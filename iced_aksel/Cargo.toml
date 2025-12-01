@@ -1,0 +1,26 @@
+[package]
+name = "iced_aksel"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+aksel.workspace = true
+derive_more.workspace = true
+derivative.workspace = true
+iced.workspace = true
+indexmap.workspace = true
+lyon_tessellation.workspace = true
+lyon_path.workspace = true
+lyon.workspace = true
+
+
+[dev-dependencies]
+rand.workspace = true
+realfft.workspace = true
+cpal.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+chrono.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+[workspace]
+members = ["iced_aksel", "examples/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+aksel = "0.2"
+chrono = "0.4"
+cpal = "0.16.0"
+derive_more = "2.0"
+derivative = "2.2"
+iced = { git = "https://github.com/iced-rs/iced", branch = "master" }
+indexmap = "2.12"
+lyon_tessellation = "1.0"
+lyon_path = "1.0"
+lyon = "1.0"
+rand = "0.9"
+realfft = "3.5.0"
+strum = "0.27"
+strum_macros = "0.27"
+
