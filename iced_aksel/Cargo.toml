@@ -7,12 +7,12 @@ edition.workspace = true
 aksel.workspace = true
 derive_more.workspace = true
 derivative.workspace = true
-iced.workspace = true
 indexmap.workspace = true
 lyon_tessellation.workspace = true
 lyon_path.workspace = true
 lyon.workspace = true
 
+iced = { workspace = true, features = ["advanced"] }
 
 [dev-dependencies]
 rand.workspace = true

@@ -6,11 +6,20 @@ resolver = "3"
 version = "0.1.0"
 edition = "2024"
 
+[workspace.lints.clippy]
+inline_always = "allow"
+
+perf = { level = "deny", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+complexity = { level = "deny", priority = -1 }
+style = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+
 [workspace.dependencies]
 aksel = "0.2"
 chrono = "0.4"
 cpal = "0.16.0"
-derive_more = "2.0"
+derive_more = { version = "2.0", features = ["from", "error", "display", "into"]}
 derivative = "2.2"
 iced = { git = "https://github.com/iced-rs/iced", branch = "master" }
 indexmap = "2.12"
@@ -21,4 +30,3 @@ rand = "0.9"
 realfft = "3.5.0"
 strum = "0.27"
 strum_macros = "0.27"
-

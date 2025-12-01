@@ -1,0 +1,13 @@
+[package]
+name = "simple"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+aksel.workspace = true
+iced.workspace = true
+
+iced_aksel = { path = "../../iced_aksel/" }
+
+[lints]
+workspace = true

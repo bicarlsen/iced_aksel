@@ -6,6 +6,8 @@
 //! - Multiple shape types (rectangles and polylines)
 //! - Real-time adjustable rendering complexity
 
+use std::time::Instant;
+
 use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Element, Subscription, Task, Theme,
@@ -13,7 +15,6 @@ use iced::{
 };
 use iced_aksel::{Axis, Chart, Length, Plot, State, Stroke, axis::Position, plot, shape};
 use rand::Rng;
-use std::time::Instant;
 
 const AXIS_ID_X: &str = "x";
 const AXIS_ID_Y: &str = "y";
