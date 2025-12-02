@@ -171,18 +171,15 @@ pub struct LabelDecisionContext<'a, D> {
 
 type LabelPolicyFn<D> = dyn for<'a> Fn(LabelDecisionContext<'a, D>) -> LabelDecision + 'static;
 
-#[derive(Derivative)]
+#[derive(Derivative, Default)]
 #[derivative(Debug)]
 pub enum LabelPolicy<D> {
+    #[default]
     All,
-    SkipOverlapping { min_gap: f32 },
+    SkipOverlapping {
+        min_gap: f32,
+    },
     Custom(#[derivative(Debug = "ignore")] Box<LabelPolicyFn<D>>),
-}
-
-impl<D> Default for LabelPolicy<D> {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 impl<D> LabelPolicy<D> {
@@ -329,6 +326,13 @@ impl<D: Float> Axis<D> {
     {
         self.tick_renderer = Some(Box::new(renderer));
         self
+    }
+
+    pub fn set_tick_renderer<F>(&mut self, renderer: F)
+    where
+        F: Fn(TickLabelContext<D>) -> Option<TickLine> + 'static,
+    {
+        self.tick_renderer = Some(Box::new(renderer));
     }
 
     pub fn label_policy(mut self, policy: LabelPolicy<D>) -> Self {

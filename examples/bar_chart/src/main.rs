@@ -1,15 +1,11 @@
-use std::f64::consts::PI;
-
-use aksel::{Float, PlotPoint, PlotRect, scale::Linear};
 use iced::{
-    Color, Element, Task, Theme,
+    Element, Task, Theme,
     widget::{button, column, pick_list, row, text_input},
 };
-use iced_aksel::{Axis, Chart, DragDelta, Shape, State, axis, plot::Items, shape::Polygon};
-
-use crate::bar::BarChart;
 
 mod bar;
+
+use bar::BarChart;
 
 fn main() -> iced::Result {
     ExampleApp::run()
@@ -34,8 +30,8 @@ enum Message {
     SwitchTheme(iced::Theme),
     NewLabelChanged(String),
     NewValueChanged(String),
-
     AddData((String, f64)),
+    ToggleOrientation,
 }
 
 impl ExampleApp {
@@ -46,7 +42,7 @@ impl ExampleApp {
 
                 new_label: String::new(),
                 new_value: 0.0,
-                bar_chart: BarChart::new(),
+                bar_chart: BarChart::vertical(),
             },
             Task::none(),
         )
@@ -64,8 +60,11 @@ impl ExampleApp {
                 self.new_value = s.parse().unwrap_or(0.0);
             }
             Message::AddData(bar_data) => {
-                self.bar_chart.data.push(bar_data.into());
+                self.bar_chart.push_data(bar_data.into());
                 self.bar_chart.refresh();
+            }
+            Message::ToggleOrientation => {
+                self.bar_chart.toggle_orientation();
             }
         }
         Task::none()
@@ -82,9 +81,13 @@ impl ExampleApp {
             text_input("0", &self.new_value.to_string()).on_input(Message::NewValueChanged);
         let new_data_confirm =
             button("+").on_press(Message::AddData((self.new_label.clone(), self.new_value)));
+        let toggle_orientation_btn =
+            button("Toggle orientation").on_press(Message::ToggleOrientation);
         let bar_chart = self.bar_chart.view();
 
-        let row_one = row![theme_toggle].spacing(16.).padding(16.);
+        let row_one = row![theme_toggle, toggle_orientation_btn]
+            .spacing(16.)
+            .padding(16.);
 
         let row_two = row![new_label_input, new_value_input, new_data_confirm]
             .spacing(16.)
