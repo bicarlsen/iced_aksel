@@ -533,10 +533,10 @@ where
 
         // ---------- 1) First pass: measure axis thicknesses ----------
 
-        let mut top_total = 0.0 + self.padding.top;
-        let mut bottom_total = 0.0 + self.padding.bottom;
-        let mut left_total = 0.0 + self.padding.left;
-        let mut right_total = 0.0 + self.padding.right;
+        let mut top_total = self.padding.top;
+        let mut bottom_total = self.padding.bottom;
+        let mut left_total = self.padding.left;
+        let mut right_total = self.padding.right;
 
         for (_, axis) in self.state.visible_axes() {
             let thickness = axis.thickness().0;
@@ -560,9 +560,9 @@ where
 
         let mut children_nodes = Vec::with_capacity(axis_count + 1);
 
-        let mut top_y = 0.0;
+        let mut top_y = self.padding.top;
         let mut bot_y = top_total + chart_height;
-        let mut left_x = 0.0;
+        let mut left_x = self.padding.left;
         let mut right_x = left_total + chart_width;
 
         for (_, axis) in self.state.visible_axes() {
