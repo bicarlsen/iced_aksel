@@ -56,10 +56,6 @@ impl BarChart {
     /// Replaces the current data and re-calculates the axis scales
     pub fn refresh(&mut self) {
         self.auto_scale();
-
-        let labels: Vec<_> = self.data.iter().map(|v| &v.label).collect();
-
-        // self.state.get_axis_mut(&X_ID).unwrap().scale_mut()
     }
 
     /// Returns the Chart widget.
