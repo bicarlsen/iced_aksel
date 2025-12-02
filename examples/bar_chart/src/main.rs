@@ -61,7 +61,6 @@ impl ExampleApp {
             }
             Message::AddData(bar_data) => {
                 self.bar_chart.push_data(bar_data.into());
-                self.bar_chart.refresh();
             }
             Message::ToggleOrientation => {
                 self.bar_chart.toggle_orientation();
