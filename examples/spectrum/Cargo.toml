@@ -10,5 +10,8 @@ iced.workspace = true
 realfft.workspace = true
 iced_aksel = { path = "../../iced_aksel/" }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iced = { workspace = true, features = ["web-colors", "thread-pool", "webgl", "fira-sans"] }
+
 [lints]
 workspace = true

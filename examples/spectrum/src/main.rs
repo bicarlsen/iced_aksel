@@ -8,7 +8,6 @@ use std::{
     collections::VecDeque,
     f32::consts::PI,
     sync::{Arc, Mutex},
-    time::Instant,
 };
 
 use aksel::{PlotPoint, scale};
@@ -19,6 +18,7 @@ use cpal::{
 use iced::{
     Element, Pixels, Subscription, Task, Theme,
     theme::{Base, Mode},
+    time::Instant,
     widget::{column, pick_list, row, text},
     window,
 };

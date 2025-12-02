@@ -6,7 +6,7 @@
 //! - Toggleable Bollinger Bands (BBands) indicator.
 //! - An interactive settings bar with checkboxes and text inputs.
 
-use std::{collections::BTreeMap, ops::RangeInclusive, time::Instant};
+use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use aksel::{PlotPoint, scale::Linear};
 use chrono::TimeZone;
@@ -14,6 +14,7 @@ use iced::{
     Color, Element, Subscription, Task, Theme,
     mouse::ScrollDelta,
     theme::palette::Extended,
+    time::Instant,
     widget::{checkbox, column, pick_list, row, text, text_input},
     window,
 };
