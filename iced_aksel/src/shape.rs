@@ -3,7 +3,7 @@ use super::plot;
 use aksel::Float;
 
 // mod ellipse;
-// mod label;
+mod label;
 // mod linesegment;
 mod circle;
 mod line;
@@ -15,7 +15,7 @@ mod stroke;
 mod triangle;
 
 // pub use ellipse::{Ellipse, StrokeBehavior};
-// pub use label::Label;
+pub use label::Label;
 // pub use linesegment::LineSegment;
 pub use circle::Circle;
 pub use line::Line;

@@ -1,8 +1,7 @@
-use aksel::{Float, PlotPoint, Transform};
+use aksel::{Float, PlotPoint};
 use iced::{
     Color,
     advanced::Text,
-    alignment,
     widget::text::{LineHeight, Shaping, Wrapping},
 };
 
@@ -20,7 +19,7 @@ pub struct Label<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Label<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_text(move |transform, mut renderer| {
+        ctx.render_text(move |transform, renderer| {
             // 1. Convert the data-space PlotPoint to a screen-space Point.
             let screen_point = transform.chart_to_screen(&self.position.clone());
             let position = iced::Point {
@@ -61,16 +60,10 @@ impl<D: Float> Label<D> {
         Self {
             content,
             position,
-            horizontal_alignment: HorizontalOrientation::Left,
-            vertical_alignment: VerticalOrientation::Center,
+            horizontal_alignment: iced::alignment::Horizontal::Left,
+            vertical_alignment: iced::alignment::Vertical::Center,
             fill,
             font_size: 16.,
         }
-    }
-
-    pub fn add_to_renderer<R>(&self, transform: &Transform<D, D, f32>, renderer: &mut R)
-    where
-        R: iced::advanced::text::Renderer<Font = iced::Font>,
-    {
     }
 }
