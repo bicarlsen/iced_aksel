@@ -176,6 +176,11 @@ where
         self
     }
 
+    pub const fn padding(mut self, padding: Padding) -> Self {
+        self.padding = padding;
+        self
+    }
+
     pub const fn drag_deadband(mut self, distance: f32) -> Self {
         self.drag_deadband = distance;
         self
