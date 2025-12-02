@@ -21,7 +21,7 @@ chrono = "0.4"
 cpal = "0.16.0"
 derive_more = { version = "2.0", features = ["from", "error", "display", "into"]}
 derivative = "2.2"
-iced = { git = "https://github.com/iced-rs/iced", branch = "master" }
+iced = { git = "https://github.com/iced-rs/iced", rev = "cfd06b4721bca6d12df6163c57b2fa41756bdc1c" }
 indexmap = "2.12"
 lyon_tessellation = "1.0"
 lyon_path = "1.0"
