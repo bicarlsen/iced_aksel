@@ -1,2 +1,6 @@
 /target
+
 **/dist
+
+Cargo.lock
+**/Cargo.lock
