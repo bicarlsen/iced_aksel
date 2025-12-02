@@ -1,4 +1,4 @@
-use aksel::scale::Linear;
+use aksel::{Scale, scale::Linear};
 use iced::{Color, Theme};
 use iced_aksel::{
     Axis, Chart, Length, State,
@@ -57,18 +57,9 @@ impl BarChart {
     pub fn refresh(&mut self) {
         self.auto_scale();
 
-        self.state
-            .get_axis_mut(&X_ID)
-            .unwrap()
-            .with_tick_renderer(|tlc| match tlc.tick.level {
-                0 => {
-                    if let Some(x_label) = self.get_nearest_x_label(tlc.normalized_position) {
-                        return Some(TickLine::simple(x_label));
-                    }
-                    None
-                }
-                _ => None,
-            });
+        let labels: Vec<_> = self.data.iter().map(|v| &v.label).collect();
+
+        // self.state.get_axis_mut(&X_ID).unwrap().scale_mut()
     }
 
     /// Returns the Chart widget.
