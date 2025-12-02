@@ -751,7 +751,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for CandleItems {
         for (time, candle) in &self.candles {
             let x = *time as f64;
 
-            if !bounds.contains_x(x) {
+            if !bounds.contains_x(&x) {
                 continue;
             };
 
