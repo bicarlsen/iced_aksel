@@ -3,7 +3,7 @@ use std::{fmt::Debug, hash::Hash};
 use aksel::{Float, Scale, ScreenRect, Transform};
 use derive_more::{Display, Error};
 use iced::{
-    Element, Event, Point, Rectangle, Size,
+    Element, Event, Padding, Point, Rectangle, Size,
     advanced::{
         Layout, Widget,
         layout::{self, Limits, Node},
@@ -107,6 +107,7 @@ where
     class: <Theme as Catalog>::Class<'a>,
     errors: Vec<Error<AxisId>>, // Throw these into the shell at each update
     drag_deadband: f32,
+    padding: Padding,
     on_error: Option<ErrorHandler<AxisId, Message>>,
     on_click: Option<ClickHandler<Message>>,
     on_drag: Option<DragHandler<Message>>,
@@ -135,6 +136,7 @@ where
             class: <Theme as Catalog>::default(),
             errors: vec![],
             drag_deadband: DEFAULT_DRAG_DEADBAND,
+            padding: Padding::new(10.0),
             on_error: None,
             on_click: None,
             on_drag: None,
@@ -526,10 +528,10 @@ where
 
         // ---------- 1) First pass: measure axis thicknesses ----------
 
-        let mut top_total = 0.0;
-        let mut bottom_total = 0.0;
-        let mut left_total = 0.0;
-        let mut right_total = 0.0;
+        let mut top_total = 0.0 + self.padding.top;
+        let mut bottom_total = 0.0 + self.padding.bottom;
+        let mut left_total = 0.0 + self.padding.left;
+        let mut right_total = 0.0 + self.padding.right;
 
         for (_, axis) in self.state.visible_axes() {
             let thickness = axis.thickness().0;
@@ -698,12 +700,13 @@ where
         _viewport: &iced::Rectangle,
     ) {
         let style = theme.style(&self.class);
+        let bounds = layout.bounds();
         let plot_bounds = self.get_plot_layout(layout).bounds();
 
         // Fill in background
         renderer.fill_quad(
             Quad {
-                bounds: layout.bounds(),
+                bounds,
                 ..Default::default()
             },
             style.background,
@@ -729,11 +732,12 @@ where
                 cursor,
                 &plot_bounds,
                 &mut mesh_buffer,
+                &bounds,
             );
         }
 
         // Make sure we render the mesh buffer after adding axes/grids to it
-        mesh_buffer.render(renderer, &layout.bounds());
+        mesh_buffer.render(renderer, &bounds);
 
         // Render layers
         for layer in &self.layers {

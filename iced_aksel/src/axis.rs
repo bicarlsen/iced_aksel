@@ -1,7 +1,7 @@
 use aksel::{Float, Tick};
 use derivative::Derivative;
 use iced::{
-    Pixels, Point, Rectangle, Size,
+    Padding, Pixels, Point, Rectangle, Size,
     advanced::{
         Layout, Text,
         graphics::{color, mesh::SolidVertex2D},
@@ -452,6 +452,7 @@ impl<D: Float> Axis<D> {
         Node::new(size)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw<Renderer, Theme>(
         &self,
         renderer: &mut Renderer,
@@ -460,6 +461,7 @@ impl<D: Float> Axis<D> {
         cursor: Cursor,
         plot_bounds: &Rectangle,
         mesh_buffer: &mut MeshBuffer,
+        viewport: &Rectangle,
     ) where
         Renderer: iced::advanced::Renderer
             + iced::advanced::graphics::mesh::Renderer
@@ -501,7 +503,14 @@ impl<D: Float> Axis<D> {
             }
         }
 
-        self.layout_labels(renderer, &theme, &bounds, orientation, label_candidates);
+        self.layout_labels(
+            renderer,
+            &theme,
+            &bounds,
+            orientation,
+            label_candidates,
+            viewport,
+        );
 
         // Combined plot and axis bounds
         let full_bounds = plot_bounds.union(&bounds);
@@ -595,6 +604,7 @@ impl<D: Float> Axis<D> {
         bounds: &Rectangle,
         orientation: Orientation,
         label_candidates: Vec<LabelCandidate<D>>,
+        viewport: &Rectangle,
     ) where
         Renderer: iced::advanced::Renderer
             + iced::advanced::graphics::mesh::Renderer
@@ -632,7 +642,7 @@ impl<D: Float> Axis<D> {
                         .with_content(paragraph.content().to_string()),
                     position,
                     theme.label_color,
-                    *bounds,
+                    *viewport,
                 );
 
                 accepted.push(PlacedLabelInfo {
