@@ -470,15 +470,6 @@ impl<D: Float> Axis<D> {
         let bounds = layout.bounds();
         let orientation = Orientation::from(self.position());
 
-        // Start by filling out the container
-        renderer.fill_quad(
-            Quad {
-                bounds,
-                ..Default::default()
-            },
-            theme.background,
-        );
-
         let mut label_candidates = Vec::new();
 
         // Render tick-related stuff (Axis ticks and grid)

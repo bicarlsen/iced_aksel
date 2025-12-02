@@ -703,7 +703,7 @@ where
         // Fill in background
         renderer.fill_quad(
             Quad {
-                bounds: plot_bounds,
+                bounds: layout.bounds(),
                 ..Default::default()
             },
             style.background,

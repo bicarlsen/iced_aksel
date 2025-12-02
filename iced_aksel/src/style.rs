@@ -10,7 +10,6 @@ pub struct Style {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AxisStyle {
-    pub background: Color,
     pub cursor: AxisCursor,
     pub tick_color: Color,
     pub label_color: Color,
@@ -60,7 +59,6 @@ pub fn default(theme: &Theme) -> Style {
             width: 1.0.into(),
         },
         axis: AxisStyle {
-            background: palette.background.weakest.color,
             cursor: AxisCursor {
                 color: palette.background.weak.color,
                 width: 10.0.into(),
