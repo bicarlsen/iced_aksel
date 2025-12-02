@@ -181,7 +181,6 @@ impl<D: Float> Rectangle<D> {
         x_min_max: (f32, f32),
         y_min_max: (f32, f32),
     ) {
-        // ... (Thickness calculation remains the same) ...
         let (th_x, th_y) = match stroke.thickness {
             Length::Screen(px) => (px, px),
             Length::Plot(units) => (
