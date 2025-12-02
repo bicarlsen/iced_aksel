@@ -87,16 +87,18 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
         }
     }
 
-    pub fn render_text<F>(&'a mut self, f: F)
+    pub fn render_text<F>(&mut self, f: F)
     where
-        F: FnOnce(&'a Transform<'a, D, D, f32>, TextRenderer<'a, Renderer>),
+        F: FnOnce(&Transform<'a, D, D, f32>, &mut TextRenderer<'_, Renderer>),
     {
         if matches!(self.last_drawn, ShapeType::Mesh) {
             // Since text is always drawn over meshes, we don't **have** to start a new layer.
             self.last_drawn = ShapeType::Text;
         }
 
-        f(self.transform, TextRenderer(self.renderer))
+        let mut renderer = TextRenderer(self.renderer);
+
+        f(self.transform, &mut renderer)
     }
 }
 
