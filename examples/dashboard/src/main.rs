@@ -14,6 +14,8 @@ use bar::BarChart;
 use gauge::Gauge;
 use line::LineChart;
 
+use crate::line::DataPoint;
+
 fn main() -> iced::Result {
     ExampleApp::run()
 }
@@ -48,6 +50,7 @@ enum Message {
 
 impl ExampleApp {
     fn init() -> (Self, Task<Message>) {
+        let line_chart = LineChart::new();
         (
             Self {
                 theme: iced::Theme::Dark,
@@ -62,13 +65,7 @@ impl ExampleApp {
                     .zone(gauge::Zone::Danger(100.))
                     .zone_opacity(0.7)
                     .format(|v| format!("{:.2}", v)),
-                line_chart: LineChart::new(vec![
-                    (0.0, 0.0),
-                    (1.0, 5.0),
-                    (2.0, 7.0),
-                    (3.0, 4.0),
-                    (4.0, 9.0),
-                ]),
+                line_chart: LineChart::new(),
             },
             Task::none(),
         )
@@ -91,6 +88,8 @@ impl ExampleApp {
                 let new_value = rand::random_range(5.0..100.0);
                 self.bar_chart
                     .add_data((format!["{}", new_label], new_value));
+
+                self.line_chart.push(new_value);
             }
             Message::ToggleOrientation => {
                 self.bar_chart.toggle_orientation();
@@ -152,18 +151,18 @@ impl ExampleApp {
     }
 
     fn linechart_view(&self) -> Element<'_, Message> {
-        // let add_line_num = button("+")
-        //     .on_press(Message::UpdateLineValue(5.))
-        //     .width(iced::Length::Fill);
-        // let sub_line_num = button("-")
-        //     .on_press(Message::UpdateLineValue(-5.))
+        let new_data_confirm_btn = button("+")
+            .on_press(Message::AddData)
+            .width(iced::Length::Fill);
+        // let toggle_orientation_btn = button("Toggle orientation")
+        //     .on_press(Message::ToggleOrientation)
         //     .width(iced::Length::Fill);
 
         let line_chart = self.line_chart.chart();
 
-        // let panel = row![add_line_num, sub_line_num].spacing(16.);
+        let panel = row![new_data_confirm_btn].spacing(16.);
 
-        column![line_chart].into()
+        column![line_chart, panel].into()
     }
 
     fn theme(&self) -> Theme {
