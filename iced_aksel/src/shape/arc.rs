@@ -329,9 +329,8 @@ impl<D: Float> Arc<D> {
         let packed_color = pack(color);
         let sweep = (end_angle - start_angle).abs();
 
-        // Level of Detail
-        let arc_len = sweep * r_outer;
-        let segments = (arc_len / 5.0).max(4.0).min(128.0) as usize;
+        // Level of Detail matches Circle to keep edge fidelity consistent.
+        let segments = (r_outer * 2.0).max(24.0).min(128.0) as usize;
 
         let step = sweep / segments as f32;
         let dir = if end_angle > start_angle { 1.0 } else { -1.0 };
