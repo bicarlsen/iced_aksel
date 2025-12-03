@@ -177,15 +177,17 @@ impl LineChart {
         };
 
         // 3. Apply to Axes
-        self.state.set_axis(
-            Self::X_AXIS,
-            Axis::new(Linear::new(min_x, max_x), axis::Position::Bottom),
-        );
+        self.state
+            .get_axis_mut(&Self::X_AXIS)
+            .unwrap()
+            .scale_mut()
+            .set_domain(min_x, max_x);
 
-        self.state.set_axis(
-            Self::Y_AXIS,
-            Axis::new(Linear::new(min_y, max_y), axis::Position::Left),
-        );
+        self.state
+            .get_axis_mut(&Self::Y_AXIS)
+            .unwrap()
+            .scale_mut()
+            .set_domain(min_y, max_y);
     }
 
     fn calculate_auto_range(&self, selector: impl Fn(&DataPoint) -> f64) -> (f64, f64) {
