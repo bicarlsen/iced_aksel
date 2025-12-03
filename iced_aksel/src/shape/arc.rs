@@ -10,7 +10,6 @@ use iced::{
 };
 use lyon::math::{Angle, Point, Vector};
 use lyon::path::Path;
-// Removed SvgPathBuilder import as we will use manual cubic beziers
 
 /// An arc (or pie slice/donut sector) defined by a center, radii, and angles.
 ///
@@ -42,12 +41,6 @@ impl<D: Float> Arc<D> {
     // =========================================================================
 
     /// Creates a new Arc/Pie Slice.
-    ///
-    /// # Arguments
-    /// * `center` - Center position.
-    /// * `radius` - The outer radius.
-    /// * `start_angle` - Starting angle in radians (0 is East).
-    /// * `end_angle` - Ending angle in radians.
     pub const fn new(
         center: PlotPoint<D>,
         radius: Length<D>,
@@ -57,7 +50,7 @@ impl<D: Float> Arc<D> {
         Self {
             center,
             radius,
-            inner_radius: Length::Screen(0.0), // Default to Pie Slice (solid center)
+            inner_radius: Length::Screen(0.0),
             start_angle,
             end_angle,
             fill: None,
@@ -171,62 +164,140 @@ impl<D: Float> Arc<D> {
 
         // 5. Render Stroke (Lyon Path)
         if let Some((width, stroke)) = maybe_stroke_data {
+            let center = Point::new(cx, cy);
+
             // Rule 1: Inner Stroke Alignment
+            // Stroke is centered on the path.
+            // Inner Edge = Path - Width/2 -> Path = Inner + Width/2
+            // Outer Edge = Path + Width/2 -> Path = Outer - Width/2
             let s_inner = inner_r + width / 2.0;
             let s_outer = outer_r - width / 2.0;
 
-            if s_outer > s_inner {
-                let center = Point::new(cx, cy);
+            if s_outer <= s_inner {
+                return;
+            }
+
+            // Fix 1: Check for Full Circle (Seam Fix)
+            let sweep = (self.end_angle - self.start_angle).abs();
+            let is_full_circle = sweep >= std::f32::consts::TAU - 0.001;
+
+            let mut builder = Path::builder();
+
+            if is_full_circle {
+                // --- Full Circle Logic (Two separate rings) ---
+
+                // 1. Outer Ring
+                // We start at angle 0 for simplicity
+                let outer_start = center + Vector::new(s_outer, 0.0);
+                builder.begin(outer_start);
+                let outer_arc = lyon::geom::Arc {
+                    center,
+                    radii: Vector::new(s_outer, s_outer),
+                    start_angle: Angle::radians(0.0),
+                    sweep_angle: Angle::radians(std::f32::consts::TAU),
+                    x_rotation: Angle::radians(0.0),
+                };
+                outer_arc.for_each_cubic_bezier(&mut |segment| {
+                    builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
+                });
+                builder.close();
+
+                // 2. Inner Ring (Only if it's a donut, not a solid pie)
+                if inner_r > 0.5 {
+                    let inner_start = center + Vector::new(s_inner, 0.0);
+                    builder.begin(inner_start); // Start new sub-path
+                    let inner_arc = lyon::geom::Arc {
+                        center,
+                        radii: Vector::new(s_inner, s_inner),
+                        start_angle: Angle::radians(0.0),
+                        sweep_angle: Angle::radians(std::f32::consts::TAU),
+                        x_rotation: Angle::radians(0.0),
+                    };
+                    inner_arc.for_each_cubic_bezier(&mut |segment| {
+                        builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
+                    });
+                    builder.close();
+                }
+            } else {
+                // --- Sector Logic (Connected shape) ---
+
                 let start_cos = self.start_angle.cos();
                 let start_sin = self.start_angle.sin();
                 let end_cos = self.end_angle.cos();
                 let end_sin = self.end_angle.sin();
+                let sweep_a = Angle::radians(self.end_angle - self.start_angle);
 
-                let mut builder = Path::builder();
+                // Fix 2: Check for Pie Center (Artifact Fix)
+                let is_pie_center = inner_r < 0.5;
 
-                // 1. Move to Inner Start
-                let inner_start = center + Vector::new(start_cos, start_sin) * s_inner;
-                builder.begin(inner_start);
+                if is_pie_center {
+                    // Path: Center -> OuterStart -> Arc -> Center -> Close
 
-                // 2. Line to Outer Start
-                let outer_start = center + Vector::new(start_cos, start_sin) * s_outer;
-                builder.line_to(outer_start);
+                    // 1. Move to Center
+                    builder.begin(center);
 
-                // 3. Outer Arc (Manual Cubic Bezier)
-                let outer_arc = lyon::geom::Arc {
-                    center,
-                    radii: Vector::new(s_outer, s_outer),
-                    start_angle: Angle::radians(self.start_angle),
-                    sweep_angle: Angle::radians(self.end_angle - self.start_angle),
-                    x_rotation: Angle::radians(0.0),
-                };
-                // FIX: Closure takes a single 'segment' argument
-                outer_arc.for_each_cubic_bezier(&mut |segment| {
-                    builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
-                });
+                    // 2. Line to Outer Start
+                    let outer_start = center + Vector::new(start_cos, start_sin) * s_outer;
+                    builder.line_to(outer_start);
 
-                // 4. Line to Inner End
-                let inner_end = center + Vector::new(end_cos, end_sin) * s_inner;
-                builder.line_to(inner_end);
+                    // 3. Outer Arc
+                    let outer_arc = lyon::geom::Arc {
+                        center,
+                        radii: Vector::new(s_outer, s_outer),
+                        start_angle: Angle::radians(self.start_angle),
+                        sweep_angle: sweep_a,
+                        x_rotation: Angle::radians(0.0),
+                    };
+                    outer_arc.for_each_cubic_bezier(&mut |segment| {
+                        builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
+                    });
 
-                // 5. Inner Arc Backwards (Manual Cubic Bezier)
-                // We define an arc starting at 'end_angle' and sweeping BACK to 'start_angle'
-                let inner_arc = lyon::geom::Arc {
-                    center,
-                    radii: Vector::new(s_inner, s_inner),
-                    start_angle: Angle::radians(self.end_angle),
-                    sweep_angle: Angle::radians(self.start_angle - self.end_angle),
-                    x_rotation: Angle::radians(0.0),
-                };
-                // FIX: Closure takes a single 'segment' argument
-                inner_arc.for_each_cubic_bezier(&mut |segment| {
-                    builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
-                });
+                    // 4. Line back to Center (Implicitly handled by close, but explicit is safer for miter)
+                    builder.close();
+                } else {
+                    // Path: InnerStart -> OuterStart -> OuterArc -> InnerEnd -> InnerBackArc -> Close
 
-                builder.close();
+                    // 1. Move to Inner Start
+                    let inner_start = center + Vector::new(start_cos, start_sin) * s_inner;
+                    builder.begin(inner_start);
 
-                tess.stroke_path(buffer, builder.build().iter(), stroke, width, 0.1);
+                    // 2. Line to Outer Start
+                    let outer_start = center + Vector::new(start_cos, start_sin) * s_outer;
+                    builder.line_to(outer_start);
+
+                    // 3. Outer Arc
+                    let outer_arc = lyon::geom::Arc {
+                        center,
+                        radii: Vector::new(s_outer, s_outer),
+                        start_angle: Angle::radians(self.start_angle),
+                        sweep_angle: sweep_a,
+                        x_rotation: Angle::radians(0.0),
+                    };
+                    outer_arc.for_each_cubic_bezier(&mut |segment| {
+                        builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
+                    });
+
+                    // 4. Line to Inner End
+                    let inner_end = center + Vector::new(end_cos, end_sin) * s_inner;
+                    builder.line_to(inner_end);
+
+                    // 5. Inner Arc Backwards
+                    let inner_arc = lyon::geom::Arc {
+                        center,
+                        radii: Vector::new(s_inner, s_inner),
+                        start_angle: Angle::radians(self.end_angle),
+                        sweep_angle: Angle::radians(self.start_angle - self.end_angle),
+                        x_rotation: Angle::radians(0.0),
+                    };
+                    inner_arc.for_each_cubic_bezier(&mut |segment| {
+                        builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
+                    });
+
+                    builder.close();
+                }
             }
+
+            tess.stroke_path(buffer, builder.build().iter(), stroke, width, 0.1);
         }
     }
 
@@ -268,33 +339,28 @@ impl<D: Float> Arc<D> {
         let mut vertices = Vec::with_capacity((segments + 1) * 2);
         let mut indices = Vec::with_capacity(segments * 6);
 
-        // 1. Generate Vertices
         for i in 0..=segments {
             let theta = start_angle + (i as f32 * step * dir);
             let (sin, cos) = theta.sin_cos();
 
-            // Inner Vertex
             vertices.push(SolidVertex2D {
                 position: [cx + cos * r_inner, cy + sin * r_inner],
                 color: packed_color,
             });
 
-            // Outer Vertex
             vertices.push(SolidVertex2D {
                 position: [cx + cos * r_outer, cy + sin * r_outer],
                 color: packed_color,
             });
         }
 
-        // 2. Generate Indices (Triangle Strip)
         for i in 0..segments {
             let base = (i * 2) as u32;
-            // Triangle 1: Inner0, Outer0, Inner1
+            // Triangle 1
             indices.push(base);
             indices.push(base + 1);
             indices.push(base + 2);
-
-            // Triangle 2: Outer0, Outer1, Inner1
+            // Triangle 2
             indices.push(base + 1);
             indices.push(base + 3);
             indices.push(base + 2);

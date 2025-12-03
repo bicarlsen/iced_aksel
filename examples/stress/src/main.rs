@@ -21,7 +21,7 @@ use iced_aksel::{
     Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
     axis::{self, Position},
     plot,
-    shape::{self, Arc, Circle, Line, Polyline, Rectangle, Triangle},
+    shape::{self, Arc, Circle, Line, Polygon, Polyline, Rectangle, Triangle},
 };
 use rand::Rng;
 
@@ -54,8 +54,13 @@ enum Message {
     TriangleCountChanged(f32),
     LineCountChanged(f32),
     PolylineCountChanged(f32),
-    PolySegmentsChanged(f32),
     ArcCountChanged(f32),
+    PolygonCountChanged(f32),
+
+    // Geometry Complexity
+    PolySegmentsChanged(f32),    // For Polylines
+    PolygonVerticesChanged(f32), // For Polygons
+
     // Geometry Generation
     MinSizeChanged(f32),
     MaxSizeChanged(f32),
@@ -68,7 +73,7 @@ enum Message {
     StrokeWidthChanged(f32),
     StrokeWidthModeChanged(LengthMode),
     StrokeStyleChanged(StrokeStyle),
-    // Line/Polyline Features
+    // Line/Poly Features
     ToggleArrowStart(bool),
     ToggleArrowEnd(bool),
     ToggleInfiniteStart(bool),
@@ -190,7 +195,6 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressTriangles {
 struct StressLines {
     geometry: Vec<Line<f64>>,
     colors: Vec<Color>,
-    // Added show_stroke to allow toggling visibility
     show_stroke: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -203,7 +207,6 @@ struct StressLines {
 
 impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        // Only draw lines if stroke is enabled
         if !self.show_stroke {
             return;
         }
@@ -230,7 +233,6 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
 struct StressPolylines {
     geometry: Vec<Polyline<f64>>,
     colors: Vec<Color>,
-    // Added show_stroke to allow toggling visibility
     show_stroke: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -243,7 +245,6 @@ struct StressPolylines {
 
 impl<R: plot::Renderer> plot::Items<f64, R> for StressPolylines {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        // Only draw polylines if stroke is enabled
         if !self.show_stroke {
             return;
         }
@@ -302,6 +303,41 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressArcs {
     }
 }
 
+struct StressPolygons {
+    geometry: Vec<Polygon<f64>>,
+    colors: Vec<Color>,
+    show_fill: bool,
+    show_stroke: bool,
+    stroke_width: f32,
+    stroke_width_mode: LengthMode,
+    stroke_style: StrokeStyle,
+}
+
+impl<R: plot::Renderer> plot::Items<f64, R> for StressPolygons {
+    fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
+        for (base_poly, &color) in self.geometry.iter().zip(self.colors.iter()) {
+            let mut poly = base_poly.clone();
+
+            if self.show_fill {
+                poly = poly.fill(color);
+            }
+
+            if self.show_stroke {
+                let thickness = match self.stroke_width_mode {
+                    LengthMode::Screen => Length::Screen(self.stroke_width),
+                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                };
+                poly =
+                    poly.stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
+            }
+
+            if self.show_fill || self.show_stroke {
+                plot.add_shape(poly);
+            }
+        }
+    }
+}
+
 // --- App ---
 
 struct StressTestApp {
@@ -312,6 +348,7 @@ struct StressTestApp {
     lines_layer: StressLines,
     polylines_layer: StressPolylines,
     arcs_layer: StressArcs,
+    polygons_layer: StressPolygons,
 
     // Generation Configuration
     rectangle_count: usize,
@@ -320,8 +357,11 @@ struct StressTestApp {
     line_count: usize,
     polyline_count: usize,
     arc_count: usize,
+    polygon_count: usize,
 
     poly_segments: usize,
+    polygon_vertices: usize,
+
     min_size: f32,
     max_size: f32,
     opacity: f32,
@@ -379,7 +419,7 @@ impl StressTestApp {
             lines_layer: StressLines {
                 geometry: Vec::new(),
                 colors: Vec::new(),
-                show_stroke: false, // Default to invisible to match toggle state
+                show_stroke: false,
                 arrow_start: false,
                 arrow_end: false,
                 extend_start: false,
@@ -391,7 +431,7 @@ impl StressTestApp {
             polylines_layer: StressPolylines {
                 geometry: Vec::new(),
                 colors: Vec::new(),
-                show_stroke: false, // Default to invisible to match toggle state
+                show_stroke: false,
                 arrow_start: false,
                 arrow_end: false,
                 extend_start: false,
@@ -409,14 +449,25 @@ impl StressTestApp {
                 stroke_width_mode: LengthMode::Screen,
                 stroke_style: StrokeStyle::Solid,
             },
+            polygons_layer: StressPolygons {
+                geometry: Vec::new(),
+                colors: Vec::new(),
+                show_fill: true,
+                show_stroke: false,
+                stroke_width: 2.0,
+                stroke_width_mode: LengthMode::Screen,
+                stroke_style: StrokeStyle::Solid,
+            },
             rectangle_count: 2000,
             circle_count: 2000,
             triangle_count: 2000,
             line_count: 2000,
             polyline_count: 1000,
             arc_count: 2000,
+            polygon_count: 2000,
 
             poly_segments: 5,
+            polygon_vertices: 6,
             min_size: 10.0,
             max_size: 50.0,
             opacity: 0.8,
@@ -556,6 +607,7 @@ impl StressTestApp {
             let len =
                 rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
 
+            // Note: Line length in 'Plot' units for simplicity in generator
             let x2 = x1 + angle.cos() * len;
             let y2 = y1 + angle.sin() * len;
 
@@ -616,9 +668,8 @@ impl StressTestApp {
                 (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
             ) as f64;
 
-            // Random Angles
             let start_angle = rng.random_range(0.0..std::f32::consts::TAU);
-            let sweep = rng.random_range(0.5..std::f32::consts::PI * 1.5); // Random sweep up to 270 deg
+            let sweep = rng.random_range(0.5..std::f32::consts::PI * 1.5);
             let end_angle = start_angle + sweep;
 
             let (radius, inner_radius) = match self.size_mode {
@@ -637,6 +688,45 @@ impl StressTestApp {
 
             self.arcs_layer.geometry.push(arc);
             self.arcs_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
+        }
+
+        // 8. Polygons
+        self.polygons_layer.geometry.clear();
+        self.polygons_layer.colors.clear();
+        self.polygons_layer.geometry.reserve(self.polygon_count);
+        self.polygons_layer.colors.reserve(self.polygon_count);
+
+        for _ in 0..self.polygon_count {
+            let cx = rng.random_range(x_min..x_max);
+            let cy = rng.random_range(y_min..y_max);
+            let radius = rng.random_range(
+                (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
+            ) as f64;
+
+            // Generate Vertices around center
+            let mut points = Vec::with_capacity(self.polygon_vertices);
+            let step = std::f64::consts::TAU / self.polygon_vertices as f64;
+
+            // If Size Mode is Screen, we can't fully bake the points here as they need to scale with zoom.
+            // Polygon stores PlotPoints. If we want constant screen-size, we'd need a specific Polygon constructor
+            // similar to Triangle::equilateral, or we have to regenerate on zoom.
+            // FOR STRESS TEST: We will bake them as PLOT coordinates (scaling).
+            // This is different from Rectangle/Circle/Triangle behavior for 'Screen' mode, but standard for arbitrary polygons.
+
+            // NOTE: If SizeMode == Screen, this generation is technically "Plot" sized based on current view.
+            // It will shrink when zooming out. True Screen-Space Polygons would need a center/radius definition in the Shape struct.
+
+            for i in 0..self.polygon_vertices {
+                let theta = i as f64 * step + rng.random_range(-0.2..0.2); // Jitter for irregularity
+                let px = cx + theta.cos() * radius;
+                let py = cy + theta.sin() * radius;
+                points.push(PlotPoint::new(px, py));
+            }
+
+            self.polygons_layer.geometry.push(Polygon::new(points));
+            self.polygons_layer
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
@@ -690,8 +780,19 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
+            Message::PolygonCountChanged(v) => {
+                self.polygon_count = v as usize;
+                self.generate_shapes();
+                Task::none()
+            }
+
             Message::PolySegmentsChanged(v) => {
                 self.poly_segments = v as usize;
+                self.generate_shapes();
+                Task::none()
+            }
+            Message::PolygonVerticesChanged(v) => {
+                self.polygon_vertices = v as usize;
                 self.generate_shapes();
                 Task::none()
             }
@@ -733,6 +834,7 @@ impl StressTestApp {
                 self.circles_layer.show_fill = v;
                 self.triangles_layer.show_fill = v;
                 self.arcs_layer.show_fill = v;
+                self.polygons_layer.show_fill = v;
                 Task::none()
             }
             Message::ToggleStroke(v) => {
@@ -742,6 +844,7 @@ impl StressTestApp {
                 self.lines_layer.show_stroke = v;
                 self.polylines_layer.show_stroke = v;
                 self.arcs_layer.show_stroke = v;
+                self.polygons_layer.show_stroke = v;
                 Task::none()
             }
             Message::StrokeWidthChanged(v) => {
@@ -751,6 +854,7 @@ impl StressTestApp {
                 self.lines_layer.stroke_width = v;
                 self.polylines_layer.stroke_width = v;
                 self.arcs_layer.stroke_width = v;
+                self.polygons_layer.stroke_width = v;
                 Task::none()
             }
             Message::StrokeWidthModeChanged(mode) => {
@@ -760,6 +864,7 @@ impl StressTestApp {
                 self.lines_layer.stroke_width_mode = mode;
                 self.polylines_layer.stroke_width_mode = mode;
                 self.arcs_layer.stroke_width_mode = mode;
+                self.polygons_layer.stroke_width_mode = mode;
                 Task::none()
             }
             Message::StrokeStyleChanged(v) => {
@@ -769,6 +874,7 @@ impl StressTestApp {
                 self.lines_layer.stroke_style = v;
                 self.polylines_layer.stroke_style = v;
                 self.arcs_layer.stroke_style = v;
+                self.polygons_layer.stroke_style = v;
                 Task::none()
             }
             // Line/Poly Features
@@ -828,6 +934,7 @@ impl StressTestApp {
             .layer(&self.lines_layer, AXIS_ID_X, AXIS_ID_Y)
             .layer(&self.polylines_layer, AXIS_ID_X, AXIS_ID_Y)
             .layer(&self.arcs_layer, AXIS_ID_X, AXIS_ID_Y)
+            .layer(&self.polygons_layer, AXIS_ID_X, AXIS_ID_Y)
             .on_drag(Message::ChartDragged)
             .on_scroll(Message::ChartScrolled);
 
@@ -851,6 +958,7 @@ impl StressTestApp {
                     + self.line_count
                     + self.polyline_count
                     + self.arc_count
+                    + self.polygon_count
             ))
             .size(16),
         ]
@@ -896,6 +1004,12 @@ impl StressTestApp {
                 self.arc_count as f32,
                 500000.0,
                 Message::ArcCountChanged
+            ),
+            slider_row(
+                "Gons",
+                self.polygon_count as f32,
+                500000.0,
+                Message::PolygonCountChanged
             ),
         ]
         .spacing(5)
@@ -1043,6 +1157,17 @@ impl StressTestApp {
                 "Inf End",
                 self.lines_layer.extend_end,
                 Message::ToggleInfiniteEnd
+            ),
+            text("Polygon Features")
+                .size(14)
+                .style(|t: &Theme| text::Style {
+                    color: Some(t.palette().primary)
+                }),
+            slider_row(
+                "Vert/Gon",
+                self.polygon_vertices as f32,
+                20.0,
+                Message::PolygonVerticesChanged
             ),
         ]
         .spacing(5)
