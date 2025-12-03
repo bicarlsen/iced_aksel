@@ -8,11 +8,11 @@ use lyon_tessellation::{
     StrokeTessellator, StrokeVertex, StrokeVertexConstructor,
 };
 
-use crate::render::MeshBuffer;
+use crate::{Stroke, render::MeshBuffer, stroke::StrokeStyle};
 
 // TODO: I don't like these cross-dependencies.
 // Maybe DashedPolyline, Stroke and StrokeStyle should move into `render`?
-use crate::shape::{DashedPolyline, Stroke, StrokeStyle};
+use crate::shape::DashedPolyline;
 
 #[derive(Default)]
 pub struct Tessellators {

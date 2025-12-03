@@ -11,7 +11,6 @@ mod polygon;
 mod polyline;
 mod rectangle;
 mod sector;
-mod stroke;
 mod triangle;
 
 // pub use ellipse::{Ellipse, StrokeBehavior};
@@ -23,7 +22,6 @@ pub use polygon::Polygon;
 pub use polyline::{DashedPolyline, Polyline};
 pub use rectangle::Rectangle;
 pub use sector::Sector;
-pub use stroke::{Stroke, StrokeStyle};
 pub use triangle::Triangle;
 
 /// A trait for unifying rendering across "primitives"

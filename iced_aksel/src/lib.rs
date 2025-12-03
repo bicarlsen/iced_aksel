@@ -20,6 +20,7 @@ mod layer;
 mod length;
 mod render;
 mod state;
+mod stroke;
 mod style;
 
 pub mod axis;
@@ -30,8 +31,9 @@ pub use axis::Axis;
 pub use layer::Layer;
 pub use length::Length;
 pub use plot::Plot;
-pub use shape::{Shape, Stroke};
+pub use shape::Shape;
 pub use state::State;
+pub use stroke::{Stroke, StrokeStyle};
 pub use style::Catalog;
 
 use action::Action;

@@ -19,10 +19,9 @@ use iced::{
     window,
 };
 use iced_aksel::{
-    Axis, Chart, DragDelta, Length, Plot, State, Stroke,
+    Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
     axis::{Position, TickLabelContext, TickLine},
     plot, shape,
-    shape::StrokeStyle,
 };
 
 // --- Constants ---
