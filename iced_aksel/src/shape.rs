@@ -19,7 +19,7 @@ pub use label::Label;
 pub use circle::Circle;
 pub use line::Line;
 pub use polygon::Polygon;
-pub use polyline::{DashedPolyline, Polyline};
+pub use polyline::Polyline;
 pub use rectangle::Rectangle;
 pub use sector::Sector;
 pub use triangle::Triangle;

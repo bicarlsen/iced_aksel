@@ -1,3 +1,4 @@
+mod dashed;
 mod meshbuffer;
 mod tessellation;
 

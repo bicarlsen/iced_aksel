@@ -6,10 +6,6 @@ use crate::{
     render::{MeshBuffer, Tessellators},
 };
 
-mod dashed;
-
-pub use dashed::DashedPolyline;
-
 #[derive(Debug, Clone)]
 pub struct Polyline<D> {
     pub points: Vec<PlotPoint<D>>,
