@@ -3,4 +3,4 @@ mod meshbuffer;
 mod tessellation;
 
 pub use meshbuffer::MeshBuffer;
-pub use tessellation::Tessellators;
+pub use tessellation::{SolidVertexConstructor, Tessellators};
