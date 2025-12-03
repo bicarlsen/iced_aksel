@@ -570,7 +570,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for TestingEnvironment {
                     plot.add_shape(circ);
                 }
                 ShapeType::Triangle => {
-                    let mut tri = shape::Triangle::new(item.position, size).stroke(stroke);
+                    let mut tri = shape::Triangle::equilateral(item.position, size).stroke(stroke);
                     if self.config.fill_enabled {
                         tri = tri.fill(self.config.fill_color);
                     }
