@@ -1,5 +1,5 @@
 [package]
-name = "bar_chart"
+name = "dashboard"
 version.workspace = true
 edition.workspace = true
 

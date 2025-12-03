@@ -3,9 +3,9 @@ use iced::{
     widget::{button, column, pick_list, row, text_input},
 };
 
-mod bar;
+mod barchart;
 
-use bar::BarChart;
+use barchart::BarChart;
 
 fn main() -> iced::Result {
     ExampleApp::run()
