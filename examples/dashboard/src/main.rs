@@ -1,6 +1,9 @@
+use std::time::Instant;
+
 use iced::{
-    Element, Task, Theme,
+    Color, Element, Subscription, Task, Theme,
     widget::{button, column, pick_list, row, text_input},
+    window,
 };
 
 mod barchart;
@@ -26,6 +29,9 @@ struct ExampleApp {
 
 #[derive(Debug, Clone)]
 enum Message {
+    // Animation
+    AnimationTick(Instant),
+
     // Widget values
     SwitchTheme(iced::Theme),
 
@@ -44,7 +50,11 @@ impl ExampleApp {
                 theme: iced::Theme::Dark,
 
                 bar_chart: BarChart::new(barchart::Orientation::Vertical),
-                gauge_chart: Gauge::new("Speed", 99., (0.0, 100.0), "ms"),
+                gauge_chart: Gauge::new("Speed", 0., 100.)
+                    .animated(0.5)
+                    .zone(gauge::Zone::Success(65.))
+                    .zone(gauge::Zone::Warning(75.))
+                    .zone(gauge::Zone::Danger(100.)),
             },
             Task::none(),
         )
@@ -52,8 +62,11 @@ impl ExampleApp {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::AnimationTick(now) => {
+                self.gauge_chart.tick(now);
+            }
             Message::UpdateGaugeValue(value) => {
-                let new_value = self.gauge_chart.value() + value;
+                let new_value = self.gauge_chart.get_value() + value;
                 self.gauge_chart.set_value(new_value);
             }
             Message::SwitchTheme(theme) => {
@@ -106,10 +119,10 @@ impl ExampleApp {
 
     fn gaugechart_view(&self) -> Element<'_, Message> {
         let add_gauge_num = button("+")
-            .on_press(Message::UpdateGaugeValue(1.))
+            .on_press(Message::UpdateGaugeValue(5.))
             .width(iced::Length::Fill);
         let sub_gauge_num = button("-")
-            .on_press(Message::UpdateGaugeValue(-1.))
+            .on_press(Message::UpdateGaugeValue(-5.))
             .width(iced::Length::Fill);
 
         let gauge_chart = self.gauge_chart.chart();
@@ -123,9 +136,14 @@ impl ExampleApp {
         self.theme.clone()
     }
 
+    fn subscription(&self) -> Subscription<Message> {
+        iced::window::frames().map(Message::AnimationTick)
+    }
+
     fn run() -> iced::Result {
         iced::application(Self::init, Self::update, Self::view)
             .theme(Self::theme)
+            .subscription(Self::subscription)
             .run()
     }
 }
