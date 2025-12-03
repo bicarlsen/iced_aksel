@@ -323,7 +323,6 @@ impl ExampleApp {
         iced::application(Self::init, Self::update, Self::view)
             .theme(Self::theme)
             .subscription(Self::subscription)
-            .antialiasing(true)
             .run()
     }
 }
