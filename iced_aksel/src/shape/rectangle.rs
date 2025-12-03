@@ -11,29 +11,6 @@ use iced::{
 use lyon_tessellation::math::Point;
 
 /// A rectangle shape that can be drawn on a chart.
-///
-/// `Rectangle` supports both **Chart Data** coordinates (scaling with zoom) and
-/// **Screen** coordinates (fixed pixels). It is designed for high-performance rendering.
-///
-/// # Example
-/// ```rust,no_run
-/// use aksel::PlotPoint;
-/// use my_crate::{Rectangle, Length, Stroke, StrokeStyle};
-/// use iced::Color;
-///
-/// // A rectangle defined in plot coordinates (e.g., a data region)
-/// let rect = Rectangle::new(
-///     PlotPoint::new(10.0, 20.0),
-///     Length::Plot(5.0),  // 5 units wide
-///     Length::Plot(2.0),  // 2 units high
-/// )
-/// .fill(Color::from_rgb(0.1, 0.2, 0.9))
-/// .stroke(Stroke {
-///     fill: Color::BLACK,
-///     thickness: Length::Screen(2.0), // Fixed 2px border
-///     style: StrokeStyle::Solid,
-/// });
-/// ```
 #[derive(Debug, Clone)]
 pub struct Rectangle<D> {
     center: PlotPoint<D>,
