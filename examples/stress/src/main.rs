@@ -3,17 +3,23 @@
 //! A stress-testing example for the chart widget with:
 //! - FPS counter to monitor performance
 //! - GUI-configurable stress parameters
-//! - Multiple shape types (rectangles and polylines)
-//! - Real-time adjustable rendering complexity
+//! - Toggles for Fill vs Stroke (testing Hybrid Engine optimizations)
+//! - Pre-calculated geometry to isolate rendering performance
+//! - Advanced styling controls (Size, Opacity, Stroke Style)
 
 use std::time::Instant;
 
 use aksel::{PlotPoint, scale::Linear};
 use iced::{
-    Color, Element, Subscription, Task, Theme,
-    widget::{Slider, button, column, row, text},
+    Alignment, Color, Element, Subscription, Task, Theme,
+    widget::{Slider, button, checkbox, column, radio, row, text},
 };
-use iced_aksel::{Axis, Chart, Length, Plot, State, Stroke, axis::Position, plot, shape};
+use iced_aksel::{
+    Axis, Chart, Length, Plot, State, Stroke, StrokeStyle,
+    axis::{self, Position},
+    plot,
+    shape::{self, Circle, Rectangle},
+};
 use rand::Rng;
 
 const AXIS_ID_X: &str = "x";
@@ -24,99 +30,154 @@ type AxisId = &'static str;
 #[derive(Debug, Clone)]
 enum Message {
     Tick(Instant),
+    // Counts
     RectangleCountChanged(f32),
-    PolylineCountChanged(f32),
-    PointsPerPolylineChanged(f32),
+    CircleCountChanged(f32),
+    // Geometry Generation
+    MinSizeChanged(f32),
+    MaxSizeChanged(f32),
+    OpacityChanged(f32),
+    // Rendering Styles
+    ToggleFill(bool),
+    ToggleStroke(bool),
+    StrokeWidthChanged(f32),
+    StrokeStyleChanged(StrokeStyle),
+    // Actions
     Regenerate,
 }
 
-// Raw data structures - only store information needed to construct shapes
-struct RectangleData {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    color: Color,
-}
+// --- Layers ---
 
-struct PolylineData {
-    points: Vec<PlotPoint<f64>>,
-    color: Color,
-    thickness: f32,
-}
-
-// Data structures that hold shape information
 struct StressRectangles {
-    data: Vec<RectangleData>,
+    // We store the specific shape struct directly to avoid geometry math in the draw loop
+    geometry: Vec<Rectangle<f64>>,
+    // We store colors separately so we can apply them during draw
+    colors: Vec<Color>,
+
+    // Render-time render properties
+    show_fill: bool,
+    show_stroke: bool,
+    stroke_width: f32,
+    stroke_style: StrokeStyle,
 }
 
 impl<R: plot::Renderer> plot::Items<f64, R> for StressRectangles {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        // Construct shapes from raw data during draw
-        for rect_data in &self.data {
-            let rect = shape::Rectangle::from_corners(
-                PlotPoint::new(rect_data.x, rect_data.y),
-                PlotPoint::new(
-                    rect_data.x + rect_data.width,
-                    rect_data.y + rect_data.height,
-                ),
-            )
-            .fill(rect_data.color);
+        // Zip geometry with colors to avoid lookups
+        for (base_rect, &color) in self.geometry.iter().zip(self.colors.iter()) {
+            // Clone the geometry (cheap: just f64s)
+            let mut rect = base_rect.clone();
 
-            plot.add_shape(rect);
+            // Apply styles Just-In-Time based on toggles
+            if self.show_fill {
+                rect = rect.fill(color);
+            }
+
+            if self.show_stroke {
+                // Use a standard white stroke for contrast, with configurable width/style
+                rect = rect.stroke(
+                    Stroke::new(Color::WHITE, Length::Screen(self.stroke_width))
+                        .with_style(self.stroke_style),
+                );
+            }
+
+            // Only add to the render list if it contributes pixels
+            if self.show_fill || self.show_stroke {
+                plot.add_shape(rect);
+            }
         }
     }
 }
 
-struct StressPolylines {
-    data: Vec<PolylineData>,
+struct StressCircles {
+    geometry: Vec<Circle<f64>>,
+    colors: Vec<Color>,
+
+    show_fill: bool,
+    show_stroke: bool,
+    stroke_width: f32,
+    stroke_style: StrokeStyle,
 }
 
-impl<R: plot::Renderer> plot::Items<f64, R> for StressPolylines {
+impl<R: plot::Renderer> plot::Items<f64, R> for StressCircles {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        // Construct shapes from raw data during draw
-        for line_data in &self.data {
-            let stroke = Stroke::new(line_data.color, Length::Screen(line_data.thickness));
-            let polyline = shape::Polyline::new(line_data.points.clone(), stroke);
+        for (base_circle, &color) in self.geometry.iter().zip(self.colors.iter()) {
+            let mut circle = base_circle.clone();
 
-            plot.add_shape(polyline);
+            if self.show_fill {
+                circle = circle.fill(color);
+            }
+
+            if self.show_stroke {
+                circle = circle.stroke(
+                    Stroke::new(Color::WHITE, Length::Screen(self.stroke_width))
+                        .with_style(self.stroke_style),
+                );
+            }
+
+            if self.show_fill || self.show_stroke {
+                plot.add_shape(circle);
+            }
         }
     }
 }
+
+// --- App ---
 
 struct StressTestApp {
     state: State<AxisId, f64>,
     rectangles_layer: StressRectangles,
-    polylines_layer: StressPolylines,
+    circles_layer: StressCircles,
 
-    // Configuration
+    // Generation Configuration
     rectangle_count: usize,
-    polyline_count: usize,
-    points_per_polyline: usize,
+    circle_count: usize,
+    min_size: f32,
+    max_size: f32,
+    opacity: f32,
 
     // FPS counter
     last_frame_time: Option<Instant>,
     fps: f32,
-    frame_times: Vec<f32>, // For calculating average frame time
+    frame_times: Vec<f32>,
 }
 
 impl StressTestApp {
     fn init() -> (Self, Task<Message>) {
         let mut state: State<AxisId, f64> = State::new();
 
-        let axis_x = Axis::new(Linear::new(0.0, 1000.0), Position::Bottom);
-        let axis_y = Axis::new(Linear::new(0.0, 1000.0), Position::Left);
-
-        state.set_axis(AXIS_ID_X, axis_x);
-        state.set_axis(AXIS_ID_Y, axis_y);
+        state.set_axis(
+            AXIS_ID_X,
+            Axis::new(Linear::new(0.0, 1000.0), Position::Bottom),
+        );
+        state.set_axis(
+            AXIS_ID_Y,
+            Axis::new(Linear::new(0.0, 1000.0), Position::Left),
+        );
 
         let mut app = Self {
             state,
-            rectangles_layer: StressRectangles { data: Vec::new() },
-            polylines_layer: StressPolylines { data: Vec::new() },
-            rectangle_count: 5000,
-            polyline_count: 500,
-            points_per_polyline: 100,
+            rectangles_layer: StressRectangles {
+                geometry: Vec::new(),
+                colors: Vec::new(),
+                show_fill: true,
+                show_stroke: false,
+                stroke_width: 2.0,
+                stroke_style: StrokeStyle::Solid,
+            },
+            circles_layer: StressCircles {
+                geometry: Vec::new(),
+                colors: Vec::new(),
+                show_fill: true,
+                show_stroke: false,
+                stroke_width: 2.0,
+                stroke_style: StrokeStyle::Solid,
+            },
+            rectangle_count: 100,
+            circle_count: 100,
+            min_size: 5.0,
+            max_size: 20.0,
+            opacity: 1.0,
             last_frame_time: None,
             fps: 0.0,
             frame_times: Vec::with_capacity(60),
@@ -128,116 +189,133 @@ impl StressTestApp {
     }
 
     fn generate_shapes(&mut self) {
-        // Clear existing data
-        self.rectangles_layer.data.clear();
-        self.polylines_layer.data.clear();
-
         let mut rng = rand::rng();
 
-        // Generate rectangle data
+        // 1. Rectangles
+        self.rectangles_layer.geometry.clear();
+        self.rectangles_layer.colors.clear();
+        self.rectangles_layer.geometry.reserve(self.rectangle_count);
+        self.rectangles_layer.colors.reserve(self.rectangle_count);
+
         for _ in 0..self.rectangle_count {
             let x = rng.random_range(0.0..900.0);
             let y = rng.random_range(0.0..900.0);
-            let width = rng.random_range(20.0..100.0);
-            let height = rng.random_range(20.0..100.0);
+            let width = rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0));
+            let height = rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0));
 
-            let color = Color::from_rgb(
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
+            // Pre-calculate geometry
+            let rect = Rectangle::from_corners(
+                PlotPoint::new(x as f64, y as f64),
+                PlotPoint::new(x as f64 + width as f64, y as f64 + height as f64),
             );
 
-            self.rectangles_layer.data.push(RectangleData {
-                x,
-                y,
-                width,
-                height,
-                color,
-            });
+            self.rectangles_layer.geometry.push(rect);
+            self.rectangles_layer.colors.push(Color::from_rgba(
+                rng.random_range(0.0..1.0),
+                rng.random_range(0.0..1.0),
+                rng.random_range(0.0..1.0),
+                self.opacity,
+            ));
         }
 
-        // Generate polyline data
-        for _ in 0..self.polyline_count {
-            let mut points = Vec::with_capacity(self.points_per_polyline);
+        // 2. Circles
+        self.circles_layer.geometry.clear();
+        self.circles_layer.colors.clear();
+        self.circles_layer.geometry.reserve(self.circle_count);
+        self.circles_layer.colors.reserve(self.circle_count);
 
-            // Start point
-            let start_x = rng.random_range(0.0..200.0);
-            let start_y = rng.random_range(0.0..1000.0);
-
-            points.push(PlotPoint::new(start_x, start_y));
-
-            // Generate connected points with some randomness
-            let mut current_x: f64 = start_x;
-            let mut current_y: f64 = start_y;
-
-            for _ in 1..self.points_per_polyline {
-                current_x += rng.random_range(5.0..20.0);
-                current_y += rng.random_range(-50.0..50.0);
-                current_y = current_y.clamp(0.0, 1000.0);
-
-                if current_x > 1000.0 {
-                    break;
-                }
-
-                points.push(PlotPoint::new(current_x, current_y));
-            }
-
-            let color = Color::from_rgba(
-                rng.random_range(0.3..1.0),
-                rng.random_range(0.3..1.0),
-                rng.random_range(0.3..1.0),
-                0.8,
+        for _ in 0..self.circle_count {
+            let x = rng.random_range(0.0..900.0);
+            let y = rng.random_range(0.0..900.0);
+            // Radius is roughly half size
+            let radius = rng.random_range(
+                (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
             );
 
-            let thickness = rng.random_range(1.0..3.0);
+            // Pre-calculate geometry
+            let circle = Circle::new(
+                PlotPoint::new(x as f64, y as f64),
+                Length::Plot(radius as f64),
+            );
 
-            self.polylines_layer.data.push(PolylineData {
-                points,
-                color,
-                thickness,
-            });
+            self.circles_layer.geometry.push(circle);
+            self.circles_layer.colors.push(Color::from_rgba(
+                rng.random_range(0.5..1.0),
+                rng.random_range(0.2..0.8),
+                rng.random_range(0.2..0.8),
+                self.opacity,
+            ));
         }
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick(now) => {
-                // Calculate FPS
                 if let Some(last) = self.last_frame_time {
-                    let delta = now.duration_since(last);
-                    let delta_secs = delta.as_secs_f32();
-
-                    if delta_secs > 0.0 {
-                        // Instant FPS
-                        let instant_fps = 1.0 / delta_secs;
-
-                        // Smooth FPS with exponential moving average
+                    let delta = now.duration_since(last).as_secs_f32();
+                    if delta > 0.0 {
+                        let instant_fps = 1.0 / delta;
                         self.fps = self.fps * 0.9 + instant_fps * 0.1;
-
-                        // Track frame times for statistics
-                        self.frame_times.push(delta_secs * 1000.0); // Convert to ms
+                        self.frame_times.push(delta * 1000.0);
                         if self.frame_times.len() > 60 {
                             self.frame_times.remove(0);
                         }
                     }
                 }
                 self.last_frame_time = Some(now);
-
                 Task::none()
             }
-            Message::RectangleCountChanged(value) => {
-                self.rectangle_count = value as usize;
+            // Generation Parameters (Trigger Regenerate)
+            Message::RectangleCountChanged(v) => {
+                self.rectangle_count = v as usize;
                 self.generate_shapes();
                 Task::none()
             }
-            Message::PolylineCountChanged(value) => {
-                self.polyline_count = value as usize;
+            Message::CircleCountChanged(v) => {
+                self.circle_count = v as usize;
                 self.generate_shapes();
                 Task::none()
             }
-            Message::PointsPerPolylineChanged(value) => {
-                self.points_per_polyline = value as usize;
+            Message::MinSizeChanged(v) => {
+                self.min_size = v;
+                if self.min_size > self.max_size {
+                    self.max_size = self.min_size;
+                }
                 self.generate_shapes();
+                Task::none()
+            }
+            Message::MaxSizeChanged(v) => {
+                self.max_size = v;
+                if self.max_size < self.min_size {
+                    self.min_size = self.max_size;
+                }
+                self.generate_shapes();
+                Task::none()
+            }
+            Message::OpacityChanged(v) => {
+                self.opacity = v;
+                self.generate_shapes();
+                Task::none()
+            }
+            // Render Parameters (Instant Update)
+            Message::ToggleFill(v) => {
+                self.rectangles_layer.show_fill = v;
+                self.circles_layer.show_fill = v;
+                Task::none()
+            }
+            Message::ToggleStroke(v) => {
+                self.rectangles_layer.show_stroke = v;
+                self.circles_layer.show_stroke = v;
+                Task::none()
+            }
+            Message::StrokeWidthChanged(v) => {
+                self.rectangles_layer.stroke_width = v;
+                self.circles_layer.stroke_width = v;
+                Task::none()
+            }
+            Message::StrokeStyleChanged(v) => {
+                self.rectangles_layer.stroke_style = v;
+                self.circles_layer.stroke_style = v;
                 Task::none()
             }
             Message::Regenerate => {
@@ -250,116 +328,156 @@ impl StressTestApp {
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.state)
             .layer(&self.rectangles_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.polylines_layer, AXIS_ID_X, AXIS_ID_Y);
+            .layer(&self.circles_layer, AXIS_ID_X, AXIS_ID_Y);
 
-        // Calculate statistics
         let avg_frame_time = if !self.frame_times.is_empty() {
             self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32
         } else {
             0.0
         };
 
-        let min_frame_time = self
-            .frame_times
-            .iter()
-            .copied()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap_or(0.0);
+        // --- Controls Sections ---
 
-        let max_frame_time = self
-            .frame_times
-            .iter()
-            .copied()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap_or(0.0);
-
-        let total_shapes = self.rectangle_count + self.polyline_count;
-        let total_points =
-            self.rectangle_count * 4 + self.polyline_count * self.points_per_polyline;
-
-        // FPS and statistics display
-        let fps_display = row![
-            text(format!("FPS: {:.1}", self.fps)).size(20),
+        // 1. Stats
+        let stats_row = row![
+            text(format!("FPS: {:.0}", self.fps)).size(24),
+            text(format!("Frame Time: {:.2}ms", avg_frame_time)).size(16),
             text(format!(
-                "  |  Frame Time: {:.2}ms (avg) {:.2}ms (min) {:.2}ms (max)",
-                avg_frame_time, min_frame_time, max_frame_time
+                "Vertices: ~{}",
+                (self.rectangle_count
+                    * (if self.rectangles_layer.show_fill {
+                        4
+                    } else {
+                        0
+                    } + if self.rectangles_layer.show_stroke {
+                        8
+                    } else {
+                        0
+                    }))
+                    + (self.circle_count * 100)
             ))
             .size(16),
         ]
-        .spacing(10);
+        .spacing(20);
 
-        let stats_display = row![
-            text(format!(
-                "Total Shapes: {} | Total Points: {}",
-                total_shapes, total_points
-            ))
-            .size(16),
-        ]
-        .spacing(10);
-
-        // Rectangle count slider
-        let rectangle_slider = row![
-            text(format!("Rectangles: {}", self.rectangle_count))
-                .size(14)
-                .width(150),
-            Slider::new(
-                0.0..=50000.0,
-                self.rectangle_count as f32,
-                Message::RectangleCountChanged
-            )
-            .step(500.0),
-        ]
-        .spacing(10)
-        .padding(5);
-
-        // Polyline count slider
-        let polyline_slider = row![
-            text(format!("Polylines: {}", self.polyline_count))
-                .size(14)
-                .width(150),
-            Slider::new(
-                0.0..=10000.0,
-                self.polyline_count as f32,
-                Message::PolylineCountChanged
-            )
-            .step(100.0),
-        ]
-        .spacing(10)
-        .padding(5);
-
-        // Points per polyline slider
-        let points_slider = row![
-            text(format!("Points/Polyline: {}", self.points_per_polyline))
-                .size(14)
-                .width(150),
-            Slider::new(
-                2.0..=1000.0,
-                self.points_per_polyline as f32,
-                Message::PointsPerPolylineChanged
-            )
-            .step(10.0),
-        ]
-        .spacing(10)
-        .padding(5);
-
-        // Regenerate button
-        let regenerate_btn = button("Regenerate Shapes")
-            .on_press(Message::Regenerate)
-            .padding(10);
-
-        // Controls panel
-        let controls = column![
-            text("Stress Test Controls").size(18),
-            rectangle_slider,
-            polyline_slider,
-            points_slider,
-            regenerate_btn,
+        // 2. Count Sliders
+        let counts_col = column![
+            row![
+                text(format!("Rects: {}", self.rectangle_count)).width(100),
+                Slider::new(
+                    0.0..=50000.0,
+                    self.rectangle_count as f32,
+                    Message::RectangleCountChanged
+                )
+                .step(500.0)
+            ]
+            .spacing(10),
+            row![
+                text(format!("Circles: {}", self.circle_count)).width(100),
+                Slider::new(
+                    0.0..=10000.0,
+                    self.circle_count as f32,
+                    Message::CircleCountChanged
+                )
+                .step(100.0)
+            ]
+            .spacing(10),
         ]
         .spacing(5)
-        .padding(10);
+        .padding(5);
 
-        // Main layout
-        column![fps_display, stats_display, controls, chart,]
+        // 3. Geometry Sliders (Size/Opacity)
+        let geometry_col = column![
+            row![
+                text(format!("Min Size: {:.0}", self.min_size)).width(100),
+                Slider::new(1.0..=200.0, self.min_size, Message::MinSizeChanged)
+            ]
+            .spacing(10),
+            row![
+                text(format!("Max Size: {:.0}", self.max_size)).width(100),
+                Slider::new(1.0..=200.0, self.max_size, Message::MaxSizeChanged)
+            ]
+            .spacing(10),
+            row![
+                text(format!("Opacity: {:.1}", self.opacity)).width(100),
+                Slider::new(0.0..=1.0, self.opacity, Message::OpacityChanged).step(0.05)
+            ]
+            .spacing(10),
+        ]
+        .spacing(5)
+        .padding(5);
+
+        // 4. Style Controls
+        let stroke_style_row = row![
+            radio(
+                "Solid",
+                StrokeStyle::Solid,
+                Some(self.rectangles_layer.stroke_style),
+                Message::StrokeStyleChanged
+            ),
+            radio(
+                "Dashed",
+                StrokeStyle::Dashed,
+                Some(self.rectangles_layer.stroke_style),
+                Message::StrokeStyleChanged
+            ),
+            radio(
+                "Dotted",
+                StrokeStyle::Dotted,
+                Some(self.rectangles_layer.stroke_style),
+                Message::StrokeStyleChanged
+            ),
+        ]
+        .spacing(15);
+
+        let styles_col = column![
+            // Fixed: Checkboxes now use a row with text for labels
+            row![
+                row![
+                    checkbox(self.rectangles_layer.show_fill).on_toggle(Message::ToggleFill),
+                    text("Fill"),
+                ]
+                .spacing(5)
+                .align_y(Alignment::Center),
+                row![
+                    checkbox(self.rectangles_layer.show_stroke).on_toggle(Message::ToggleStroke),
+                    text("Stroke"),
+                ]
+                .spacing(5)
+                .align_y(Alignment::Center),
+            ]
+            .spacing(20),
+            row![
+                text(format!(
+                    "Stroke Width: {:.1}",
+                    self.rectangles_layer.stroke_width
+                ))
+                .width(120),
+                Slider::new(
+                    0.5..=10.0,
+                    self.rectangles_layer.stroke_width,
+                    Message::StrokeWidthChanged
+                )
+                .step(0.5)
+            ]
+            .spacing(10),
+            stroke_style_row,
+        ]
+        .spacing(5)
+        .padding(5);
+
+        // Combine controls in a responsive grid/row
+        let controls_row = row![
+            counts_col,
+            geometry_col,
+            styles_col,
+            button("Regenerate")
+                .on_press(Message::Regenerate)
+                .padding(10)
+        ]
+        .spacing(20);
+
+        column![stats_row, controls_row, chart]
             .spacing(10)
             .padding(10)
             .into()
@@ -369,7 +487,7 @@ impl StressTestApp {
         iced::window::frames().map(Message::Tick)
     }
 
-    const fn theme(&self) -> Theme {
+    fn theme(&self) -> Theme {
         Theme::Dark
     }
 
@@ -382,6 +500,6 @@ impl StressTestApp {
     }
 }
 
-fn main() -> iced::Result {
+pub fn main() -> iced::Result {
     StressTestApp::run()
 }

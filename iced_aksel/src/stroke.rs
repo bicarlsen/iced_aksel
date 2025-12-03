@@ -36,4 +36,9 @@ impl<D> Stroke<D> {
         self.style = StrokeStyle::Dotted;
         self
     }
+
+    pub fn with_style(mut self, style: StrokeStyle) -> Self {
+        self.style = style;
+        self
+    }
 }
