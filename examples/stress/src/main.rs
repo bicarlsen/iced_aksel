@@ -21,7 +21,7 @@ use iced_aksel::{
     Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
     axis::{self, Position},
     plot,
-    shape::{self, Circle, Rectangle, Triangle},
+    shape::{self, Arc, Circle, Line, Polyline, Rectangle, Triangle},
 };
 use rand::Rng;
 
@@ -52,10 +52,15 @@ enum Message {
     RectangleCountChanged(f32),
     CircleCountChanged(f32),
     TriangleCountChanged(f32),
+    LineCountChanged(f32),
+    PolylineCountChanged(f32),
+    PolySegmentsChanged(f32),
+    ArcCountChanged(f32),
     // Geometry Generation
     MinSizeChanged(f32),
     MaxSizeChanged(f32),
     OpacityChanged(f32),
+    InnerRadiusChanged(f32),
     SizeModeChanged(LengthMode),
     // Rendering Styles
     ToggleFill(bool),
@@ -63,6 +68,11 @@ enum Message {
     StrokeWidthChanged(f32),
     StrokeWidthModeChanged(LengthMode),
     StrokeStyleChanged(StrokeStyle),
+    // Line/Polyline Features
+    ToggleArrowStart(bool),
+    ToggleArrowEnd(bool),
+    ToggleInfiniteStart(bool),
+    ToggleInfiniteEnd(bool),
     // Actions
     Regenerate,
     // Chart interaction
@@ -177,6 +187,121 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressTriangles {
     }
 }
 
+struct StressLines {
+    geometry: Vec<Line<f64>>,
+    colors: Vec<Color>,
+    // Added show_stroke to allow toggling visibility
+    show_stroke: bool,
+    arrow_start: bool,
+    arrow_end: bool,
+    extend_start: bool,
+    extend_end: bool,
+    stroke_width: f32,
+    stroke_width_mode: LengthMode,
+    stroke_style: StrokeStyle,
+}
+
+impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
+    fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
+        // Only draw lines if stroke is enabled
+        if !self.show_stroke {
+            return;
+        }
+
+        for (base_line, &color) in self.geometry.iter().zip(self.colors.iter()) {
+            let mut line = base_line.clone();
+
+            let thickness = match self.stroke_width_mode {
+                LengthMode::Screen => Length::Screen(self.stroke_width),
+                LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+            };
+
+            line.stroke = Stroke::new(color, thickness).with_style(self.stroke_style);
+            line.arrow_start = self.arrow_start;
+            line.arrow_end = self.arrow_end;
+            line.extend_start = self.extend_start;
+            line.extend_end = self.extend_end;
+
+            plot.add_shape(line);
+        }
+    }
+}
+
+struct StressPolylines {
+    geometry: Vec<Polyline<f64>>,
+    colors: Vec<Color>,
+    // Added show_stroke to allow toggling visibility
+    show_stroke: bool,
+    arrow_start: bool,
+    arrow_end: bool,
+    extend_start: bool,
+    extend_end: bool,
+    stroke_width: f32,
+    stroke_width_mode: LengthMode,
+    stroke_style: StrokeStyle,
+}
+
+impl<R: plot::Renderer> plot::Items<f64, R> for StressPolylines {
+    fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
+        // Only draw polylines if stroke is enabled
+        if !self.show_stroke {
+            return;
+        }
+
+        for (base_poly, &color) in self.geometry.iter().zip(self.colors.iter()) {
+            let mut poly = base_poly.clone();
+
+            let thickness = match self.stroke_width_mode {
+                LengthMode::Screen => Length::Screen(self.stroke_width),
+                LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+            };
+
+            poly.stroke = Stroke::new(color, thickness).with_style(self.stroke_style);
+            poly.arrow_start = self.arrow_start;
+            poly.arrow_end = self.arrow_end;
+            poly.extend_start = self.extend_start;
+            poly.extend_end = self.extend_end;
+
+            plot.add_shape(poly);
+        }
+    }
+}
+
+struct StressArcs {
+    geometry: Vec<Arc<f64>>,
+    colors: Vec<Color>,
+    show_fill: bool,
+    show_stroke: bool,
+    stroke_width: f32,
+    stroke_width_mode: LengthMode,
+    stroke_style: StrokeStyle,
+}
+
+impl<R: plot::Renderer> plot::Items<f64, R> for StressArcs {
+    fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
+        for (base_arc, &color) in self.geometry.iter().zip(self.colors.iter()) {
+            let mut arc = base_arc.clone();
+
+            if self.show_fill {
+                arc = arc.fill(color);
+            }
+
+            if self.show_stroke {
+                let thickness = match self.stroke_width_mode {
+                    LengthMode::Screen => Length::Screen(self.stroke_width),
+                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                };
+                arc =
+                    arc.stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
+            }
+
+            if self.show_fill || self.show_stroke {
+                plot.add_shape(arc);
+            }
+        }
+    }
+}
+
 // --- App ---
 
 struct StressTestApp {
@@ -184,14 +309,23 @@ struct StressTestApp {
     rectangles_layer: StressRectangles,
     circles_layer: StressCircles,
     triangles_layer: StressTriangles,
+    lines_layer: StressLines,
+    polylines_layer: StressPolylines,
+    arcs_layer: StressArcs,
 
     // Generation Configuration
     rectangle_count: usize,
     circle_count: usize,
     triangle_count: usize,
+    line_count: usize,
+    polyline_count: usize,
+    arc_count: usize,
+
+    poly_segments: usize,
     min_size: f32,
     max_size: f32,
     opacity: f32,
+    inner_radius_factor: f32, // 0.0 to 0.9, for Arcs/Donuts
     size_mode: LengthMode,
 
     // FPS counter
@@ -242,13 +376,53 @@ impl StressTestApp {
                 stroke_width_mode: LengthMode::Screen,
                 stroke_style: StrokeStyle::Solid,
             },
-            rectangle_count: 5000,
-            circle_count: 5000,
-            triangle_count: 5000,
-            min_size: 5.0,
-            max_size: 20.0,
-            opacity: 1.0,
+            lines_layer: StressLines {
+                geometry: Vec::new(),
+                colors: Vec::new(),
+                show_stroke: false, // Default to invisible to match toggle state
+                arrow_start: false,
+                arrow_end: false,
+                extend_start: false,
+                extend_end: false,
+                stroke_width: 2.0,
+                stroke_width_mode: LengthMode::Screen,
+                stroke_style: StrokeStyle::Solid,
+            },
+            polylines_layer: StressPolylines {
+                geometry: Vec::new(),
+                colors: Vec::new(),
+                show_stroke: false, // Default to invisible to match toggle state
+                arrow_start: false,
+                arrow_end: false,
+                extend_start: false,
+                extend_end: false,
+                stroke_width: 2.0,
+                stroke_width_mode: LengthMode::Screen,
+                stroke_style: StrokeStyle::Solid,
+            },
+            arcs_layer: StressArcs {
+                geometry: Vec::new(),
+                colors: Vec::new(),
+                show_fill: true,
+                show_stroke: false,
+                stroke_width: 2.0,
+                stroke_width_mode: LengthMode::Screen,
+                stroke_style: StrokeStyle::Solid,
+            },
+            rectangle_count: 2000,
+            circle_count: 2000,
+            triangle_count: 2000,
+            line_count: 2000,
+            polyline_count: 1000,
+            arc_count: 2000,
+
+            poly_segments: 5,
+            min_size: 10.0,
+            max_size: 50.0,
+            opacity: 0.8,
+            inner_radius_factor: 0.5,
             size_mode: LengthMode::Screen,
+
             last_frame_time: None,
             fps: 0.0,
             frame_times: Vec::with_capacity(60),
@@ -312,12 +486,9 @@ impl StressTestApp {
             self.rectangles_layer
                 .geometry
                 .push(Rectangle::new(center, width, height));
-            self.rectangles_layer.colors.push(Color::from_rgba(
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
-                self.opacity,
-            ));
+            self.rectangles_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
         }
 
         // 3. Circles
@@ -341,12 +512,9 @@ impl StressTestApp {
             self.circles_layer
                 .geometry
                 .push(Circle::new(PlotPoint::new(x, y), radius));
-            self.circles_layer.colors.push(Color::from_rgba(
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
-                self.opacity,
-            ));
+            self.circles_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
         }
 
         // 4. Triangles
@@ -367,16 +535,110 @@ impl StressTestApp {
                 LengthMode::Plot => Length::Plot(r_val),
             };
 
-            // Using Equilateral triangle constructor for markers
             self.triangles_layer
                 .geometry
                 .push(Triangle::equilateral(PlotPoint::new(x, y), radius));
-            self.triangles_layer.colors.push(Color::from_rgba(
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
-                rng.random_range(0.0..1.0),
-                self.opacity,
+            self.triangles_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
+        }
+
+        // 5. Lines
+        self.lines_layer.geometry.clear();
+        self.lines_layer.colors.clear();
+        self.lines_layer.geometry.reserve(self.line_count);
+        self.lines_layer.colors.reserve(self.line_count);
+
+        for _ in 0..self.line_count {
+            let x1 = rng.random_range(x_min..x_max);
+            let y1 = rng.random_range(y_min..y_max);
+            let angle = rng.random_range(0.0..std::f64::consts::TAU);
+            let len =
+                rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
+
+            let x2 = x1 + angle.cos() * len;
+            let y2 = y1 + angle.sin() * len;
+
+            self.lines_layer.geometry.push(Line::new(
+                PlotPoint::new(x1, y1),
+                PlotPoint::new(x2, y2),
+                Stroke::new(Color::BLACK, Length::Screen(1.0)),
             ));
+            self.lines_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
+        }
+
+        // 6. Polylines
+        self.polylines_layer.geometry.clear();
+        self.polylines_layer.colors.clear();
+        self.polylines_layer.geometry.reserve(self.polyline_count);
+        self.polylines_layer.colors.reserve(self.polyline_count);
+
+        for _ in 0..self.polyline_count {
+            let mut points = Vec::with_capacity(self.poly_segments);
+            let start_x = rng.random_range(x_min..x_max);
+            let start_y = rng.random_range(y_min..y_max);
+            points.push(PlotPoint::new(start_x, start_y));
+
+            let mut prev_x = start_x;
+            let mut prev_y = start_y;
+            let step_size = (self.max_size as f64).min(50.0);
+
+            for _ in 1..self.poly_segments.max(2) {
+                let angle = rng.random_range(0.0..std::f64::consts::TAU);
+                let next_x = prev_x + angle.cos() * step_size;
+                let next_y = prev_y + angle.sin() * step_size;
+                points.push(PlotPoint::new(next_x, next_y));
+                prev_x = next_x;
+                prev_y = next_y;
+            }
+
+            self.polylines_layer.geometry.push(Polyline::new(
+                points,
+                Stroke::new(Color::BLACK, Length::Screen(1.0)),
+            ));
+            self.polylines_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
+        }
+
+        // 7. Arcs
+        self.arcs_layer.geometry.clear();
+        self.arcs_layer.colors.clear();
+        self.arcs_layer.geometry.reserve(self.arc_count);
+        self.arcs_layer.colors.reserve(self.arc_count);
+
+        for _ in 0..self.arc_count {
+            let x = rng.random_range(x_min..x_max);
+            let y = rng.random_range(y_min..y_max);
+            let r_val = rng.random_range(
+                (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
+            ) as f64;
+
+            // Random Angles
+            let start_angle = rng.random_range(0.0..std::f32::consts::TAU);
+            let sweep = rng.random_range(0.5..std::f32::consts::PI * 1.5); // Random sweep up to 270 deg
+            let end_angle = start_angle + sweep;
+
+            let (radius, inner_radius) = match self.size_mode {
+                LengthMode::Screen => (
+                    Length::Screen(r_val as f32),
+                    Length::Screen(r_val as f32 * self.inner_radius_factor),
+                ),
+                LengthMode::Plot => (
+                    Length::Plot(r_val),
+                    Length::Plot(r_val * self.inner_radius_factor as f64),
+                ),
+            };
+
+            let arc = Arc::new(PlotPoint::new(x, y), radius, start_angle, end_angle)
+                .inner_radius(inner_radius);
+
+            self.arcs_layer.geometry.push(arc);
+            self.arcs_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
         }
     }
 
@@ -413,6 +675,27 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
+            Message::LineCountChanged(v) => {
+                self.line_count = v as usize;
+                self.generate_shapes();
+                Task::none()
+            }
+            Message::PolylineCountChanged(v) => {
+                self.polyline_count = v as usize;
+                self.generate_shapes();
+                Task::none()
+            }
+            Message::ArcCountChanged(v) => {
+                self.arc_count = v as usize;
+                self.generate_shapes();
+                Task::none()
+            }
+            Message::PolySegmentsChanged(v) => {
+                self.poly_segments = v as usize;
+                self.generate_shapes();
+                Task::none()
+            }
+
             Message::MinSizeChanged(v) => {
                 self.min_size = v;
                 if self.min_size > self.max_size {
@@ -434,6 +717,11 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
+            Message::InnerRadiusChanged(v) => {
+                self.inner_radius_factor = v;
+                self.generate_shapes();
+                Task::none()
+            }
             Message::SizeModeChanged(mode) => {
                 self.size_mode = mode;
                 self.generate_shapes();
@@ -444,32 +732,67 @@ impl StressTestApp {
                 self.rectangles_layer.show_fill = v;
                 self.circles_layer.show_fill = v;
                 self.triangles_layer.show_fill = v;
+                self.arcs_layer.show_fill = v;
                 Task::none()
             }
             Message::ToggleStroke(v) => {
                 self.rectangles_layer.show_stroke = v;
                 self.circles_layer.show_stroke = v;
                 self.triangles_layer.show_stroke = v;
+                self.lines_layer.show_stroke = v;
+                self.polylines_layer.show_stroke = v;
+                self.arcs_layer.show_stroke = v;
                 Task::none()
             }
             Message::StrokeWidthChanged(v) => {
                 self.rectangles_layer.stroke_width = v;
                 self.circles_layer.stroke_width = v;
                 self.triangles_layer.stroke_width = v;
+                self.lines_layer.stroke_width = v;
+                self.polylines_layer.stroke_width = v;
+                self.arcs_layer.stroke_width = v;
                 Task::none()
             }
             Message::StrokeWidthModeChanged(mode) => {
                 self.rectangles_layer.stroke_width_mode = mode;
                 self.circles_layer.stroke_width_mode = mode;
                 self.triangles_layer.stroke_width_mode = mode;
+                self.lines_layer.stroke_width_mode = mode;
+                self.polylines_layer.stroke_width_mode = mode;
+                self.arcs_layer.stroke_width_mode = mode;
                 Task::none()
             }
             Message::StrokeStyleChanged(v) => {
                 self.rectangles_layer.stroke_style = v;
                 self.circles_layer.stroke_style = v;
                 self.triangles_layer.stroke_style = v;
+                self.lines_layer.stroke_style = v;
+                self.polylines_layer.stroke_style = v;
+                self.arcs_layer.stroke_style = v;
                 Task::none()
             }
+            // Line/Poly Features
+            Message::ToggleArrowStart(v) => {
+                self.lines_layer.arrow_start = v;
+                self.polylines_layer.arrow_start = v;
+                Task::none()
+            }
+            Message::ToggleArrowEnd(v) => {
+                self.lines_layer.arrow_end = v;
+                self.polylines_layer.arrow_end = v;
+                Task::none()
+            }
+            Message::ToggleInfiniteStart(v) => {
+                self.lines_layer.extend_start = v;
+                self.polylines_layer.extend_start = v;
+                Task::none()
+            }
+            Message::ToggleInfiniteEnd(v) => {
+                self.lines_layer.extend_end = v;
+                self.polylines_layer.extend_end = v;
+                Task::none()
+            }
+
             Message::Regenerate => {
                 self.generate_shapes();
                 Task::none()
@@ -502,6 +825,9 @@ impl StressTestApp {
             .layer(&self.rectangles_layer, AXIS_ID_X, AXIS_ID_Y)
             .layer(&self.circles_layer, AXIS_ID_X, AXIS_ID_Y)
             .layer(&self.triangles_layer, AXIS_ID_X, AXIS_ID_Y)
+            .layer(&self.lines_layer, AXIS_ID_X, AXIS_ID_Y)
+            .layer(&self.polylines_layer, AXIS_ID_X, AXIS_ID_Y)
+            .layer(&self.arcs_layer, AXIS_ID_X, AXIS_ID_Y)
             .on_drag(Message::ChartDragged)
             .on_scroll(Message::ChartScrolled);
 
@@ -511,173 +837,220 @@ impl StressTestApp {
             0.0
         };
 
-        // --- Controls ---
+        // --- Controls Layout ---
 
         // 1. Stats
         let stats_row = row![
             text(format!("FPS: {:.0}", self.fps)).size(24),
             text(format!("Frame Time: {:.2}ms", avg_frame_time)).size(16),
             text(format!(
-                "Total Objects: {}",
-                self.rectangle_count + self.circle_count + self.triangle_count
+                "Objects: {}",
+                self.rectangle_count
+                    + self.circle_count
+                    + self.triangle_count
+                    + self.line_count
+                    + self.polyline_count
+                    + self.arc_count
             ))
             .size(16),
         ]
         .spacing(20);
 
-        // 2. Count Sliders (Range Increased to 500,000)
+        // 2. Count Sliders (Column 1)
         let counts_col = column![
-            row![
-                text(format!("Rects: {}", self.rectangle_count)).width(100),
-                Slider::new(
-                    0.0..=500000.0,
-                    self.rectangle_count as f32,
-                    Message::RectangleCountChanged
-                )
-                .step(5000.0)
-            ]
-            .spacing(10),
-            row![
-                text(format!("Circles: {}", self.circle_count)).width(100),
-                Slider::new(
-                    0.0..=500000.0,
-                    self.circle_count as f32,
-                    Message::CircleCountChanged
-                )
-                .step(5000.0)
-            ]
-            .spacing(10),
-            row![
-                text(format!("Triangles: {}", self.triangle_count)).width(100),
-                Slider::new(
-                    0.0..=500000.0,
-                    self.triangle_count as f32,
-                    Message::TriangleCountChanged
-                )
-                .step(5000.0)
-            ]
-            .spacing(10),
+            text("Counts").size(14).style(|t: &Theme| text::Style {
+                color: Some(t.palette().primary)
+            }),
+            slider_row(
+                "Rects",
+                self.rectangle_count as f32,
+                500000.0,
+                Message::RectangleCountChanged
+            ),
+            slider_row(
+                "Circles",
+                self.circle_count as f32,
+                500000.0,
+                Message::CircleCountChanged
+            ),
+            slider_row(
+                "Tris",
+                self.triangle_count as f32,
+                500000.0,
+                Message::TriangleCountChanged
+            ),
+            slider_row(
+                "Lines",
+                self.line_count as f32,
+                500000.0,
+                Message::LineCountChanged
+            ),
+            slider_row(
+                "Polys",
+                self.polyline_count as f32,
+                100000.0,
+                Message::PolylineCountChanged
+            ),
+            slider_row(
+                "Arcs",
+                self.arc_count as f32,
+                500000.0,
+                Message::ArcCountChanged
+            ),
         ]
         .spacing(5)
-        .padding(5);
+        .padding(5)
+        .width(iced::Length::FillPortion(1));
 
-        // 3. Geometry Sliders (Size/Opacity)
+        // 3. Geometry (Column 2)
         let geometry_col = column![
+            text("Geometry").size(14).style(|t: &Theme| text::Style {
+                color: Some(t.palette().primary)
+            }),
+            slider_row("Min Sz", self.min_size, 200.0, Message::MinSizeChanged),
+            slider_row("Max Sz", self.max_size, 200.0, Message::MaxSizeChanged),
+            slider_row("Opacity", self.opacity, 1.0, Message::OpacityChanged),
+            slider_row(
+                "Inner R",
+                self.inner_radius_factor,
+                0.9,
+                Message::InnerRadiusChanged
+            ),
             row![
-                text(format!("Min Size: {:.0}", self.min_size)).width(100),
-                Slider::new(1.0..=200.0, self.min_size, Message::MinSizeChanged)
-            ]
-            .spacing(10),
-            row![
-                text(format!("Max Size: {:.0}", self.max_size)).width(100),
-                Slider::new(1.0..=200.0, self.max_size, Message::MaxSizeChanged)
-            ]
-            .spacing(10),
-            row![
-                text(format!("Opacity: {:.1}", self.opacity)).width(100),
-                Slider::new(0.0..=1.0, self.opacity, Message::OpacityChanged).step(0.05)
-            ]
-            .spacing(10),
-            row![
-                text("Size Mode:").size(14),
+                text("Mode:").size(12),
                 radio(
                     "Screen",
                     LengthMode::Screen,
                     Some(self.size_mode),
                     Message::SizeModeChanged
-                ),
+                )
+                .size(12),
                 radio(
                     "Plot",
                     LengthMode::Plot,
                     Some(self.size_mode),
                     Message::SizeModeChanged
-                ),
+                )
+                .size(12),
             ]
-            .spacing(15)
+            .spacing(10)
         ]
         .spacing(5)
-        .padding(5);
+        .padding(5)
+        .width(iced::Length::FillPortion(1));
 
-        // 4. Style Controls
-        let stroke_style_row = row![
-            radio(
-                "Solid",
-                StrokeStyle::Solid,
-                Some(self.rectangles_layer.stroke_style),
-                Message::StrokeStyleChanged
+        // 4. Style (Column 3)
+        let style_col = column![
+            text("Stroke Style")
+                .size(14)
+                .style(|t: &Theme| text::Style {
+                    color: Some(t.palette().primary)
+                }),
+            slider_row(
+                "Width",
+                self.rectangles_layer.stroke_width,
+                20.0,
+                Message::StrokeWidthChanged
             ),
-            radio(
-                "Dashed",
-                StrokeStyle::Dashed,
-                Some(self.rectangles_layer.stroke_style),
-                Message::StrokeStyleChanged
-            ),
-            radio(
-                "Dotted",
-                StrokeStyle::Dotted,
-                Some(self.rectangles_layer.stroke_style),
-                Message::StrokeStyleChanged
-            ),
-        ]
-        .spacing(15);
-
-        let stroke_mode_row = row![
-            text("Width Mode:").size(14),
-            radio(
-                "Screen",
-                LengthMode::Screen,
-                Some(self.rectangles_layer.stroke_width_mode),
-                Message::StrokeWidthModeChanged
-            ),
-            radio(
-                "Plot",
-                LengthMode::Plot,
-                Some(self.rectangles_layer.stroke_width_mode),
-                Message::StrokeWidthModeChanged
-            ),
-        ]
-        .spacing(15);
-
-        let styles_col = column![
             row![
-                row![
-                    checkbox(self.rectangles_layer.show_fill).on_toggle(Message::ToggleFill),
-                    text("Fill"),
-                ]
-                .spacing(5)
-                .align_y(Alignment::Center),
-                row![
-                    checkbox(self.rectangles_layer.show_stroke).on_toggle(Message::ToggleStroke),
-                    text("Stroke"),
-                ]
-                .spacing(5)
-                .align_y(Alignment::Center),
-            ]
-            .spacing(20),
-            row![
-                text(format!(
-                    "Stroke Width: {:.1}",
-                    self.rectangles_layer.stroke_width
-                ))
-                .width(120),
-                Slider::new(
-                    0.5..=20.0,
-                    self.rectangles_layer.stroke_width,
-                    Message::StrokeWidthChanged
+                radio(
+                    "Px",
+                    LengthMode::Screen,
+                    Some(self.rectangles_layer.stroke_width_mode),
+                    Message::StrokeWidthModeChanged
                 )
-                .step(0.5)
+                .size(12),
+                radio(
+                    "Unit",
+                    LengthMode::Plot,
+                    Some(self.rectangles_layer.stroke_width_mode),
+                    Message::StrokeWidthModeChanged
+                )
+                .size(12),
             ]
             .spacing(10),
-            stroke_mode_row,
-            stroke_style_row,
+            column![
+                radio(
+                    "Solid",
+                    StrokeStyle::Solid,
+                    Some(self.rectangles_layer.stroke_style),
+                    Message::StrokeStyleChanged
+                )
+                .size(12),
+                radio(
+                    "Dashed",
+                    StrokeStyle::Dashed,
+                    Some(self.rectangles_layer.stroke_style),
+                    Message::StrokeStyleChanged
+                )
+                .size(12),
+                radio(
+                    "Dotted",
+                    StrokeStyle::Dotted,
+                    Some(self.rectangles_layer.stroke_style),
+                    Message::StrokeStyleChanged
+                )
+                .size(12),
+            ]
+            .spacing(2)
         ]
         .spacing(5)
-        .padding(5);
+        .padding(5)
+        .width(iced::Length::FillPortion(1));
+
+        // 5. Toggles / Line Features (Column 4)
+        let toggles_col = column![
+            text("Visibility").size(14).style(|t: &Theme| text::Style {
+                color: Some(t.palette().primary)
+            }),
+            checkbox_row(
+                "Show Fill",
+                self.rectangles_layer.show_fill,
+                Message::ToggleFill
+            ),
+            checkbox_row(
+                "Show Stroke",
+                self.rectangles_layer.show_stroke,
+                Message::ToggleStroke
+            ),
+            text("Line/Poly Features")
+                .size(14)
+                .style(|t: &Theme| text::Style {
+                    color: Some(t.palette().primary)
+                }),
+            slider_row(
+                "Segs/Poly",
+                self.poly_segments as f32,
+                100.0,
+                Message::PolySegmentsChanged
+            ),
+            checkbox_row(
+                "Arrow Start",
+                self.lines_layer.arrow_start,
+                Message::ToggleArrowStart
+            ),
+            checkbox_row(
+                "Arrow End",
+                self.lines_layer.arrow_end,
+                Message::ToggleArrowEnd
+            ),
+            checkbox_row(
+                "Inf Start",
+                self.lines_layer.extend_start,
+                Message::ToggleInfiniteStart
+            ),
+            checkbox_row(
+                "Inf End",
+                self.lines_layer.extend_end,
+                Message::ToggleInfiniteEnd
+            ),
+        ]
+        .spacing(5)
+        .padding(5)
+        .width(iced::Length::FillPortion(1));
 
         // Combine controls
-        let controls_row = row![counts_col, geometry_col, styles_col,]
-            .spacing(20)
-            .align_y(Alignment::Start);
+        let controls_row = row![counts_col, geometry_col, style_col, toggles_col].spacing(10);
 
         let regenerate_btn = button(
             text("Regenerate Shapes")
@@ -709,6 +1082,40 @@ impl StressTestApp {
             .antialiasing(true)
             .run()
     }
+}
+
+// Helper for compact sliders
+fn slider_row(label: &str, value: f32, max: f32, msg: fn(f32) -> Message) -> Element<'_, Message> {
+    // Increment of 500 for counts (which go to 100k+), smaller for others
+    let step = if max > 200.0 {
+        500.0
+    } else if max > 5.0 {
+        0.5
+    } else {
+        0.05
+    };
+    column![
+        row![text(label).size(12), text(format!("{:.1}", value)).size(12)].spacing(5),
+        Slider::new(0.0..=max, value, msg).step(step)
+    ]
+    .into()
+}
+
+// Helper for labeled checkboxes
+fn checkbox_row(label: &str, value: bool, msg: fn(bool) -> Message) -> Element<'_, Message> {
+    row![checkbox(value).on_toggle(msg), text(label).size(12)]
+        .spacing(5)
+        .align_y(Alignment::Center)
+        .into()
+}
+
+fn random_color(rng: &mut impl rand::Rng, opacity: f32) -> Color {
+    Color::from_rgba(
+        rng.random_range(0.0..1.0),
+        rng.random_range(0.0..1.0),
+        rng.random_range(0.0..1.0),
+        opacity,
+    )
 }
 
 pub fn main() -> iced::Result {
