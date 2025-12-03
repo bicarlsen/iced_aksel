@@ -1,69 +1,110 @@
-use aksel::{Float, PlotPoint};
+use crate::{Shape, plot};
+use aksel::{Float, PlotPoint, Transform};
 use iced::{
-    Color,
-    advanced::Text,
-    widget::text::{LineHeight, Shaping, Wrapping},
+    Color, Font, Pixels, Point, Rectangle, Size,
+    advanced::text::{LineHeight, Shaping, Text, Wrapping},
+    alignment::{Horizontal, Vertical},
 };
 
-use crate::{Shape, plot};
-
+/// A text label positioned at a specific point in the chart.
+///
+/// Unlike geometric shapes, labels are rendered using the backend's native text engine
+/// via [`plot::Renderer::fill_text`], ensuring crisp, hinted typography.
 #[derive(Debug, Clone)]
 pub struct Label<D> {
     pub content: String,
     pub position: PlotPoint<D>,
-    pub horizontal_alignment: iced::alignment::Horizontal,
-    pub vertical_alignment: iced::alignment::Vertical,
+    pub horizontal_alignment: Horizontal,
+    pub vertical_alignment: Vertical,
     pub fill: Color,
     pub font_size: f32,
+    pub font: Font,
 }
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Label<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         ctx.render_text(move |transform, renderer| {
-            // 1. Convert the data-space PlotPoint to a screen-space Point.
-            let screen_point = transform.chart_to_screen(&self.position.clone());
-            let position = iced::Point {
-                x: screen_point.x,
-                y: screen_point.y,
-            };
+            // 1. Resolve Position
+            let position = Point::new(
+                transform.x_to_screen(&self.position.x),
+                transform.y_to_screen(&self.position.y),
+            );
 
-            // 2. Create the advanced Text primitive.
-            // TODO: Clone text every time? m
+            // 2. Resolve Clip Bounds (Screen Rect)
+            let b = transform.screen_bounds();
+            let clip_bounds = Rectangle::new(Point::new(b.x, b.y), Size::new(b.width, b.height));
+
+            // 3. Construct Iced Text Object
             let text = Text {
-                content: self.content.clone(),
-                bounds: iced::Size::new(500., 500.), // TODO: Better way to handle this. INFINITE doesnt work properly
-                size: self.font_size.into(),
+                content: self.content,
+                bounds: Size::new(500., 500.),
+                size: Pixels(self.font_size),
                 line_height: LineHeight::default(),
-                font: iced::Font::default(),
+                font: self.font,
                 align_x: self.horizontal_alignment.into(),
                 align_y: self.vertical_alignment,
                 shaping: Shaping::Basic,
                 wrapping: Wrapping::None,
             };
 
-            let screen_bounds = transform.screen_bounds();
-            let clip_bounds = iced::Rectangle {
-                x: screen_bounds.x,
-                y: screen_bounds.y,
-                width: screen_bounds.width,
-                height: screen_bounds.height,
-            };
-
-            // 3. Fill the text on the screen.
+            // 4. Draw
             renderer.fill_text(text, position, self.fill, clip_bounds);
         });
     }
 }
 
 impl<D: Float> Label<D> {
-    pub const fn simple(content: String, position: PlotPoint<D>, fill: Color) -> Self {
+    // =========================================================================
+    //  Constructors
+    // =========================================================================
+
+    /// Creates a new Label.
+    ///
+    /// Default style: Black, 12px, Centered.
+    pub fn new(content: impl ToString, position: PlotPoint<D>) -> Self {
         Self {
-            content,
+            content: content.to_string(),
             position,
-            horizontal_alignment: iced::alignment::Horizontal::Left,
-            vertical_alignment: iced::alignment::Vertical::Center,
-            fill,
-            font_size: 16.,
+            horizontal_alignment: Horizontal::Center,
+            vertical_alignment: Vertical::Center,
+            fill: Color::BLACK,
+            font_size: 12.0,
+            font: Font::default(),
         }
+    }
+
+    // =========================================================================
+    //  Builder Methods
+    // =========================================================================
+
+    /// Sets the text color.
+    pub fn fill(mut self, color: Color) -> Self {
+        self.fill = color;
+        self
+    }
+
+    /// Sets the font size in logical pixels.
+    pub fn size(mut self, size: f32) -> Self {
+        self.font_size = size;
+        self
+    }
+
+    /// Sets the font.
+    pub fn font(mut self, font: Font) -> Self {
+        self.font = font;
+        self
+    }
+
+    /// Sets the horizontal and vertical alignment relative to the `position`.
+    ///
+    /// - `Horizontal::Left`: The text starts at `position.x`.
+    /// - `Horizontal::Center`: The text is centered on `position.x`.
+    /// - `Horizontal::Right`: The text ends at `position.x`.
+    ///
+    /// (Similarly for Vertical alignment)
+    pub fn align(mut self, horizontal: Horizontal, vertical: Vertical) -> Self {
+        self.horizontal_alignment = horizontal;
+        self.vertical_alignment = vertical;
+        self
     }
 }

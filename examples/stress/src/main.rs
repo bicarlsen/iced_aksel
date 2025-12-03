@@ -21,7 +21,7 @@ use iced_aksel::{
     Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
     axis::{self, Position},
     plot,
-    shape::{self, Arc, Circle, Line, Polygon, Polyline, Rectangle, Triangle},
+    shape::{self, Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
 };
 use rand::Rng;
 
@@ -56,6 +56,7 @@ enum Message {
     PolylineCountChanged(f32),
     ArcCountChanged(f32),
     PolygonCountChanged(f32),
+    LabelCountChanged(f32),
 
     // Geometry Generation
     MinSizeChanged(f32),
@@ -76,10 +77,13 @@ enum Message {
     // Polygon
     PolygonVerticesChanged(f32),
     TogglePolygonConcave(bool),
+    // Label
+    LabelFontSizeChanged(f32),
 
     // Rendering Styles
     ToggleFill(bool),
     ToggleStroke(bool),
+    ToggleLabels(bool),
     StrokeWidthChanged(f32),
     StrokeWidthModeChanged(LengthMode),
     StrokeStyleChanged(StrokeStyle),
@@ -201,6 +205,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressTriangles {
 struct StressLines {
     geometry: Vec<Line<f64>>,
     colors: Vec<Color>,
+    // show_fill (from global toggle) controls visibility for Lines
     show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -239,6 +244,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
 struct StressPolylines {
     geometry: Vec<Polyline<f64>>,
     colors: Vec<Color>,
+    // show_fill (from global toggle) controls visibility for Polylines
     show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -344,6 +350,27 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressPolygons {
     }
 }
 
+struct StressLabels {
+    geometry: Vec<Label<f64>>,
+    colors: Vec<Color>,
+    show_labels: bool,
+    font_size: f32,
+}
+
+impl<R: plot::Renderer> plot::Items<f64, R> for StressLabels {
+    fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
+        if !self.show_labels {
+            return;
+        }
+
+        for (base_label, &color) in self.geometry.iter().zip(self.colors.iter()) {
+            let mut label = base_label.clone();
+            label = label.fill(color).size(self.font_size);
+            plot.add_shape(label);
+        }
+    }
+}
+
 // --- App ---
 
 struct StressTestApp {
@@ -355,6 +382,7 @@ struct StressTestApp {
     polylines_layer: StressPolylines,
     arcs_layer: StressArcs,
     polygons_layer: StressPolygons,
+    labels_layer: StressLabels,
 
     // Generation Configuration
     rectangle_count: usize,
@@ -364,6 +392,7 @@ struct StressTestApp {
     polyline_count: usize,
     arc_count: usize,
     polygon_count: usize,
+    label_count: usize,
 
     // Shape Specifics
     poly_segments: usize,
@@ -371,6 +400,7 @@ struct StressTestApp {
     polygon_concave: bool,
     arc_inner_radius: f32,
     arc_sweep: f32,
+    label_font_size: f32,
 
     min_size: f32,
     max_size: f32,
@@ -467,6 +497,12 @@ impl StressTestApp {
                 stroke_width_mode: LengthMode::Screen,
                 stroke_style: StrokeStyle::Solid,
             },
+            labels_layer: StressLabels {
+                geometry: Vec::new(),
+                colors: Vec::new(),
+                show_labels: true,
+                font_size: 12.0,
+            },
             // Start with 0 for all shapes
             rectangle_count: 0,
             circle_count: 0,
@@ -475,12 +511,14 @@ impl StressTestApp {
             polyline_count: 0,
             arc_count: 0,
             polygon_count: 0,
+            label_count: 0,
 
             poly_segments: 5,
             polygon_vertices: 6,
             polygon_concave: false,
             arc_inner_radius: 0.5,
             arc_sweep: 270.0,
+            label_font_size: 12.0,
 
             min_size: 10.0,
             max_size: 50.0,
@@ -769,6 +807,28 @@ impl StressTestApp {
         }
     }
 
+    fn generate_labels(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
+        self.labels_layer.geometry.clear();
+        self.labels_layer.colors.clear();
+        self.labels_layer.geometry.reserve(self.label_count);
+        self.labels_layer.colors.reserve(self.label_count);
+
+        for i in 0..self.label_count {
+            let x = rng.random_range(x_min..x_max);
+            let y = rng.random_range(y_min..y_max);
+
+            self.labels_layer
+                .geometry
+                .push(Label::new(format!("Lbl {}", i), PlotPoint::new(x, y)));
+            self.labels_layer
+                .colors
+                .push(random_color(&mut rng, self.opacity));
+        }
+    }
+
     fn generate_all(&mut self) {
         self.generate_rectangles();
         self.generate_circles();
@@ -777,6 +837,7 @@ impl StressTestApp {
         self.generate_polylines();
         self.generate_arcs();
         self.generate_polygons();
+        self.generate_labels();
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -830,6 +891,11 @@ impl StressTestApp {
             Message::PolygonCountChanged(v) => {
                 self.polygon_count = v as usize;
                 self.generate_polygons();
+                Task::none()
+            }
+            Message::LabelCountChanged(v) => {
+                self.label_count = v as usize;
+                self.generate_labels();
                 Task::none()
             }
 
@@ -903,6 +969,14 @@ impl StressTestApp {
                 self.triangles_layer.show_stroke = v;
                 self.arcs_layer.show_stroke = v;
                 self.polygons_layer.show_stroke = v;
+                Task::none()
+            }
+            Message::ToggleLabels(v) => {
+                self.labels_layer.show_labels = v;
+                Task::none()
+            }
+            Message::LabelFontSizeChanged(v) => {
+                self.labels_layer.font_size = v;
                 Task::none()
             }
             Message::StrokeWidthChanged(v) => {
@@ -993,6 +1067,7 @@ impl StressTestApp {
             .layer(&self.polylines_layer, AXIS_ID_X, AXIS_ID_Y)
             .layer(&self.arcs_layer, AXIS_ID_X, AXIS_ID_Y)
             .layer(&self.polygons_layer, AXIS_ID_X, AXIS_ID_Y)
+            .layer(&self.labels_layer, AXIS_ID_X, AXIS_ID_Y)
             .on_drag(Message::ChartDragged)
             .on_scroll(Message::ChartScrolled);
 
@@ -1017,6 +1092,7 @@ impl StressTestApp {
                     + self.polyline_count
                     + self.arc_count
                     + self.polygon_count
+                    + self.label_count
             ))
             .size(16),
         ]
@@ -1066,6 +1142,12 @@ impl StressTestApp {
                 self.polygon_count as f32,
                 150000.0,
                 Message::PolygonCountChanged
+            ),
+            slider_row(
+                "Labels",
+                self.label_count as f32,
+                150000.0,
+                Message::LabelCountChanged
             ),
         ]
         .spacing(5)
@@ -1191,6 +1273,14 @@ impl StressTestApp {
                 self.polygon_concave,
                 Message::TogglePolygonConcave
             ),
+            // Label
+            sub_header("Label"),
+            slider_row(
+                "Size",
+                self.label_font_size,
+                48.0,
+                Message::LabelFontSizeChanged
+            ),
         ]
         .spacing(5)
         .padding(5)
@@ -1230,13 +1320,27 @@ impl StressTestApp {
         .padding(5)
         .width(iced::Length::FillPortion(1));
 
+        // 7. Global Toggles (Column 6 - New)
+        let visibility_col = column![
+            header("Visibility"),
+            checkbox_row(
+                "Show Labels",
+                self.labels_layer.show_labels,
+                Message::ToggleLabels
+            ),
+        ]
+        .spacing(5)
+        .padding(5)
+        .width(iced::Length::FillPortion(1));
+
         // Combine controls
         let controls_row = row![
             counts_col,
             geometry_col,
             style_col,
             shape_spec_col,
-            line_poly_col
+            line_poly_col,
+            visibility_col
         ]
         .spacing(10);
 
@@ -1294,11 +1398,7 @@ fn sub_header(text_content: &'static str) -> Element<'static, Message> {
 
 // Helper for compact sliders
 fn slider_row(label: &str, value: f32, max: f32, msg: fn(f32) -> Message) -> Element<'_, Message> {
-    // Improved Step Logic:
-    // Large Counts (150k) -> 500
-    // Angles (360) -> 1.0
-    // Small (20) -> 0.5
-    // Tiny (1.0) -> 0.05
+    // Increment of 500 for counts (which go to 100k+), smaller for others
     let step = if max > 1000.0 {
         500.0
     } else if max >= 360.0 {
