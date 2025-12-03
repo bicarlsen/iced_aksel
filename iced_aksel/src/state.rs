@@ -46,6 +46,31 @@ where
         self.axes.iter().filter(|(_, axis)| axis.is_visible())
     }
 
+    pub fn pan_scales(&mut self, x_scale: AxisId, y_scale: AxisId, dx: Domain, dy: Domain) {
+        if let Some(axis) = self.axes.get_mut(&x_scale) {
+            axis.scale_mut().pan(dx);
+        }
+        if let Some(axis) = self.axes.get_mut(&y_scale) {
+            axis.scale_mut().pan(dy);
+        }
+    }
+
+    pub fn zoom_scales(
+        &mut self,
+        x_scale: AxisId,
+        y_scale: AxisId,
+        x_norm: Domain,
+        y_norm: Domain,
+        factor: Domain,
+    ) {
+        if let Some(axis) = self.axes.get_mut(&x_scale) {
+            axis.scale_mut().zoom(factor, Some(x_norm));
+        }
+        if let Some(axis) = self.axes.get_mut(&y_scale) {
+            axis.scale_mut().zoom(factor, Some(y_norm));
+        }
+    }
+
     #[deprecated = "Use State::axes() instead"]
     pub const fn axis(&self) -> &IndexMap<AxisId, Axis<Domain>> {
         &self.axes
@@ -64,19 +89,4 @@ where
 
         Some(PlotRect::from_points(top_left, bot_right))
     }
-
-    // pub fn get_plotpoint(
-    //     &self,
-    //     x_scale: AxisId,
-    //     y_scale: AxisId,
-    //     normalized: Point<f32>,
-    // ) -> Option<PlotPoint<Domain>> {
-    //     let hori = self.axis.get(&x_scale)?;
-    //     let vert = self.axis.get(&y_scale)?;
-    //
-    //     let x = hori.denormalize(normalized.x).convert_to();
-    //     let y = vert.denormalize(normalized.y).convert_to();
-    //
-    //     Some(PlotPoint::new(x, y))
-    // }
 }

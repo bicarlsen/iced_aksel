@@ -6,16 +6,18 @@
 //! - Toggles for Fill vs Stroke (testing Hybrid Engine optimizations)
 //! - Pre-calculated geometry to isolate rendering performance
 //! - Advanced styling controls (Size, Opacity, Stroke Style)
+//! - **View-Aware Generation**: Shapes generate within the current pan/zoom bounds.
 
 use std::time::Instant;
 
-use aksel::{PlotPoint, scale::Linear};
+use aksel::{PlotPoint, Scale, scale::Linear}; // Added Scale trait import
 use iced::{
-    Alignment, Color, Element, Subscription, Task, Theme,
+    Alignment, Color, Element, Point, Subscription, Task, Theme,
+    mouse::ScrollDelta,
     widget::{Slider, button, checkbox, column, radio, row, text},
 };
 use iced_aksel::{
-    Axis, Chart, Length, Plot, State, Stroke, StrokeStyle,
+    Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
     axis::{self, Position},
     plot,
     shape::{self, Circle, Rectangle},
@@ -44,6 +46,9 @@ enum Message {
     StrokeStyleChanged(StrokeStyle),
     // Actions
     Regenerate,
+    // Chart interaction
+    ChartDragged(DragDelta),
+    ChartScrolled(Point, ScrollDelta),
 }
 
 // --- Layers ---
@@ -191,22 +196,55 @@ impl StressTestApp {
     fn generate_shapes(&mut self) {
         let mut rng = rand::rng();
 
-        // 1. Rectangles
+        // 1. Get current View Bounds from State
+        // This ensures we generate shapes where the camera currently IS.
+        let (x_min, x_max) = self
+            .state
+            .get_axis(&AXIS_ID_X)
+            .map(|axis| {
+                let (min, max) = axis.scale().domain();
+                // Ensure correct ordering for RNG
+                if min <= max {
+                    (*min, *max)
+                } else {
+                    (*max, *min)
+                }
+            })
+            .unwrap_or((0.0, 1000.0));
+
+        let (y_min, y_max) = self
+            .state
+            .get_axis(&AXIS_ID_X)
+            .map(|axis| {
+                let (min, max) = axis.scale().domain();
+                if min <= max {
+                    (*min, *max)
+                } else {
+                    (*max, *min)
+                }
+            })
+            .unwrap_or((0.0, 1000.0));
+
+        // 2. Rectangles
         self.rectangles_layer.geometry.clear();
         self.rectangles_layer.colors.clear();
         self.rectangles_layer.geometry.reserve(self.rectangle_count);
         self.rectangles_layer.colors.reserve(self.rectangle_count);
 
         for _ in 0..self.rectangle_count {
-            let x = rng.random_range(0.0..900.0);
-            let y = rng.random_range(0.0..900.0);
-            let width = rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0));
-            let height = rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0));
+            // Generate within current view
+            let x = rng.random_range(x_min..x_max);
+            let y = rng.random_range(y_min..y_max);
+
+            let width =
+                rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
+            let height =
+                rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
 
             // Pre-calculate geometry
             let rect = Rectangle::from_corners(
-                PlotPoint::new(x as f64, y as f64),
-                PlotPoint::new(x as f64 + width as f64, y as f64 + height as f64),
+                PlotPoint::new(x, y),
+                PlotPoint::new(x + width, y + height),
             );
 
             self.rectangles_layer.geometry.push(rect);
@@ -218,25 +256,24 @@ impl StressTestApp {
             ));
         }
 
-        // 2. Circles
+        // 3. Circles
         self.circles_layer.geometry.clear();
         self.circles_layer.colors.clear();
         self.circles_layer.geometry.reserve(self.circle_count);
         self.circles_layer.colors.reserve(self.circle_count);
 
         for _ in 0..self.circle_count {
-            let x = rng.random_range(0.0..900.0);
-            let y = rng.random_range(0.0..900.0);
+            // Generate within current view
+            let x = rng.random_range(x_min..x_max);
+            let y = rng.random_range(y_min..y_max);
+
             // Radius is roughly half size
             let radius = rng.random_range(
                 (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
             );
 
             // Pre-calculate geometry
-            let circle = Circle::new(
-                PlotPoint::new(x as f64, y as f64),
-                Length::Plot(radius as f64),
-            );
+            let circle = Circle::new(PlotPoint::new(x, y), Length::Plot(radius as f64));
 
             self.circles_layer.geometry.push(circle);
             self.circles_layer.colors.push(Color::from_rgba(
@@ -322,13 +359,36 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
+
+            Message::ChartDragged(delta) => {
+                let x = delta.x as f64;
+                let y = delta.y as f64;
+                self.state.pan_scales(AXIS_ID_X, AXIS_ID_Y, x, y);
+                Task::none()
+            }
+
+            Message::ChartScrolled(point, delta) => {
+                if let ScrollDelta::Lines { x: _, y } = delta {
+                    let factor = 1.1f64.powf(y.into());
+                    self.state.zoom_scales(
+                        AXIS_ID_X,
+                        AXIS_ID_Y,
+                        point.x.into(),
+                        point.y.into(),
+                        factor,
+                    );
+                };
+                Task::none()
+            }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.state)
             .layer(&self.rectangles_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.circles_layer, AXIS_ID_X, AXIS_ID_Y);
+            .layer(&self.circles_layer, AXIS_ID_X, AXIS_ID_Y)
+            .on_drag(Message::ChartDragged)
+            .on_scroll(Message::ChartScrolled);
 
         let avg_frame_time = if !self.frame_times.is_empty() {
             self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32
