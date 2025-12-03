@@ -6,6 +6,7 @@
 //! - Toggleable Bollinger Bands (BBands) indicator.
 //! - An interactive settings bar with checkboxes and text inputs.
 
+use core::panic;
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use aksel::{PlotPoint, scale::Linear};
@@ -47,7 +48,6 @@ enum Message {
     UpdateChart,
     /// A message sent when the main plot area is dragged.
     OnPlotDrag(DragDelta),
-    OnPlotDoubleClick(Point),
     OnPlotScroll(iced::Point, ScrollDelta),
     /// A message sent when an axis is dragged (for zooming).
     OnAxisDrag(AxisId, f32),
@@ -212,7 +212,6 @@ impl ExampleApp {
             .on_drag(Message::OnPlotDrag)
             .on_scroll(Message::OnPlotScroll)
             .on_axis_drag(Message::OnAxisDrag)
-            .on_double_click(Message::OnPlotDoubleClick)
             .on_axis_double_click(Message::OnAxisDoubleClick);
 
         // --- Build the Settings UI ---
@@ -461,11 +460,11 @@ impl CandlestickChart {
                 self.handle_axis_drag(id, delta);
                 self.rebuild_layers();
             }
-            Message::OnPlotDoubleClick(point) => {
-                println!("Doubleclicked plot at {point:?}")
-            }
-            Message::OnAxisDoubleClick(id, point) => {
-                println!("Doubleclicked axis '{id}' at {point:?}")
+            Message::OnAxisDoubleClick(id, _) => {
+                if id == Y_AXIS_ID {
+                    self.settings.y_lock = true;
+                    self.update_y_lock_domain();
+                }
             }
             // Other messages are handled by ExampleApp
             _ => {}

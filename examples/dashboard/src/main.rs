@@ -90,7 +90,7 @@ impl ExampleApp {
                 let new_label = self.bar_chart.get_data().len();
                 let new_value = rand::random_range(5.0..100.0);
                 self.bar_chart
-                    .add_data((format!["{}", new_label], new_value));
+                    .add_data((format!("{}", new_label), new_value));
             }
             Message::ToggleOrientation => {
                 self.bar_chart.toggle_orientation();
@@ -178,6 +178,7 @@ impl ExampleApp {
         iced::application(Self::init, Self::update, Self::view)
             .theme(Self::theme)
             .subscription(Self::subscription)
+            .antialiasing(true)
             .run()
     }
 }
