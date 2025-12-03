@@ -57,27 +57,33 @@ enum Message {
     ArcCountChanged(f32),
     PolygonCountChanged(f32),
 
-    // Geometry Complexity
-    PolySegmentsChanged(f32),    // For Polylines
-    PolygonVerticesChanged(f32), // For Polygons
-
     // Geometry Generation
     MinSizeChanged(f32),
     MaxSizeChanged(f32),
     OpacityChanged(f32),
-    InnerRadiusChanged(f32),
     SizeModeChanged(LengthMode),
+
+    // Shape Specifics
+    // Line/Poly
+    PolySegmentsChanged(f32),
+    ToggleArrowStart(bool),
+    ToggleArrowEnd(bool),
+    ToggleInfiniteStart(bool),
+    ToggleInfiniteEnd(bool),
+    // Arc
+    InnerRadiusChanged(f32),
+    ArcSweepChanged(f32),
+    // Polygon
+    PolygonVerticesChanged(f32),
+    TogglePolygonConcave(bool),
+
     // Rendering Styles
     ToggleFill(bool),
     ToggleStroke(bool),
     StrokeWidthChanged(f32),
     StrokeWidthModeChanged(LengthMode),
     StrokeStyleChanged(StrokeStyle),
-    // Line/Poly Features
-    ToggleArrowStart(bool),
-    ToggleArrowEnd(bool),
-    ToggleInfiniteStart(bool),
-    ToggleInfiniteEnd(bool),
+
     // Actions
     Regenerate,
     // Chart interaction
@@ -195,7 +201,8 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressTriangles {
 struct StressLines {
     geometry: Vec<Line<f64>>,
     colors: Vec<Color>,
-    show_stroke: bool,
+    // Added show_fill to control visibility via the Fill checkbox
+    show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
     extend_start: bool,
@@ -207,7 +214,8 @@ struct StressLines {
 
 impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        if !self.show_stroke {
+        // Line visibility is now controlled by "Show Fill"
+        if !self.show_fill {
             return;
         }
 
@@ -233,7 +241,8 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
 struct StressPolylines {
     geometry: Vec<Polyline<f64>>,
     colors: Vec<Color>,
-    show_stroke: bool,
+    // Added show_fill to control visibility via the Fill checkbox
+    show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
     extend_start: bool,
@@ -245,7 +254,8 @@ struct StressPolylines {
 
 impl<R: plot::Renderer> plot::Items<f64, R> for StressPolylines {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        if !self.show_stroke {
+        // Polyline visibility is now controlled by "Show Fill"
+        if !self.show_fill {
             return;
         }
 
@@ -359,13 +369,16 @@ struct StressTestApp {
     arc_count: usize,
     polygon_count: usize,
 
+    // Shape Specifics
     poly_segments: usize,
     polygon_vertices: usize,
+    polygon_concave: bool,
+    arc_inner_radius: f32,
+    arc_sweep: f32,
 
     min_size: f32,
     max_size: f32,
     opacity: f32,
-    inner_radius_factor: f32, // 0.0 to 0.9, for Arcs/Donuts
     size_mode: LengthMode,
 
     // FPS counter
@@ -419,7 +432,7 @@ impl StressTestApp {
             lines_layer: StressLines {
                 geometry: Vec::new(),
                 colors: Vec::new(),
-                show_stroke: false,
+                show_fill: true, // Default to visible
                 arrow_start: false,
                 arrow_end: false,
                 extend_start: false,
@@ -431,7 +444,7 @@ impl StressTestApp {
             polylines_layer: StressPolylines {
                 geometry: Vec::new(),
                 colors: Vec::new(),
-                show_stroke: false,
+                show_fill: true, // Default to visible
                 arrow_start: false,
                 arrow_end: false,
                 extend_start: false,
@@ -458,20 +471,24 @@ impl StressTestApp {
                 stroke_width_mode: LengthMode::Screen,
                 stroke_style: StrokeStyle::Solid,
             },
-            rectangle_count: 2000,
-            circle_count: 2000,
-            triangle_count: 2000,
-            line_count: 2000,
-            polyline_count: 1000,
-            arc_count: 2000,
-            polygon_count: 2000,
+            // Start with 0 for all shapes
+            rectangle_count: 0,
+            circle_count: 0,
+            triangle_count: 0,
+            line_count: 0,
+            polyline_count: 0,
+            arc_count: 0,
+            polygon_count: 0,
 
             poly_segments: 5,
             polygon_vertices: 6,
+            polygon_concave: false,
+            arc_inner_radius: 0.5,
+            arc_sweep: 270.0,
+
             min_size: 10.0,
             max_size: 50.0,
             opacity: 0.8,
-            inner_radius_factor: 0.5,
             size_mode: LengthMode::Screen,
 
             last_frame_time: None,
@@ -607,7 +624,6 @@ impl StressTestApp {
             let len =
                 rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
 
-            // Note: Line length in 'Plot' units for simplicity in generator
             let x2 = x1 + angle.cos() * len;
             let y2 = y1 + angle.sin() * len;
 
@@ -668,18 +684,19 @@ impl StressTestApp {
                 (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
             ) as f64;
 
+            // Generate Arc based on User Sweep
             let start_angle = rng.random_range(0.0..std::f32::consts::TAU);
-            let sweep = rng.random_range(0.5..std::f32::consts::PI * 1.5);
-            let end_angle = start_angle + sweep;
+            let sweep_rad = self.arc_sweep.to_radians();
+            let end_angle = start_angle + sweep_rad;
 
             let (radius, inner_radius) = match self.size_mode {
                 LengthMode::Screen => (
                     Length::Screen(r_val as f32),
-                    Length::Screen(r_val as f32 * self.inner_radius_factor),
+                    Length::Screen(r_val as f32 * self.arc_inner_radius),
                 ),
                 LengthMode::Plot => (
                     Length::Plot(r_val),
-                    Length::Plot(r_val * self.inner_radius_factor as f64),
+                    Length::Plot(r_val * self.arc_inner_radius as f64),
                 ),
             };
 
@@ -701,27 +718,25 @@ impl StressTestApp {
         for _ in 0..self.polygon_count {
             let cx = rng.random_range(x_min..x_max);
             let cy = rng.random_range(y_min..y_max);
-            let radius = rng.random_range(
+            let radius_base = rng.random_range(
                 (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
             ) as f64;
 
-            // Generate Vertices around center
             let mut points = Vec::with_capacity(self.polygon_vertices);
             let step = std::f64::consts::TAU / self.polygon_vertices as f64;
 
-            // If Size Mode is Screen, we can't fully bake the points here as they need to scale with zoom.
-            // Polygon stores PlotPoints. If we want constant screen-size, we'd need a specific Polygon constructor
-            // similar to Triangle::equilateral, or we have to regenerate on zoom.
-            // FOR STRESS TEST: We will bake them as PLOT coordinates (scaling).
-            // This is different from Rectangle/Circle/Triangle behavior for 'Screen' mode, but standard for arbitrary polygons.
-
-            // NOTE: If SizeMode == Screen, this generation is technically "Plot" sized based on current view.
-            // It will shrink when zooming out. True Screen-Space Polygons would need a center/radius definition in the Shape struct.
-
             for i in 0..self.polygon_vertices {
-                let theta = i as f64 * step + rng.random_range(-0.2..0.2); // Jitter for irregularity
-                let px = cx + theta.cos() * radius;
-                let py = cy + theta.sin() * radius;
+                let theta = i as f64 * step;
+
+                // Concavity Logic: Alternate radii if concave is checked
+                let r = if self.polygon_concave && i % 2 != 0 {
+                    radius_base * 0.5 // Indent by 50% for star effect
+                } else {
+                    radius_base
+                };
+
+                let px = cx + theta.cos() * r;
+                let py = cy + theta.sin() * r;
                 points.push(PlotPoint::new(px, py));
             }
 
@@ -796,6 +811,21 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
+            Message::TogglePolygonConcave(v) => {
+                self.polygon_concave = v;
+                self.generate_shapes();
+                Task::none()
+            }
+            Message::InnerRadiusChanged(v) => {
+                self.arc_inner_radius = v;
+                self.generate_shapes();
+                Task::none()
+            }
+            Message::ArcSweepChanged(v) => {
+                self.arc_sweep = v;
+                self.generate_shapes();
+                Task::none()
+            }
 
             Message::MinSizeChanged(v) => {
                 self.min_size = v;
@@ -818,11 +848,6 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
-            Message::InnerRadiusChanged(v) => {
-                self.inner_radius_factor = v;
-                self.generate_shapes();
-                Task::none()
-            }
             Message::SizeModeChanged(mode) => {
                 self.size_mode = mode;
                 self.generate_shapes();
@@ -833,6 +858,8 @@ impl StressTestApp {
                 self.rectangles_layer.show_fill = v;
                 self.circles_layer.show_fill = v;
                 self.triangles_layer.show_fill = v;
+                self.lines_layer.show_fill = v; // Now controlled by Fill
+                self.polylines_layer.show_fill = v; // Now controlled by Fill
                 self.arcs_layer.show_fill = v;
                 self.polygons_layer.show_fill = v;
                 Task::none()
@@ -841,8 +868,6 @@ impl StressTestApp {
                 self.rectangles_layer.show_stroke = v;
                 self.circles_layer.show_stroke = v;
                 self.triangles_layer.show_stroke = v;
-                self.lines_layer.show_stroke = v;
-                self.polylines_layer.show_stroke = v;
                 self.arcs_layer.show_stroke = v;
                 self.polygons_layer.show_stroke = v;
                 Task::none()
@@ -964,51 +989,49 @@ impl StressTestApp {
         ]
         .spacing(20);
 
-        // 2. Count Sliders (Column 1)
+        // 2. Count Sliders (Column 1) - Updated to 150,000 max
         let counts_col = column![
-            text("Counts").size(14).style(|t: &Theme| text::Style {
-                color: Some(t.palette().primary)
-            }),
+            header("Counts"),
             slider_row(
-                "Rects",
+                "Rectangles",
                 self.rectangle_count as f32,
-                500000.0,
+                150000.0,
                 Message::RectangleCountChanged
             ),
             slider_row(
                 "Circles",
                 self.circle_count as f32,
-                500000.0,
+                150000.0,
                 Message::CircleCountChanged
             ),
             slider_row(
-                "Tris",
+                "Triangles",
                 self.triangle_count as f32,
-                500000.0,
+                150000.0,
                 Message::TriangleCountChanged
             ),
             slider_row(
                 "Lines",
                 self.line_count as f32,
-                500000.0,
+                150000.0,
                 Message::LineCountChanged
             ),
             slider_row(
-                "Polys",
+                "Polylines",
                 self.polyline_count as f32,
-                100000.0,
+                150000.0,
                 Message::PolylineCountChanged
             ),
             slider_row(
                 "Arcs",
                 self.arc_count as f32,
-                500000.0,
+                150000.0,
                 Message::ArcCountChanged
             ),
             slider_row(
-                "Gons",
+                "Polygons",
                 self.polygon_count as f32,
-                500000.0,
+                150000.0,
                 Message::PolygonCountChanged
             ),
         ]
@@ -1018,18 +1041,15 @@ impl StressTestApp {
 
         // 3. Geometry (Column 2)
         let geometry_col = column![
-            text("Geometry").size(14).style(|t: &Theme| text::Style {
-                color: Some(t.palette().primary)
-            }),
+            header("Geometry"),
+            checkbox_row(
+                "Show Fill",
+                self.rectangles_layer.show_fill,
+                Message::ToggleFill
+            ),
             slider_row("Min Sz", self.min_size, 200.0, Message::MinSizeChanged),
             slider_row("Max Sz", self.max_size, 200.0, Message::MaxSizeChanged),
             slider_row("Opacity", self.opacity, 1.0, Message::OpacityChanged),
-            slider_row(
-                "Inner R",
-                self.inner_radius_factor,
-                0.9,
-                Message::InnerRadiusChanged
-            ),
             row![
                 text("Mode:").size(12),
                 radio(
@@ -1055,11 +1075,12 @@ impl StressTestApp {
 
         // 4. Style (Column 3)
         let style_col = column![
-            text("Stroke Style")
-                .size(14)
-                .style(|t: &Theme| text::Style {
-                    color: Some(t.palette().primary)
-                }),
+            header("Stroke Style"),
+            checkbox_row(
+                "Show Stroke",
+                self.rectangles_layer.show_stroke,
+                Message::ToggleStroke
+            ),
             slider_row(
                 "Width",
                 self.rectangles_layer.stroke_width,
@@ -1112,28 +1133,41 @@ impl StressTestApp {
         .padding(5)
         .width(iced::Length::FillPortion(1));
 
-        // 5. Toggles / Line Features (Column 4)
-        let toggles_col = column![
-            text("Visibility").size(14).style(|t: &Theme| text::Style {
-                color: Some(t.palette().primary)
-            }),
-            checkbox_row(
-                "Show Fill",
-                self.rectangles_layer.show_fill,
-                Message::ToggleFill
-            ),
-            checkbox_row(
-                "Show Stroke",
-                self.rectangles_layer.show_stroke,
-                Message::ToggleStroke
-            ),
-            text("Line/Poly Features")
-                .size(14)
-                .style(|t: &Theme| text::Style {
-                    color: Some(t.palette().primary)
-                }),
+        // 5. Shape Specifics (Column 4)
+        let shape_spec_col = column![
+            header("Shape Specifics"),
+            // Arc
+            sub_header("Arc"),
             slider_row(
-                "Segs/Poly",
+                "Inner R",
+                self.arc_inner_radius,
+                0.9,
+                Message::InnerRadiusChanged
+            ),
+            slider_row("Sweep", self.arc_sweep, 360.0, Message::ArcSweepChanged),
+            // Polygon
+            sub_header("Polygon"),
+            slider_row(
+                "Verts",
+                self.polygon_vertices as f32,
+                20.0,
+                Message::PolygonVerticesChanged
+            ),
+            checkbox_row(
+                "Concave (Star)",
+                self.polygon_concave,
+                Message::TogglePolygonConcave
+            ),
+        ]
+        .spacing(5)
+        .padding(5)
+        .width(iced::Length::FillPortion(1));
+
+        // 6. Line/Poly Features (Column 5)
+        let line_poly_col = column![
+            header("Line/Poly Features"),
+            slider_row(
+                "Segs",
                 self.poly_segments as f32,
                 100.0,
                 Message::PolySegmentsChanged
@@ -1158,24 +1192,20 @@ impl StressTestApp {
                 self.lines_layer.extend_end,
                 Message::ToggleInfiniteEnd
             ),
-            text("Polygon Features")
-                .size(14)
-                .style(|t: &Theme| text::Style {
-                    color: Some(t.palette().primary)
-                }),
-            slider_row(
-                "Vert/Gon",
-                self.polygon_vertices as f32,
-                20.0,
-                Message::PolygonVerticesChanged
-            ),
         ]
         .spacing(5)
         .padding(5)
         .width(iced::Length::FillPortion(1));
 
         // Combine controls
-        let controls_row = row![counts_col, geometry_col, style_col, toggles_col].spacing(10);
+        let controls_row = row![
+            counts_col,
+            geometry_col,
+            style_col,
+            shape_spec_col,
+            line_poly_col
+        ]
+        .spacing(10);
 
         let regenerate_btn = button(
             text("Regenerate Shapes")
@@ -1207,6 +1237,26 @@ impl StressTestApp {
             .antialiasing(true)
             .run()
     }
+}
+
+// UI Helpers
+
+fn header(text_content: &'static str) -> Element<'static, Message> {
+    text(text_content)
+        .size(14)
+        .style(|t: &Theme| text::Style {
+            color: Some(t.palette().primary),
+        })
+        .into()
+}
+
+fn sub_header(text_content: &'static str) -> Element<'static, Message> {
+    text(text_content)
+        .size(12)
+        .style(|t: &Theme| text::Style {
+            color: Some(t.palette().success),
+        })
+        .into()
 }
 
 // Helper for compact sliders
