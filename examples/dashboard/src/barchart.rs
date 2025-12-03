@@ -143,12 +143,19 @@ impl BarChart {
 
         state.set_axis(
             Self::VALUE_AXIS,
-            Axis::new(value_scale, value_pos).with_tick_renderer(|tlc| match tlc.tick.level {
-                0 => Some(TickLine::simple(format!("{:.2}", tlc.tick.value))),
-                _ => None,
-            }),
+            Axis::new(value_scale, value_pos)
+                .with_tick_renderer(|tlc| match tlc.tick.level {
+                    0 => Some(TickLine::simple(format!("{:.2}", tlc.tick.value))),
+                    _ => None,
+                })
+                .skip_overlapping_labels(6.),
         );
-        state.set_axis(Self::BAR_AXIS, Axis::new(bar_scale, bar_pos).without_grid());
+        state.set_axis(
+            Self::BAR_AXIS,
+            Axis::new(bar_scale, bar_pos)
+                .without_grid()
+                .skip_overlapping_labels(6.),
+        );
     }
 
     fn update_labels(&mut self) {

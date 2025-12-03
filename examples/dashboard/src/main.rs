@@ -4,8 +4,10 @@ use iced::{
 };
 
 mod barchart;
+mod gauge;
 
 use barchart::BarChart;
+use gauge::Gauge;
 
 fn main() -> iced::Result {
     ExampleApp::run()
@@ -19,14 +21,20 @@ struct ExampleApp {
 
     // Bar chart
     bar_chart: BarChart,
+    gauge_chart: Gauge,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
     // Widget values
     SwitchTheme(iced::Theme),
+
+    // Barchart
     AddData,
     ToggleOrientation,
+
+    // Gauge
+    UpdateGaugeValue(f64),
 }
 
 impl ExampleApp {
@@ -36,6 +44,7 @@ impl ExampleApp {
                 theme: iced::Theme::Dark,
 
                 bar_chart: BarChart::new(barchart::Orientation::Vertical),
+                gauge_chart: Gauge::new("Speed", 99., (0.0, 100.0), "ms"),
             },
             Task::none(),
         )
@@ -43,6 +52,10 @@ impl ExampleApp {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::UpdateGaugeValue(value) => {
+                let new_value = self.gauge_chart.value() + value;
+                self.gauge_chart.set_value(new_value);
+            }
             Message::SwitchTheme(theme) => {
                 self.theme = theme;
             }
@@ -67,7 +80,7 @@ impl ExampleApp {
         .width(iced::Length::Fill);
 
         let bar_chart_box1 = column![self.barchart_view()].width(iced::Length::Fill);
-        let bar_chart_box2 = column![self.barchart_view()].width(iced::Length::Fill);
+        let bar_chart_box2 = column![self.gaugechart_view()].width(iced::Length::Fill);
 
         let row1 = row![bar_chart_box1, bar_chart_box2]
             .height(iced::Length::Fixed(360.))
@@ -86,9 +99,24 @@ impl ExampleApp {
             .width(iced::Length::Fill);
         let bar_chart = self.bar_chart.chart();
 
-        let row1 = row![new_data_confirm_btn, toggle_orientation_btn].spacing(16.);
+        let panel = row![new_data_confirm_btn, toggle_orientation_btn].spacing(16.);
 
-        column![row1, bar_chart].into()
+        column![bar_chart, panel].into()
+    }
+
+    fn gaugechart_view(&self) -> Element<'_, Message> {
+        let add_gauge_num = button("+")
+            .on_press(Message::UpdateGaugeValue(1.))
+            .width(iced::Length::Fill);
+        let sub_gauge_num = button("-")
+            .on_press(Message::UpdateGaugeValue(-1.))
+            .width(iced::Length::Fill);
+
+        let gauge_chart = self.gauge_chart.chart();
+
+        let panel = row![add_gauge_num, sub_gauge_num].spacing(16.);
+
+        column![gauge_chart, panel].into()
     }
 
     fn theme(&self) -> Theme {
