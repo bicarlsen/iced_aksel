@@ -8,9 +8,11 @@ use iced::{
 
 mod bar;
 mod gauge;
+mod line;
 
 use bar::BarChart;
 use gauge::Gauge;
+use line::LineChart;
 
 fn main() -> iced::Result {
     ExampleApp::run()
@@ -25,6 +27,7 @@ struct ExampleApp {
     // Bar chart
     bar_chart: BarChart,
     gauge_chart: Gauge,
+    line_chart: LineChart,
 }
 
 #[derive(Debug, Clone)]
@@ -57,8 +60,15 @@ impl ExampleApp {
                     .zone(gauge::Zone::Success(65.))
                     .zone(gauge::Zone::Warning(75.))
                     .zone(gauge::Zone::Danger(100.))
-                    .zone_opacity(0.3)
+                    .zone_opacity(0.7)
                     .format(|v| format!("{:.2}", v)),
+                line_chart: LineChart::new(vec![
+                    (0.0, 0.0),
+                    (1.0, 5.0),
+                    (2.0, 7.0),
+                    (3.0, 4.0),
+                    (4.0, 9.0),
+                ]),
             },
             Task::none(),
         )
@@ -104,7 +114,12 @@ impl ExampleApp {
             .spacing(16.)
             .padding(16.);
 
-        column![theme_toggle, row1].into()
+        let row2 = row![self.linechart_view()]
+            .height(iced::Length::Fixed(360.))
+            .spacing(16.)
+            .padding(16.);
+
+        column![theme_toggle, row1, row2].into()
     }
 
     fn barchart_view(&self) -> Element<'_, Message> {
@@ -134,6 +149,21 @@ impl ExampleApp {
         let panel = row![add_gauge_num, sub_gauge_num].spacing(16.);
 
         column![gauge_chart, panel].into()
+    }
+
+    fn linechart_view(&self) -> Element<'_, Message> {
+        // let add_line_num = button("+")
+        //     .on_press(Message::UpdateLineValue(5.))
+        //     .width(iced::Length::Fill);
+        // let sub_line_num = button("-")
+        //     .on_press(Message::UpdateLineValue(-5.))
+        //     .width(iced::Length::Fill);
+
+        let line_chart = self.line_chart.chart();
+
+        // let panel = row![add_line_num, sub_line_num].spacing(16.);
+
+        column![line_chart].into()
     }
 
     fn theme(&self) -> Theme {
