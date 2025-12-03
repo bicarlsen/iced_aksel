@@ -15,6 +15,9 @@ use iced_aksel::shape::{Arc, Label};
 
 type AxisId = &'static str;
 
+// --- Constants ---
+const GAUGE_RADIUS: f64 = 1.08;
+
 // --- Helper Types ---
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,7 +30,6 @@ pub enum Zone {
 }
 
 impl Zone {
-    /// Helper to extract the threshold value regardless of the variant
     pub fn threshold(&self) -> f64 {
         match self {
             Zone::Primary(t) => *t,
@@ -38,7 +40,6 @@ impl Zone {
         }
     }
 
-    /// Resolves the actual color using the current Theme palette
     pub fn resolve_color(&self, palette: &iced::theme::Palette) -> Color {
         match self {
             Zone::Primary(_) => palette.primary,
@@ -56,6 +57,9 @@ pub enum Placement {
     Bottom,
     Center,
     Hidden,
+    /// Custom placement using percentages of the chart area.
+    /// x: 0.0 (Left) to 1.0 (Right)
+    /// y: 0.0 (Bottom) to 1.0 (Top)
     Custom(f64, f64),
 }
 
@@ -73,12 +77,20 @@ pub struct Gauge {
     base_color: Option<Color>,
     decimals: usize,
     custom_formatter: Option<Box<dyn Fn(f64) -> String>>,
+
     title_placement: Placement,
+    title_size: f32,
+
     value_placement: Placement,
+    value_size: f32,
+
     inner_radius_factor: f64,
     start_angle: f32,
     end_angle: f32,
     tick_count: usize,
+
+    // Appearance
+    zone_opacity: f32, // Controls the "dullness" of the outer ring
 
     // Physics
     value: f64,
@@ -90,16 +102,26 @@ pub struct Gauge {
 impl Gauge {
     const X_AXIS: &str = "X";
     const Y_AXIS: &str = "Y";
+    const VIEW_LIMIT: f64 = 1.5;
 
     pub fn new(label: impl Into<String>, min: f64, max: f64) -> Self {
         let mut chart_state = ChartState::new();
+        // Fixed axes ensure the gauge is centered and fits.
         chart_state.set_axis(
             Self::X_AXIS,
-            Axis::new(Linear::new(-1.5, 1.5), axis::Position::Bottom).invisible(),
+            Axis::new(
+                Linear::new(-Self::VIEW_LIMIT, Self::VIEW_LIMIT),
+                axis::Position::Bottom,
+            )
+            .invisible(),
         );
         chart_state.set_axis(
             Self::Y_AXIS,
-            Axis::new(Linear::new(-1.5, 1.5), axis::Position::Left).invisible(),
+            Axis::new(
+                Linear::new(-Self::VIEW_LIMIT, Self::VIEW_LIMIT),
+                axis::Position::Left,
+            )
+            .invisible(),
         );
 
         let default_span_deg = 240.0;
@@ -117,12 +139,20 @@ impl Gauge {
             base_color: None,
             decimals: 0,
             custom_formatter: None,
+
             title_placement: Placement::Bottom,
+            title_size: 16.0,
+
             value_placement: Placement::Center,
+            value_size: 32.0,
+
             inner_radius_factor: 0.75,
             start_angle,
             end_angle,
             tick_count: 0,
+
+            zone_opacity: 1.0, // Default to solid colors (100%)
+
             value: min,
             target_value: min,
             animation_speed: None,
@@ -172,7 +202,6 @@ impl Gauge {
 
     // =========================================================
     //  Setters (Runtime Mutation)
-    //  Use these if you need to change settings *after* init.
     // =========================================================
 
     pub fn set_range(&mut self, min: f64, max: f64) {
@@ -206,8 +235,6 @@ impl Gauge {
         self.decimals = decimals;
     }
 
-    /// Clears existing zones and adds a new one.
-    /// Useful if zones change dynamically based on data.
     pub fn add_zone(&mut self, zone: Zone) {
         self.zones.push(zone);
         self.zones
@@ -218,17 +245,30 @@ impl Gauge {
         self.zones.clear();
     }
 
+    /// Sets the opacity of the outer zone ring (0.0 to 1.0).
+    /// Default is 1.0 (Solid). Set lower (e.g., 0.5) for a "dull" or "pastel" look.
+    pub fn set_zone_opacity(&mut self, opacity: f32) {
+        self.zone_opacity = opacity.max(0.0).min(1.0);
+    }
+
     pub fn set_title_pos(&mut self, placement: Placement) {
         self.title_placement = placement;
+    }
+
+    pub fn set_title_size(&mut self, size: f32) {
+        self.title_size = size;
     }
 
     pub fn set_value_pos(&mut self, placement: Placement) {
         self.value_placement = placement;
     }
 
+    pub fn set_value_size(&mut self, size: f32) {
+        self.value_size = size;
+    }
+
     // =========================================================
     //  Builder API (Initialization)
-    //  Use these in `new()` for clean, one-line setup.
     // =========================================================
 
     pub fn animated(mut self, speed: f64) -> Self {
@@ -261,10 +301,13 @@ impl Gauge {
         self
     }
 
-    /// Adds a Zone to the gauge.
-    /// Example: `.zone(Zone::Success(50.0)).zone(Zone::Danger(100.0))`
     pub fn zone(mut self, zone: Zone) -> Self {
         self.add_zone(zone);
+        self
+    }
+
+    pub fn zone_opacity(mut self, opacity: f32) -> Self {
+        self.set_zone_opacity(opacity);
         self
     }
 
@@ -278,8 +321,18 @@ impl Gauge {
         self
     }
 
+    pub fn title_size(mut self, size: f32) -> Self {
+        self.set_title_size(size);
+        self
+    }
+
     pub fn value_pos(mut self, placement: Placement) -> Self {
         self.set_value_pos(placement);
+        self
+    }
+
+    pub fn value_size(mut self, size: f32) -> Self {
+        self.set_value_size(size);
         self
     }
 
@@ -317,7 +370,7 @@ impl Items<f64> for Gauge {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         let palette = theme.palette();
 
-        // 1. Resolve Colors using the new Zone enum logic
+        // 1. Resolve Colors
         let active_color = if self.zones.is_empty() {
             self.base_color.unwrap_or(palette.primary)
         } else {
@@ -351,13 +404,19 @@ impl Items<f64> for Gauge {
 
         // 3. Draw Zones
         if !self.zones.is_empty() {
-            let zone_radius = Length::Plot(1.08);
+            let zone_radius = Length::Plot(GAUGE_RADIUS);
             let zone_inner = Length::Plot(1.02);
             let mut current_angle = self.start_angle;
 
             for zone in &self.zones {
                 let threshold = zone.threshold();
-                let zone_color = zone.resolve_color(&palette);
+                let zone_raw_color = zone.resolve_color(&palette);
+
+                // Apply the configured opacity (dullness)
+                let zone_color = Color {
+                    a: self.zone_opacity,
+                    ..zone_raw_color
+                };
 
                 let zone_ratio = ((threshold - self.min) / safe_denominator)
                     .max(0.0)
@@ -365,14 +424,10 @@ impl Items<f64> for Gauge {
                 let zone_end_angle = self.start_angle + (zone_ratio as f32 * total_sweep);
 
                 if zone_end_angle > current_angle {
-                    let pastel = Color {
-                        a: 0.5,
-                        ..zone_color
-                    };
                     plot.add_shape(
                         Arc::new(center, zone_radius, current_angle, zone_end_angle)
                             .inner_radius(zone_inner)
-                            .fill(pastel),
+                            .fill(zone_color),
                     );
                     current_angle = zone_end_angle;
                 }
@@ -421,17 +476,22 @@ impl Items<f64> for Gauge {
         }
 
         // 7. Text
-        let resolve_pos = |p: Placement| -> Option<(PlotPoint<f64>, Vertical)> {
+        let resolve_pos = |p: Placement| -> Option<PlotPoint<f64>> {
             match p {
-                Placement::Top => Some((PlotPoint::new(0.0, 0.4), Vertical::Bottom)),
-                Placement::Bottom => Some((PlotPoint::new(0.0, -0.4), Vertical::Top)),
-                Placement::Center => Some((PlotPoint::new(0.0, 0.2), Vertical::Center)),
-                Placement::Custom(x, y) => Some((PlotPoint::new(x, y), Vertical::Center)),
+                Placement::Top => Some(PlotPoint::new(0.0, 0.4)),
+                Placement::Bottom => Some(PlotPoint::new(0.0, -0.4)),
+                Placement::Center => Some(PlotPoint::new(0.0, 0.2)),
+                Placement::Custom(pct_x, pct_y) => {
+                    let limit = Self::VIEW_LIMIT;
+                    let x = -limit + (pct_x * limit * 2.0);
+                    let y = -limit + (pct_y * limit * 2.0);
+                    Some(PlotPoint::new(x, y))
+                }
                 Placement::Hidden => None,
             }
         };
 
-        if let Some((pos, vert)) = resolve_pos(self.value_placement) {
+        if let Some(pos) = resolve_pos(self.value_placement) {
             let text = if let Some(fmt) = &self.custom_formatter {
                 fmt(self.value)
             } else {
@@ -440,20 +500,20 @@ impl Items<f64> for Gauge {
             plot.add_shape(
                 Label::new(text, pos)
                     .fill(active_color)
-                    .size(32.0)
-                    .align(Horizontal::Center, vert),
+                    .size(self.value_size)
+                    .align(Horizontal::Center, Vertical::Center),
             );
         }
 
-        if let Some((pos, vert)) = resolve_pos(self.title_placement) {
+        if let Some(pos) = resolve_pos(self.title_placement) {
             plot.add_shape(
                 Label::new(&self.label, pos)
                     .fill(Color {
                         a: 0.7,
                         ..palette.text
                     })
-                    .size(16.0)
-                    .align(Horizontal::Center, vert),
+                    .size(self.title_size)
+                    .align(Horizontal::Center, Vertical::Center),
             );
         }
     }

@@ -52,9 +52,13 @@ impl ExampleApp {
                 bar_chart: BarChart::new(barchart::Orientation::Vertical),
                 gauge_chart: Gauge::new("Speed", 0., 100.)
                     .animated(0.5)
+                    .value_pos(gauge::Placement::Center)
+                    .title_pos(gauge::Placement::Custom(0.1, 0.9))
                     .zone(gauge::Zone::Success(65.))
                     .zone(gauge::Zone::Warning(75.))
-                    .zone(gauge::Zone::Danger(100.)),
+                    .zone(gauge::Zone::Danger(100.))
+                    .zone_opacity(0.3)
+                    .format(|v| format!("{:.2}", v)),
             },
             Task::none(),
         )
