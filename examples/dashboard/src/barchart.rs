@@ -1,5 +1,8 @@
 use aksel::{PlotPoint, Scale, Tick, TickIter, scale::Linear};
-use iced::Theme;
+use iced::{
+    Element, Theme,
+    widget::{pick_list, text_input},
+};
 use iced_aksel::{
     Axis, Chart, Length, State,
     axis::{self, TickLine},
@@ -59,23 +62,14 @@ impl BarChart {
         chart
     }
 
-    pub fn horizontal() -> Self {
-        Self::new(Orientation::Horizontal)
+    pub fn get_data(&self) -> &Vec<BarData> {
+        &self.data
     }
 
-    pub fn vertical() -> Self {
-        Self::new(Orientation::Vertical)
-    }
-
-    pub fn push_data(&mut self, data: BarData) {
-        self.data.push(data);
+    pub fn add_data<T: Into<BarData>>(&mut self, bar_data: T) {
+        self.data.push(bar_data.into());
         self.refresh();
     }
-
-    // Potential helper?
-    // pub fn append_data(&mut self, data: &[BarData]) {
-    //     self.data.extend_from_slice(data);
-    // }
 
     pub fn toggle_orientation(&mut self) {
         self.orientation = match self.orientation {
@@ -98,7 +92,7 @@ impl BarChart {
     ///
     /// We return 'Chart' instead of 'Element' so the user can chain
     /// .on_drag(), .width(), or .height() before calling .into().
-    pub fn view<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
+    pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
         let (x_axis_id, y_axis_id) = match self.orientation {
             Orientation::Horizontal => (Self::VALUE_AXIS, Self::BAR_AXIS),
             Orientation::Vertical => (Self::BAR_AXIS, Self::VALUE_AXIS),

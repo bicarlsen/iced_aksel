@@ -17,10 +17,7 @@ struct ExampleApp {
     // Settings
     theme: iced::Theme,
 
-    // Widget values
-    new_label: String,
-    new_value: f64,
-
+    // Bar chart
     bar_chart: BarChart,
 }
 
@@ -28,9 +25,7 @@ struct ExampleApp {
 enum Message {
     // Widget values
     SwitchTheme(iced::Theme),
-    NewLabelChanged(String),
-    NewValueChanged(String),
-    AddData((String, f64)),
+    AddData,
     ToggleOrientation,
 }
 
@@ -40,9 +35,7 @@ impl ExampleApp {
             Self {
                 theme: iced::Theme::Dark,
 
-                new_label: String::new(),
-                new_value: 0.0,
-                bar_chart: BarChart::vertical(),
+                bar_chart: BarChart::new(barchart::Orientation::Vertical),
             },
             Task::none(),
         )
@@ -53,14 +46,11 @@ impl ExampleApp {
             Message::SwitchTheme(theme) => {
                 self.theme = theme;
             }
-            Message::NewLabelChanged(s) => {
-                self.new_label = s;
-            }
-            Message::NewValueChanged(s) => {
-                self.new_value = s.parse().unwrap_or(0.0);
-            }
-            Message::AddData(bar_data) => {
-                self.bar_chart.push_data(bar_data.into());
+            Message::AddData => {
+                let new_label = self.bar_chart.get_data().len();
+                let new_value = rand::random_range(5.0..100.0);
+                self.bar_chart
+                    .add_data((format!["{}", new_label], new_value));
             }
             Message::ToggleOrientation => {
                 self.bar_chart.toggle_orientation();
@@ -73,26 +63,32 @@ impl ExampleApp {
         // --- Theme toggle ---
         let theme_toggle = pick_list(iced::Theme::ALL, Some(&self.theme), |t| {
             Message::SwitchTheme(t)
-        });
+        })
+        .width(iced::Length::Fill);
 
-        let new_label_input = text_input("Jan", &self.new_label).on_input(Message::NewLabelChanged);
-        let new_value_input =
-            text_input("0", &self.new_value.to_string()).on_input(Message::NewValueChanged);
-        let new_data_confirm =
-            button("+").on_press(Message::AddData((self.new_label.clone(), self.new_value)));
-        let toggle_orientation_btn =
-            button("Toggle orientation").on_press(Message::ToggleOrientation);
-        let bar_chart = self.bar_chart.view();
+        let bar_chart_box1 = column![self.barchart_view()].width(iced::Length::Fill);
+        let bar_chart_box2 = column![self.barchart_view()].width(iced::Length::Fill);
 
-        let row_one = row![theme_toggle, toggle_orientation_btn]
+        let row1 = row![bar_chart_box1, bar_chart_box2]
+            .height(iced::Length::Fixed(360.))
             .spacing(16.)
             .padding(16.);
 
-        let row_two = row![new_label_input, new_value_input, new_data_confirm]
-            .spacing(16.)
-            .padding(16.);
+        column![theme_toggle, row1].into()
+    }
 
-        column![row_one, row_two, bar_chart].into()
+    fn barchart_view(&self) -> Element<'_, Message> {
+        let new_data_confirm_btn = button("+")
+            .on_press(Message::AddData)
+            .width(iced::Length::Fill);
+        let toggle_orientation_btn = button("Toggle orientation")
+            .on_press(Message::ToggleOrientation)
+            .width(iced::Length::Fill);
+        let bar_chart = self.bar_chart.chart();
+
+        let row1 = row![new_data_confirm_btn, toggle_orientation_btn].spacing(16.);
+
+        column![row1, bar_chart].into()
     }
 
     fn theme(&self) -> Theme {
