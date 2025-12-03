@@ -577,7 +577,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for TestingEnvironment {
                     plot.add_shape(tri);
                 }
                 ShapeType::Sector => {
-                    let mut sec = shape::Sector::new(
+                    let mut sec = shape::Arc::new(
                         item.position,
                         size,
                         self.config.sector_start,
