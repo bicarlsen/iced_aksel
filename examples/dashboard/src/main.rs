@@ -6,10 +6,10 @@ use iced::{
     window,
 };
 
-mod barchart;
+mod bar;
 mod gauge;
 
-use barchart::BarChart;
+use bar::BarChart;
 use gauge::Gauge;
 
 fn main() -> iced::Result {
@@ -49,7 +49,7 @@ impl ExampleApp {
             Self {
                 theme: iced::Theme::Dark,
 
-                bar_chart: BarChart::new(barchart::Orientation::Vertical),
+                bar_chart: BarChart::new(bar::Orientation::Vertical),
                 gauge_chart: Gauge::new("Speed", 0., 100.)
                     .animated(0.5)
                     .value_pos(gauge::Placement::Center)
