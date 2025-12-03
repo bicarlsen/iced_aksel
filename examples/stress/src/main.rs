@@ -7,10 +7,11 @@
 //! - Pre-calculated geometry to isolate rendering performance
 //! - Advanced styling controls (Size, Opacity, Stroke Style)
 //! - **View-Aware Generation**: Shapes generate within the current pan/zoom bounds.
+//! - **Length Modes**: Switch between Screen (px) and Plot (data) units for sizes and strokes.
 
 use std::time::Instant;
 
-use aksel::{PlotPoint, Scale, scale::Linear}; // Added Scale trait import
+use aksel::{PlotPoint, Scale, scale::Linear};
 use iced::{
     Alignment, Color, Element, Point, Subscription, Task, Theme,
     mouse::ScrollDelta,
@@ -29,6 +30,21 @@ const AXIS_ID_Y: &str = "y";
 
 type AxisId = &'static str;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LengthMode {
+    Screen,
+    Plot,
+}
+
+impl std::fmt::Display for LengthMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LengthMode::Screen => write!(f, "Screen (px)"),
+            LengthMode::Plot => write!(f, "Plot (units)"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Message {
     Tick(Instant),
@@ -39,10 +55,12 @@ enum Message {
     MinSizeChanged(f32),
     MaxSizeChanged(f32),
     OpacityChanged(f32),
+    SizeModeChanged(LengthMode),
     // Rendering Styles
     ToggleFill(bool),
     ToggleStroke(bool),
     StrokeWidthChanged(f32),
+    StrokeWidthModeChanged(LengthMode),
     StrokeStyleChanged(StrokeStyle),
     // Actions
     Regenerate,
@@ -63,6 +81,7 @@ struct StressRectangles {
     show_fill: bool,
     show_stroke: bool,
     stroke_width: f32,
+    stroke_width_mode: LengthMode,
     stroke_style: StrokeStyle,
 }
 
@@ -79,11 +98,14 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressRectangles {
             }
 
             if self.show_stroke {
-                // Use a standard white stroke for contrast, with configurable width/style
-                rect = rect.stroke(
-                    Stroke::new(Color::WHITE, Length::Screen(self.stroke_width))
-                        .with_style(self.stroke_style),
-                );
+                // Determine stroke thickness based on mode
+                let thickness = match self.stroke_width_mode {
+                    LengthMode::Screen => Length::Screen(self.stroke_width),
+                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                };
+
+                rect =
+                    rect.stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
             }
 
             // Only add to the render list if it contributes pixels
@@ -101,6 +123,7 @@ struct StressCircles {
     show_fill: bool,
     show_stroke: bool,
     stroke_width: f32,
+    stroke_width_mode: LengthMode,
     stroke_style: StrokeStyle,
 }
 
@@ -114,10 +137,13 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressCircles {
             }
 
             if self.show_stroke {
-                circle = circle.stroke(
-                    Stroke::new(Color::WHITE, Length::Screen(self.stroke_width))
-                        .with_style(self.stroke_style),
-                );
+                let thickness = match self.stroke_width_mode {
+                    LengthMode::Screen => Length::Screen(self.stroke_width),
+                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                };
+
+                circle = circle
+                    .stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
             }
 
             if self.show_fill || self.show_stroke {
@@ -140,6 +166,7 @@ struct StressTestApp {
     min_size: f32,
     max_size: f32,
     opacity: f32,
+    size_mode: LengthMode,
 
     // FPS counter
     last_frame_time: Option<Instant>,
@@ -168,6 +195,7 @@ impl StressTestApp {
                 show_fill: true,
                 show_stroke: false,
                 stroke_width: 2.0,
+                stroke_width_mode: LengthMode::Screen,
                 stroke_style: StrokeStyle::Solid,
             },
             circles_layer: StressCircles {
@@ -176,6 +204,7 @@ impl StressTestApp {
                 show_fill: true,
                 show_stroke: false,
                 stroke_width: 2.0,
+                stroke_width_mode: LengthMode::Screen,
                 stroke_style: StrokeStyle::Solid,
             },
             rectangle_count: 100,
@@ -183,6 +212,7 @@ impl StressTestApp {
             min_size: 5.0,
             max_size: 20.0,
             opacity: 1.0,
+            size_mode: LengthMode::Screen,
             last_frame_time: None,
             fps: 0.0,
             frame_times: Vec::with_capacity(60),
@@ -196,14 +226,12 @@ impl StressTestApp {
     fn generate_shapes(&mut self) {
         let mut rng = rand::rng();
 
-        // 1. Get current View Bounds from State
-        // This ensures we generate shapes where the camera currently IS.
+        // 1. Get current View Bounds
         let (x_min, x_max) = self
             .state
             .get_axis(&AXIS_ID_X)
             .map(|axis| {
                 let (min, max) = axis.scale().domain();
-                // Ensure correct ordering for RNG
                 if min <= max {
                     (*min, *max)
                 } else {
@@ -214,7 +242,7 @@ impl StressTestApp {
 
         let (y_min, y_max) = self
             .state
-            .get_axis(&AXIS_ID_X)
+            .get_axis(&AXIS_ID_Y)
             .map(|axis| {
                 let (min, max) = axis.scale().domain();
                 if min <= max {
@@ -232,20 +260,22 @@ impl StressTestApp {
         self.rectangles_layer.colors.reserve(self.rectangle_count);
 
         for _ in 0..self.rectangle_count {
-            // Generate within current view
             let x = rng.random_range(x_min..x_max);
             let y = rng.random_range(y_min..y_max);
 
-            let width =
+            let w_val =
                 rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
-            let height =
+            let h_val =
                 rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
 
-            // Pre-calculate geometry
-            let rect = Rectangle::from_corners(
-                PlotPoint::new(x, y),
-                PlotPoint::new(x + width, y + height),
-            );
+            let center = PlotPoint::new(x, y);
+
+            let (width, height) = match self.size_mode {
+                LengthMode::Screen => (Length::Screen(w_val as f32), Length::Screen(h_val as f32)),
+                LengthMode::Plot => (Length::Plot(w_val), Length::Plot(h_val)),
+            };
+
+            let rect = Rectangle::new(center, width, height);
 
             self.rectangles_layer.geometry.push(rect);
             self.rectangles_layer.colors.push(Color::from_rgba(
@@ -263,23 +293,25 @@ impl StressTestApp {
         self.circles_layer.colors.reserve(self.circle_count);
 
         for _ in 0..self.circle_count {
-            // Generate within current view
             let x = rng.random_range(x_min..x_max);
             let y = rng.random_range(y_min..y_max);
 
-            // Radius is roughly half size
-            let radius = rng.random_range(
+            let r_val = rng.random_range(
                 (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
-            );
+            ) as f64;
 
-            // Pre-calculate geometry
-            let circle = Circle::new(PlotPoint::new(x, y), Length::Plot(radius as f64));
+            let radius = match self.size_mode {
+                LengthMode::Screen => Length::Screen(r_val as f32),
+                LengthMode::Plot => Length::Plot(r_val),
+            };
+
+            let circle = Circle::new(PlotPoint::new(x, y), radius);
 
             self.circles_layer.geometry.push(circle);
             self.circles_layer.colors.push(Color::from_rgba(
-                rng.random_range(0.5..1.0),
-                rng.random_range(0.2..0.8),
-                rng.random_range(0.2..0.8),
+                rng.random_range(0.0..1.0),
+                rng.random_range(0.0..1.0),
+                rng.random_range(0.0..1.0),
                 self.opacity,
             ));
         }
@@ -302,7 +334,7 @@ impl StressTestApp {
                 self.last_frame_time = Some(now);
                 Task::none()
             }
-            // Generation Parameters (Trigger Regenerate)
+            // Generation Parameters
             Message::RectangleCountChanged(v) => {
                 self.rectangle_count = v as usize;
                 self.generate_shapes();
@@ -334,7 +366,12 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
-            // Render Parameters (Instant Update)
+            Message::SizeModeChanged(mode) => {
+                self.size_mode = mode;
+                self.generate_shapes();
+                Task::none()
+            }
+            // Render Parameters
             Message::ToggleFill(v) => {
                 self.rectangles_layer.show_fill = v;
                 self.circles_layer.show_fill = v;
@@ -350,6 +387,11 @@ impl StressTestApp {
                 self.circles_layer.stroke_width = v;
                 Task::none()
             }
+            Message::StrokeWidthModeChanged(mode) => {
+                self.rectangles_layer.stroke_width_mode = mode;
+                self.circles_layer.stroke_width_mode = mode;
+                Task::none()
+            }
             Message::StrokeStyleChanged(v) => {
                 self.rectangles_layer.stroke_style = v;
                 self.circles_layer.stroke_style = v;
@@ -359,14 +401,13 @@ impl StressTestApp {
                 self.generate_shapes();
                 Task::none()
             }
-
+            // Chart
             Message::ChartDragged(delta) => {
                 let x = delta.x as f64;
                 let y = delta.y as f64;
                 self.state.pan_scales(AXIS_ID_X, AXIS_ID_Y, x, y);
                 Task::none()
             }
-
             Message::ChartScrolled(point, delta) => {
                 if let ScrollDelta::Lines { x: _, y } = delta {
                     let factor = 1.1f64.powf(y.into());
@@ -396,7 +437,7 @@ impl StressTestApp {
             0.0
         };
 
-        // --- Controls Sections ---
+        // --- Controls ---
 
         // 1. Stats
         let stats_row = row![
@@ -463,6 +504,23 @@ impl StressTestApp {
                 Slider::new(0.0..=1.0, self.opacity, Message::OpacityChanged).step(0.05)
             ]
             .spacing(10),
+            // Shape Size Mode Radio
+            row![
+                text("Size Mode:").size(14),
+                radio(
+                    "Screen",
+                    LengthMode::Screen,
+                    Some(self.size_mode),
+                    Message::SizeModeChanged
+                ),
+                radio(
+                    "Plot",
+                    LengthMode::Plot,
+                    Some(self.size_mode),
+                    Message::SizeModeChanged
+                ),
+            ]
+            .spacing(15)
         ]
         .spacing(5)
         .padding(5);
@@ -490,8 +548,24 @@ impl StressTestApp {
         ]
         .spacing(15);
 
+        let stroke_mode_row = row![
+            text("Width Mode:").size(14),
+            radio(
+                "Screen",
+                LengthMode::Screen,
+                Some(self.rectangles_layer.stroke_width_mode),
+                Message::StrokeWidthModeChanged
+            ),
+            radio(
+                "Plot",
+                LengthMode::Plot,
+                Some(self.rectangles_layer.stroke_width_mode),
+                Message::StrokeWidthModeChanged
+            ),
+        ]
+        .spacing(15);
+
         let styles_col = column![
-            // Fixed: Checkboxes now use a row with text for labels
             row![
                 row![
                     checkbox(self.rectangles_layer.show_fill).on_toggle(Message::ToggleFill),
@@ -514,30 +588,34 @@ impl StressTestApp {
                 ))
                 .width(120),
                 Slider::new(
-                    0.5..=10.0,
+                    0.5..=20.0,
                     self.rectangles_layer.stroke_width,
                     Message::StrokeWidthChanged
                 )
                 .step(0.5)
             ]
             .spacing(10),
+            stroke_mode_row,
             stroke_style_row,
         ]
         .spacing(5)
         .padding(5);
 
-        // Combine controls in a responsive grid/row
-        let controls_row = row![
-            counts_col,
-            geometry_col,
-            styles_col,
-            button("Regenerate")
-                .on_press(Message::Regenerate)
-                .padding(10)
-        ]
-        .spacing(20);
+        // Combine controls
+        let controls_row = row![counts_col, geometry_col, styles_col,]
+            .spacing(20)
+            .align_y(Alignment::Start);
 
-        column![stats_row, controls_row, chart]
+        let regenerate_btn = button(
+            text("Regenerate Shapes")
+                .width(iced::Length::Fill)
+                .align_x(Alignment::Center),
+        )
+        .on_press(Message::Regenerate)
+        .padding(10)
+        .width(iced::Length::Fill);
+
+        column![stats_row, controls_row, regenerate_btn, chart]
             .spacing(10)
             .padding(10)
             .into()
