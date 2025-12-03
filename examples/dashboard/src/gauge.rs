@@ -7,6 +7,7 @@ use iced_aksel::{
     Axis, Chart, Length, State as ChartState,
     axis::{self},
     plot::{Items, Plot},
+    shape,
 };
 use std::f32::consts::PI;
 use std::time::Instant;
@@ -40,12 +41,12 @@ impl Zone {
         }
     }
 
-    pub fn resolve_color(&self, palette: &iced::theme::Palette) -> Color {
+    pub fn resolve_color(&self, palette: &iced::theme::palette::Extended) -> Color {
         match self {
-            Zone::Primary(_) => palette.primary,
-            Zone::Success(_) => palette.success,
-            Zone::Warning(_) => palette.warning,
-            Zone::Danger(_) => palette.danger,
+            Zone::Primary(_) => palette.primary.base.color,
+            Zone::Success(_) => palette.success.base.color,
+            Zone::Warning(_) => palette.warning.base.color,
+            Zone::Danger(_) => palette.danger.base.color,
             Zone::Custom(_, color) => *color,
         }
     }
@@ -368,11 +369,11 @@ impl Gauge {
 
 impl Items<f64> for Gauge {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
-        let palette = theme.palette();
+        let palette = theme.extended_palette();
 
         // 1. Resolve Colors
         let active_color = if self.zones.is_empty() {
-            self.base_color.unwrap_or(palette.primary)
+            self.base_color.unwrap_or(palette.primary.base.color)
         } else {
             self.zones
                 .iter()
@@ -381,10 +382,7 @@ impl Items<f64> for Gauge {
                 .unwrap_or_else(|| self.zones.last().unwrap().resolve_color(&palette))
         };
 
-        let track_color = Color {
-            a: 0.1,
-            ..palette.text
-        };
+        let track_color = palette.background.strong.color;
 
         // 2. Geometry
         let center = PlotPoint::new(0.0, 0.0);
@@ -461,7 +459,7 @@ impl Items<f64> for Gauge {
             };
             let tick_color = Color {
                 a: 0.5,
-                ..palette.text
+                ..palette.background.base.text
             };
 
             for i in 0..self.tick_count {
@@ -510,7 +508,7 @@ impl Items<f64> for Gauge {
                 Label::new(&self.label, pos)
                     .fill(Color {
                         a: 0.7,
-                        ..palette.text
+                        ..palette.background.base.text
                     })
                     .size(self.title_size)
                     .align(Horizontal::Center, Vertical::Center),
