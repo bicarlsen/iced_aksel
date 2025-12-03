@@ -85,7 +85,7 @@ enum Message {
     StrokeStyleChanged(StrokeStyle),
 
     // Actions
-    Regenerate,
+    RegenerateAll,
     // Chart interaction
     ChartDragged(DragDelta),
     ChartScrolled(Point, ScrollDelta),
@@ -201,7 +201,6 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressTriangles {
 struct StressLines {
     geometry: Vec<Line<f64>>,
     colors: Vec<Color>,
-    // Added show_fill to control visibility via the Fill checkbox
     show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -214,7 +213,6 @@ struct StressLines {
 
 impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        // Line visibility is now controlled by "Show Fill"
         if !self.show_fill {
             return;
         }
@@ -241,7 +239,6 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
 struct StressPolylines {
     geometry: Vec<Polyline<f64>>,
     colors: Vec<Color>,
-    // Added show_fill to control visibility via the Fill checkbox
     show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -254,7 +251,6 @@ struct StressPolylines {
 
 impl<R: plot::Renderer> plot::Items<f64, R> for StressPolylines {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &iced::Theme) {
-        // Polyline visibility is now controlled by "Show Fill"
         if !self.show_fill {
             return;
         }
@@ -432,7 +428,7 @@ impl StressTestApp {
             lines_layer: StressLines {
                 geometry: Vec::new(),
                 colors: Vec::new(),
-                show_fill: true, // Default to visible
+                show_fill: true,
                 arrow_start: false,
                 arrow_end: false,
                 extend_start: false,
@@ -444,7 +440,7 @@ impl StressTestApp {
             polylines_layer: StressPolylines {
                 geometry: Vec::new(),
                 colors: Vec::new(),
-                show_fill: true, // Default to visible
+                show_fill: true,
                 arrow_start: false,
                 arrow_end: false,
                 extend_start: false,
@@ -496,15 +492,13 @@ impl StressTestApp {
             frame_times: Vec::with_capacity(60),
         };
 
-        app.generate_shapes();
+        // Don't generate anything at start (counts are 0)
+        // app.generate_all();
 
         (app, Task::none())
     }
 
-    fn generate_shapes(&mut self) {
-        let mut rng = rand::rng();
-
-        // 1. Get current View Bounds
+    fn get_view_bounds(&self) -> ((f64, f64), (f64, f64)) {
         let (x_min, x_max) = self
             .state
             .get_axis(&AXIS_ID_X)
@@ -531,7 +525,13 @@ impl StressTestApp {
             })
             .unwrap_or((0.0, 1000.0));
 
-        // 2. Rectangles
+        ((x_min, x_max), (y_min, y_max))
+    }
+
+    fn generate_rectangles(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
         self.rectangles_layer.geometry.clear();
         self.rectangles_layer.colors.clear();
         self.rectangles_layer.geometry.reserve(self.rectangle_count);
@@ -558,8 +558,12 @@ impl StressTestApp {
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
+    }
 
-        // 3. Circles
+    fn generate_circles(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
         self.circles_layer.geometry.clear();
         self.circles_layer.colors.clear();
         self.circles_layer.geometry.reserve(self.circle_count);
@@ -584,8 +588,12 @@ impl StressTestApp {
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
+    }
 
-        // 4. Triangles
+    fn generate_triangles(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
         self.triangles_layer.geometry.clear();
         self.triangles_layer.colors.clear();
         self.triangles_layer.geometry.reserve(self.triangle_count);
@@ -610,8 +618,12 @@ impl StressTestApp {
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
+    }
 
-        // 5. Lines
+    fn generate_lines(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
         self.lines_layer.geometry.clear();
         self.lines_layer.colors.clear();
         self.lines_layer.geometry.reserve(self.line_count);
@@ -636,8 +648,12 @@ impl StressTestApp {
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
+    }
 
-        // 6. Polylines
+    fn generate_polylines(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
         self.polylines_layer.geometry.clear();
         self.polylines_layer.colors.clear();
         self.polylines_layer.geometry.reserve(self.polyline_count);
@@ -670,8 +686,12 @@ impl StressTestApp {
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
+    }
 
-        // 7. Arcs
+    fn generate_arcs(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
         self.arcs_layer.geometry.clear();
         self.arcs_layer.colors.clear();
         self.arcs_layer.geometry.reserve(self.arc_count);
@@ -684,7 +704,6 @@ impl StressTestApp {
                 (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
             ) as f64;
 
-            // Generate Arc based on User Sweep
             let start_angle = rng.random_range(0.0..std::f32::consts::TAU);
             let sweep_rad = self.arc_sweep.to_radians();
             let end_angle = start_angle + sweep_rad;
@@ -708,8 +727,12 @@ impl StressTestApp {
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
+    }
 
-        // 8. Polygons
+    fn generate_polygons(&mut self) {
+        let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
+        let mut rng = rand::rng();
+
         self.polygons_layer.geometry.clear();
         self.polygons_layer.colors.clear();
         self.polygons_layer.geometry.reserve(self.polygon_count);
@@ -728,9 +751,8 @@ impl StressTestApp {
             for i in 0..self.polygon_vertices {
                 let theta = i as f64 * step;
 
-                // Concavity Logic: Alternate radii if concave is checked
                 let r = if self.polygon_concave && i % 2 != 0 {
-                    radius_base * 0.5 // Indent by 50% for star effect
+                    radius_base * 0.5
                 } else {
                     radius_base
                 };
@@ -745,6 +767,16 @@ impl StressTestApp {
                 .colors
                 .push(random_color(&mut rng, self.opacity));
         }
+    }
+
+    fn generate_all(&mut self) {
+        self.generate_rectangles();
+        self.generate_circles();
+        self.generate_triangles();
+        self.generate_lines();
+        self.generate_polylines();
+        self.generate_arcs();
+        self.generate_polygons();
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -767,72 +799,73 @@ impl StressTestApp {
             // Generation Parameters
             Message::RectangleCountChanged(v) => {
                 self.rectangle_count = v as usize;
-                self.generate_shapes();
+                self.generate_rectangles();
                 Task::none()
             }
             Message::CircleCountChanged(v) => {
                 self.circle_count = v as usize;
-                self.generate_shapes();
+                self.generate_circles();
                 Task::none()
             }
             Message::TriangleCountChanged(v) => {
                 self.triangle_count = v as usize;
-                self.generate_shapes();
+                self.generate_triangles();
                 Task::none()
             }
             Message::LineCountChanged(v) => {
                 self.line_count = v as usize;
-                self.generate_shapes();
+                self.generate_lines();
                 Task::none()
             }
             Message::PolylineCountChanged(v) => {
                 self.polyline_count = v as usize;
-                self.generate_shapes();
+                self.generate_polylines();
                 Task::none()
             }
             Message::ArcCountChanged(v) => {
                 self.arc_count = v as usize;
-                self.generate_shapes();
+                self.generate_arcs();
                 Task::none()
             }
             Message::PolygonCountChanged(v) => {
                 self.polygon_count = v as usize;
-                self.generate_shapes();
+                self.generate_polygons();
                 Task::none()
             }
 
             Message::PolySegmentsChanged(v) => {
                 self.poly_segments = v as usize;
-                self.generate_shapes();
+                self.generate_polylines();
                 Task::none()
             }
             Message::PolygonVerticesChanged(v) => {
                 self.polygon_vertices = v as usize;
-                self.generate_shapes();
+                self.generate_polygons();
                 Task::none()
             }
             Message::TogglePolygonConcave(v) => {
                 self.polygon_concave = v;
-                self.generate_shapes();
+                self.generate_polygons();
                 Task::none()
             }
             Message::InnerRadiusChanged(v) => {
                 self.arc_inner_radius = v;
-                self.generate_shapes();
+                self.generate_arcs();
                 Task::none()
             }
             Message::ArcSweepChanged(v) => {
                 self.arc_sweep = v;
-                self.generate_shapes();
+                self.generate_arcs();
                 Task::none()
             }
 
+            // Global Geometry Changes -> Must Regenerate ALL
             Message::MinSizeChanged(v) => {
                 self.min_size = v;
                 if self.min_size > self.max_size {
                     self.max_size = self.min_size;
                 }
-                self.generate_shapes();
+                self.generate_all();
                 Task::none()
             }
             Message::MaxSizeChanged(v) => {
@@ -840,17 +873,17 @@ impl StressTestApp {
                 if self.max_size < self.min_size {
                     self.min_size = self.max_size;
                 }
-                self.generate_shapes();
+                self.generate_all();
                 Task::none()
             }
             Message::OpacityChanged(v) => {
                 self.opacity = v;
-                self.generate_shapes();
+                self.generate_all();
                 Task::none()
             }
             Message::SizeModeChanged(mode) => {
                 self.size_mode = mode;
-                self.generate_shapes();
+                self.generate_all();
                 Task::none()
             }
             // Render Parameters
@@ -858,8 +891,8 @@ impl StressTestApp {
                 self.rectangles_layer.show_fill = v;
                 self.circles_layer.show_fill = v;
                 self.triangles_layer.show_fill = v;
-                self.lines_layer.show_fill = v; // Now controlled by Fill
-                self.polylines_layer.show_fill = v; // Now controlled by Fill
+                self.lines_layer.show_fill = v;
+                self.polylines_layer.show_fill = v;
                 self.arcs_layer.show_fill = v;
                 self.polygons_layer.show_fill = v;
                 Task::none()
@@ -902,7 +935,7 @@ impl StressTestApp {
                 self.polygons_layer.stroke_style = v;
                 Task::none()
             }
-            // Line/Poly Features
+            // Line/Poly Features (Just toggles, no regen needed)
             Message::ToggleArrowStart(v) => {
                 self.lines_layer.arrow_start = v;
                 self.polylines_layer.arrow_start = v;
@@ -924,8 +957,8 @@ impl StressTestApp {
                 Task::none()
             }
 
-            Message::Regenerate => {
-                self.generate_shapes();
+            Message::RegenerateAll => {
+                self.generate_all();
                 Task::none()
             }
             // Chart
@@ -1208,11 +1241,11 @@ impl StressTestApp {
         .spacing(10);
 
         let regenerate_btn = button(
-            text("Regenerate Shapes")
+            text("Regenerate All")
                 .width(iced::Length::Fill)
                 .align_x(Alignment::Center),
         )
-        .on_press(Message::Regenerate)
+        .on_press(Message::RegenerateAll)
         .padding(10)
         .width(iced::Length::Fill);
 
@@ -1261,14 +1294,21 @@ fn sub_header(text_content: &'static str) -> Element<'static, Message> {
 
 // Helper for compact sliders
 fn slider_row(label: &str, value: f32, max: f32, msg: fn(f32) -> Message) -> Element<'_, Message> {
-    // Increment of 500 for counts (which go to 100k+), smaller for others
-    let step = if max > 200.0 {
+    // Improved Step Logic:
+    // Large Counts (150k) -> 500
+    // Angles (360) -> 1.0
+    // Small (20) -> 0.5
+    // Tiny (1.0) -> 0.05
+    let step = if max > 1000.0 {
         500.0
+    } else if max >= 360.0 {
+        1.0
     } else if max > 5.0 {
         0.5
     } else {
         0.05
     };
+
     column![
         row![text(label).size(12), text(format!("{:.1}", value)).size(12)].spacing(5),
         Slider::new(0.0..=max, value, msg).step(step)
