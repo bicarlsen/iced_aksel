@@ -8,7 +8,7 @@ use iced::{
 };
 
 mod bar;
-mod combined;
+// mod combined;
 mod gauge;
 mod line;
 
@@ -56,9 +56,8 @@ struct ExampleApp {
 
     // Labels
     bar_chart_labels: Vec<String>,
-
     // Customizable chart
-    combined_state: combined::State,
+    // combined_state: combined::State,
 }
 
 #[derive(Debug, Clone)]
@@ -66,30 +65,18 @@ enum Message {
     // Animation
     AnimationTick(Instant),
 
-    // Widget values
+    // General
     SwitchTheme(iced::Theme),
 
-    // Collective data
+    // Data
     AddBarDataPoint,
     AddLineDataPoint,
     AddLineSeries,
-
-    // Barchart
-    // AddBarData,
-    // ToggleOrientation,
-
-    // Linechart
-    // AddLineSeries,
+    StackedLineChartToggle,
+    BottomAlphaLineChartToggle,
 
     // Gauge
     UpdateGaugeValue(f64),
-    // Customizablechart
-    // SyncChart,
-    // AddLineSeries,
-    // AddBarSeries,
-    // AddCustomData,
-    // ChartTypeChanged(SeriesType),
-    // InputValueChanged(String),
 }
 
 impl ExampleApp {
@@ -111,7 +98,7 @@ impl ExampleApp {
                     .zone(gauge::Zone::Danger(100.))
                     .zone_opacity(0.7)
                     .format(|v| format!("{:.2}", v)),
-                line_chart: LineChart::new(),
+                line_chart: LineChart::new().legend(true).fill_alpha(0.25),
                 bar_chart_labels: vec![
                     "You".to_string(),
                     "Decide".to_string(),
@@ -119,7 +106,7 @@ impl ExampleApp {
                     "Own".to_string(),
                     "Labels".to_string(),
                 ],
-                combined_state: combined::State::new(),
+                // combined_state: combined::State::new(),
             },
             Task::none(),
         )
@@ -127,16 +114,18 @@ impl ExampleApp {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            // GENERAL
+            // Automation
             Message::AnimationTick(now) => {
                 self.gauge_chart.tick(now);
                 Task::none()
             }
+
+            // General
             Message::SwitchTheme(theme) => {
                 self.theme = theme;
                 Task::none()
             }
-            // BAR
+            // Data
             Message::AddBarDataPoint => {
                 let len = self.bar_chart.get_data().len();
                 let new_value = rand::random_range(0.0..=10.0);
@@ -145,7 +134,6 @@ impl ExampleApp {
                 Task::none()
             }
 
-            // LINE
             Message::AddLineDataPoint => {
                 let new_value = {
                     if let Some(last) = self.line_chart.get_last() {
@@ -164,6 +152,16 @@ impl ExampleApp {
                 let new_series =
                     LineSeries::new("New Series", generate_random_pastel(&self.theme()));
                 self.line_chart.push_series(new_series);
+                Task::none()
+            }
+
+            Message::StackedLineChartToggle => {
+                self.line_chart.toggle_stacked();
+                Task::none()
+            }
+
+            Message::BottomAlphaLineChartToggle => {
+                self.line_chart.toggle_fill();
                 Task::none()
             }
 
@@ -245,10 +243,18 @@ impl ExampleApp {
         let new_series_confirm_btn = button("Series +")
             .on_press(Message::AddLineSeries)
             .width(iced::Length::Fill);
+        let toggle_stacked_btn = button("Stack").on_press(Message::StackedLineChartToggle);
+        let toggle_alpha_btn = button("Alpha").on_press(Message::BottomAlphaLineChartToggle);
 
         let line_chart = self.line_chart.chart();
 
-        let panel = row![new_data_confirm_btn, new_series_confirm_btn].spacing(16.);
+        let panel = row![
+            new_data_confirm_btn,
+            new_series_confirm_btn,
+            toggle_stacked_btn,
+            toggle_alpha_btn
+        ]
+        .spacing(16.);
 
         column![line_chart, panel].into()
     }
