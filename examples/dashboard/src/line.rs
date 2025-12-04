@@ -245,6 +245,7 @@ impl LineChart {
         if !self.defined_axes.contains(&key) {
             self.defined_axes.push(key);
         }
+        self.auto_scale();
     }
 
     pub fn push_series(&mut self, mut series: LineSeries) {
@@ -256,10 +257,7 @@ impl LineChart {
 
         self.ensure_axes_exist(&series);
         self.series.push(series);
-
-        if self.animation_speed.is_none() {
-            self.snap_axes();
-        }
+        self.auto_scale();
     }
 
     pub fn clear(&mut self) {
@@ -282,39 +280,25 @@ impl LineChart {
         };
         self.last_tick = Some(now);
 
-        // Standard smoothing factor for Lines (keep them smooth/organic)
         let physics_speed = speed_normalized * 10.0;
         let alpha = 1.0 - (-physics_speed * dt).exp();
 
-        // Faster smoothing for Axes (Domain) to make it feel responsive
-        // We use a Hybrid approach: Exponential Decay + Minimum Linear Velocity.
-        // This ensures the "tail" of the animation finishes quickly instead of lingering.
-        let axis_speed = physics_speed * 2.0; // Faster base speed for layout changes
+        let axis_speed = physics_speed * 2.0;
         let axis_alpha = 1.0 - (-axis_speed * dt).exp();
 
         let smooth_axis_val = |current: f64, target: f64| -> f64 {
             let diff = target - current;
-            // Higher snap threshold prevents micro-jitters at the end
             if diff.abs() < 0.005 {
                 return target;
             }
-
-            // 1. Exponential step (Fast start, slow end)
             let step_exp = diff * axis_alpha;
-
-            // 2. Linear step (Constant speed end)
-            // Move at least 0.5 units per second to kill the Zeno tail
             let min_velocity = 0.5;
             let step_lin = min_velocity * dt * diff.signum();
-
-            // Pick the faster one
             let step = if step_exp.abs() > step_lin.abs() {
                 step_exp
             } else {
                 step_lin
             };
-
-            // Clamp to target
             if step.abs() >= diff.abs() {
                 target
             } else {
@@ -322,71 +306,43 @@ impl LineChart {
             }
         };
 
-        // 1. Calculate Targets based on Data
+        // 1. Calculate Targets
         let (target_x, target_ys) = self.calculate_targets();
 
-        // 2. Animate Axis Domains (Stage 1)
-        let mut axes_moving = false;
-
-        // X Axis
+        // 2. Animate Axes (Simultaneous)
         let next_x0 = smooth_axis_val(self.current_x_domain.0, target_x.0);
         let next_x1 = smooth_axis_val(self.current_x_domain.1, target_x.1);
+        self.current_x_domain = (next_x0, next_x1);
 
-        if (next_x0 - target_x.0).abs() > f64::EPSILON
-            || (next_x1 - target_x.1).abs() > f64::EPSILON
-        {
-            self.current_x_domain = (next_x0, next_x1);
-            axes_moving = true;
-        } else {
-            self.current_x_domain = target_x;
-        }
-
-        // Apply X
         if let Some(axis) = self.state.get_axis_mut(&Self::X.to_string()) {
             axis.scale_mut()
                 .set_domain(self.current_x_domain.0, self.current_x_domain.1);
         }
 
-        // Y Axes
         for (id, target) in target_ys {
             let current = self.current_y_domains.entry(id.clone()).or_insert(target);
-
-            let next_y0 = smooth_axis_val(current.0, target.0);
-            let next_y1 = smooth_axis_val(current.1, target.1);
-
-            if (next_y0 - target.0).abs() > f64::EPSILON
-                || (next_y1 - target.1).abs() > f64::EPSILON
-            {
-                current.0 = next_y0;
-                current.1 = next_y1;
-                axes_moving = true;
-            } else {
-                *current = target;
-            }
+            current.0 = smooth_axis_val(current.0, target.0);
+            current.1 = smooth_axis_val(current.1, target.1);
 
             if let Some(axis) = self.state.get_axis_mut(&id) {
                 axis.scale_mut().set_domain(current.0, current.1);
             }
         }
 
-        // 3. Animate Content (Stage 2)
-        // Only animate lines/stacking if axes are mostly stable to prevent jitter
-        if !axes_moving {
-            // Animate Lines
-            for s in &mut self.series {
-                s.tick(alpha);
-            }
-
-            // Animate Stacking Factor
-            let diff_stack = self.target_stack_factor - self.current_stack_factor;
-            if diff_stack.abs() > 1e-5 {
-                self.current_stack_factor += diff_stack * alpha;
-            } else {
-                self.current_stack_factor = self.target_stack_factor;
-            }
+        // 3. Animate Content (Simultaneous)
+        for s in &mut self.series {
+            s.tick(alpha);
         }
 
-        // 4. Animate Fill Alpha (Independent)
+        // Animate Stacking Factor
+        let diff_stack = self.target_stack_factor - self.current_stack_factor;
+        if diff_stack.abs() > 1e-5 {
+            self.current_stack_factor += diff_stack * alpha;
+        } else {
+            self.current_stack_factor = self.target_stack_factor;
+        }
+
+        // 4. Animate Fill Alpha
         let target_alpha = if self.fill_enabled {
             self.target_fill_alpha
         } else {
@@ -418,13 +374,21 @@ impl LineChart {
         }
     }
 
+    fn auto_scale(&mut self) {
+        if self.animation_speed.is_none() {
+            for s in &mut self.series {
+                s.snap();
+            }
+            self.snap_axes();
+        }
+    }
+
     // Calculates where the axes SHOULD be based on Target Values & Target Stack
     fn calculate_targets(&self) -> ((f64, f64), HashMap<String, (f64, f64)>) {
         if self.series.is_empty() {
             return ((0.0, 1.0), HashMap::new());
         }
 
-        // X Bounds (Target Length)
         let max_len = self
             .series
             .iter()
@@ -434,12 +398,8 @@ impl LineChart {
         let x_max = (max_len as f64 - 1.0).max(0.0);
         let target_x = (0.0, x_max);
 
-        // Y Bounds
         let mut target_ys = HashMap::new();
         let mut stacked_sums: HashMap<String, Vec<f64>> = HashMap::new();
-
-        // We calculate bounds based on the TARGET stack factor (0.0 or 1.0 usually)
-        // This ensures the axis prepares for the final state.
         let factor = self.target_stack_factor;
 
         for s in &self.series {
@@ -455,19 +415,15 @@ impl LineChart {
             for (i, &val) in s.target_values.iter().enumerate() {
                 let baseline = sums[i];
                 let effective_val = val + (baseline * factor);
-
                 entry.0 = entry.0.min(effective_val);
                 entry.1 = entry.1.max(effective_val);
-
                 sums[i] += val;
             }
         }
 
-        // Apply padding
         for (_, bounds) in target_ys.iter_mut() {
             let (min, max) = *bounds;
             let padding = if max > min { (max - min) * 0.05 } else { 1.0 };
-            // If stacking, prefer 0 floor
             let final_min = if factor > 0.1 { min.min(0.0) } else { min };
             *bounds = (final_min, max + padding);
         }
@@ -499,12 +455,7 @@ impl LineChart {
             last.push(value);
         }
 
-        if self.animation_speed.is_none() {
-            for s in &mut self.series {
-                s.snap();
-            }
-            self.snap_axes();
-        }
+        self.auto_scale();
     }
 
     pub fn push_value(&mut self, value: f64) {
@@ -527,12 +478,7 @@ impl LineChart {
             series.push(value);
         }
 
-        if self.animation_speed.is_none() {
-            if let Some(s) = self.series.get_mut(index) {
-                s.snap();
-            }
-            self.snap_axes();
-        }
+        self.auto_scale();
     }
 
     pub fn push_value_to(&mut self, index: usize, value: f64) {
@@ -599,7 +545,6 @@ impl LineChart {
 
     pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
         let mut chart = Chart::new(&self.state);
-        // Unified layer
         let first_y = self
             .series
             .first()
@@ -613,14 +558,12 @@ impl LineChart {
 // Unified Renderer
 impl Items<f64> for LineChart {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
-        // 1. Determine Chart Floor
         let chart_floor = if let Some(axis) = self.state.get_axis(&Self::Y.to_string()) {
             *axis.scale().domain().0
         } else {
             0.0
         };
 
-        // 2. Draw Series
         let mut baseline: Vec<f64> = Vec::new();
 
         for s in &self.series {
@@ -632,7 +575,6 @@ impl Items<f64> for LineChart {
                 baseline.resize(s.current_values.len(), 0.0);
             }
 
-            // Calculate Visual Points
             let points: Vec<PlotPoint<f64>> = s
                 .current_values
                 .iter()
@@ -644,7 +586,6 @@ impl Items<f64> for LineChart {
                 })
                 .collect();
 
-            // Draw Fill
             if self.current_fill_alpha > 0.0 {
                 let mut fill_poly = points.clone();
                 for (i, _) in s
@@ -664,7 +605,6 @@ impl Items<f64> for LineChart {
                 plot.add_shape(Polygon::new(fill_poly).fill(color));
             }
 
-            // Draw Stroke
             plot.add_shape(Polyline {
                 points: points.clone(),
                 stroke: Stroke::new(s.color, Length::Screen(s.width)),
@@ -675,7 +615,6 @@ impl Items<f64> for LineChart {
                 arrow_size: 10.0,
             });
 
-            // Draw Markers
             if s.show_markers {
                 for point in &points {
                     let marker_size = Length::Screen(s.width * 2.0 + 2.0);
@@ -683,13 +622,11 @@ impl Items<f64> for LineChart {
                 }
             }
 
-            // Accumulate
             for (i, &v) in s.current_values.iter().enumerate() {
                 baseline[i] += v;
             }
         }
 
-        // 3. Draw Legend
         if self.show_legend {
             let palette = theme.palette();
             if let (Some(x_axis), Some(y_axis)) = (
@@ -698,6 +635,7 @@ impl Items<f64> for LineChart {
             ) {
                 let (x_min, x_max) = x_axis.scale().domain();
                 let (y_min, y_max) = y_axis.scale().domain();
+
                 let start_x = *x_min + (x_max - x_min) * 0.02;
                 let start_y = *y_max - (y_max - y_min) * 0.05;
                 let step_y = (y_max - y_min) * 0.06;
