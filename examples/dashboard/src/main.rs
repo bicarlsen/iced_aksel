@@ -88,7 +88,7 @@ impl ExampleApp {
 
                 theme: iced::Theme::Dark,
 
-                bar_chart: BarChart::new(bar::Orientation::Vertical),
+                bar_chart: BarChart::new(bar::Orientation::Vertical).animated(0.3),
                 gauge_chart: Gauge::new("Speed", 0., 100.)
                     .animated(0.5)
                     .value_pos(gauge::Placement::Center)
@@ -118,6 +118,7 @@ impl ExampleApp {
             Message::AnimationTick(now) => {
                 self.gauge_chart.tick(now);
                 self.line_chart.tick(now);
+                self.bar_chart.tick(now);
                 Task::none()
             }
 

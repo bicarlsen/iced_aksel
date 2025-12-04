@@ -9,6 +9,7 @@ use iced_aksel::{
     plot::{Items, Plot},
     shape::Rectangle,
 };
+use std::time::Instant;
 
 type AxisId = &'static str;
 
@@ -16,6 +17,8 @@ type AxisId = &'static str;
 pub struct BarData {
     pub label: String,
     pub value: f64,
+    // Animation state: The value currently being rendered
+    pub(crate) current_value: f64,
 }
 
 impl From<(String, f64)> for BarData {
@@ -23,6 +26,8 @@ impl From<(String, f64)> for BarData {
         Self {
             label: data.0,
             value: data.1,
+            // Start at 0.0 so the bar "rises up" when added
+            current_value: 0.0,
         }
     }
 }
@@ -38,6 +43,11 @@ pub struct BarChart {
     data: Vec<BarData>,
     bar_width: f64,
     orientation: Orientation,
+
+    // Animation
+    animation_speed: Option<f64>,
+    last_tick: Option<Instant>,
+    current_x_max: f64, // Controls the animated expansion of the domain
 }
 
 impl BarChart {
@@ -52,14 +62,20 @@ impl BarChart {
         let mut chart = Self {
             state,
             data: Vec::new(),
-            bar_width: 0.8, // Default nice width (relative to x-step of 1.0)
+            bar_width: 0.8,
             orientation,
+            animation_speed: None,
+            last_tick: None,
+            current_x_max: 1.0, // Default domain size
         };
 
-        // Refresh the chart before returning
         chart.refresh();
-
         chart
+    }
+
+    pub fn animated(mut self, speed: f64) -> Self {
+        self.animation_speed = Some(speed.max(0.0).min(1.0));
+        self
     }
 
     pub fn get_data(&self) -> &Vec<BarData> {
@@ -67,7 +83,15 @@ impl BarChart {
     }
 
     pub fn add_data<T: Into<BarData>>(&mut self, bar_data: T) {
-        self.data.push(bar_data.into());
+        let mut data = bar_data.into();
+
+        // If animation is disabled, snap to target immediately
+        if self.animation_speed.is_none() {
+            data.current_value = data.value;
+            self.current_x_max = (self.data.len() + 2) as f64;
+        }
+
+        self.data.push(data);
         self.refresh();
     }
 
@@ -78,20 +102,74 @@ impl BarChart {
         };
 
         Self::setup_scales(&mut self.state, &self.orientation);
+        self.refresh();
+    }
+
+    // --- Physics ---
+
+    pub fn tick(&mut self, now: Instant) {
+        let Some(speed_normalized) = self.animation_speed else {
+            return;
+        };
+
+        let dt = if let Some(last) = self.last_tick {
+            (now - last).as_secs_f32() as f64
+        } else {
+            0.0
+        };
+        self.last_tick = Some(now);
+
+        // Standard Exponential Smoothing factor
+        // 1.0 - exp(-speed * dt) gives the percentage of the gap to close this frame.
+        // Higher physics_speed = faster close.
+        let physics_speed = speed_normalized * 10.0;
+        let alpha = 1.0 - (-physics_speed * dt).exp();
+
+        // 1. Animate Domain Expansion (Moving Right)
+        let target_x_max = self.data.len() as f64 + 1.0;
+        let diff_x = target_x_max - self.current_x_max;
+
+        // Update Domain
+        if diff_x.abs() > 1e-5 {
+            self.current_x_max += diff_x * alpha;
+        } else {
+            self.current_x_max = target_x_max;
+        }
+
+        // Check if domain is still significantly expanding
+        // If we are more than 0.1 units away from target, we consider it "Expanding"
+        // and hold the new bar at 0.
+        let is_expanding = diff_x.abs() > 0.15;
+
+        // 2. Animate Bars Rising
+        let last_idx = self.data.len().saturating_sub(1);
+
+        for (i, bar) in self.data.iter_mut().enumerate() {
+            // Sequence Logic:
+            // If this is the newest bar AND the domain is still expanding,
+            // keep it at 0.0. It waits for the "stage" to widen before entering.
+            if is_expanding && i == last_idx {
+                // Ensure it stays at base if we are waiting
+                bar.current_value = 0.0;
+                continue;
+            }
+
+            let diff = bar.value - bar.current_value;
+            if diff.abs() > 1e-5 {
+                bar.current_value += diff * alpha;
+            } else {
+                bar.current_value = bar.value;
+            }
+        }
 
         self.refresh();
     }
 
-    /// Replaces the current data and re-calculates the axis scales
     pub fn refresh(&mut self) {
         self.auto_scale();
         self.update_labels();
     }
 
-    /// Returns the Chart widget.
-    ///
-    /// We return 'Chart' instead of 'Element' so the user can chain
-    /// .on_drag(), .width(), or .height() before calling .into().
     pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
         let (x_axis_id, y_axis_id) = match self.orientation {
             Orientation::Horizontal => (Self::VALUE_AXIS, Self::BAR_AXIS),
@@ -101,26 +179,24 @@ impl BarChart {
         Chart::new(&self.state).layer(self, x_axis_id, y_axis_id)
     }
 
-    /// Internal helper to fit the axes to the data
     fn auto_scale(&mut self) {
-        let count = self.data.len() as f64;
+        // Use the animated current_x_max for the domain to create the sliding effect
+        let domain_max = self.current_x_max;
 
-        // Update Bar Axis: 0 to count (e.g., 5 items = 0..5)
-        // We range from -0.5 to count-0.5 so the first (index 0) and last bars are fully visible
+        // Update Bar Axis
         if let Some(bar_axis) = self.state.get_axis_mut(&Self::BAR_AXIS) {
-            bar_axis.scale_mut().set_domain(0.0, count + 1.0);
+            bar_axis.scale_mut().set_domain(0.0, domain_max);
         }
 
-        // Update Value Axis: 0 to max_value * 1.1 (10% headroom)
+        // Update Value Axis
         if let Some(value_axis) = self.state.get_axis_mut(&Self::VALUE_AXIS) {
-            // Find max Y value (or default to 10.0 if empty to avoid 0 range)
             let max_value = self
                 .data
                 .iter()
                 .map(|d| d.value)
                 .fold(0.0, f64::max)
                 .max(10.0)
-                * 1.05; // Add 5% padding
+                * 1.05;
 
             value_axis.scale_mut().set_domain(0.0, max_value);
         }
@@ -165,14 +241,17 @@ impl BarChart {
             .unwrap()
             .set_tick_renderer(move |ctx| {
                 let idx = ctx.tick.value;
-
-                // Don't draw label on the axis bound
                 if idx <= 0. {
                     return None;
                 }
 
-                // Fetch and draw all other labels
-                if let Some(label) = labels.get((idx - 1.0) as usize) {
+                // Round to find nearest whole bar index
+                let index = idx.round() as usize;
+                if index == 0 {
+                    return None;
+                }
+
+                if let Some(label) = labels.get(index - 1) {
                     return Some(TickLine::simple(label.clone()));
                 }
 
@@ -181,24 +260,15 @@ impl BarChart {
     }
 }
 
-// --- The Drawing Logic ---
-
 impl Items<f64> for BarChart {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         let palette = theme.palette();
-
-        // Use the theme's primary color for the bars
         let bar_color = palette.primary;
 
         for (i, item) in self.data.iter().enumerate() {
             let index = i as f64 + 1.0;
-            let val = item.value;
+            let val = item.current_value;
 
-            // GEOMETRY CALCULATION:
-            // Rectangle::new takes the CENTER.
-            // To make a bar sit on the baseline (y=0) and go up to 'val':
-            // Center Y = val / 2.0
-            // Height   = val
             let shape = match self.orientation {
                 Orientation::Horizontal => {
                     let center = PlotPoint::new(val / 2.0, index);
