@@ -14,24 +14,7 @@ use std::collections::HashMap;
 use iced_aksel::Stroke;
 use iced_aksel::shape::{Label, Polygon, Polyline, Rectangle};
 
-type AxisId = &'static str;
-
-// --- Data Structure ---
-
-#[derive(Debug, Clone)]
-pub struct DataPoint {
-    pub label: String,
-    pub value: f64,
-}
-
-impl DataPoint {
-    pub fn new(label: &'static str, value: f64) -> Self {
-        Self {
-            label: label.into(),
-            value,
-        }
-    }
-}
+type AxisId = String;
 
 // =========================================================
 //  Line Series (The Renderable Item)
@@ -40,11 +23,11 @@ impl DataPoint {
 #[derive(Debug, Clone)]
 pub struct LineSeries {
     pub name: String,
-    pub data: Vec<DataPoint>,
+    pub values: Vec<f64>, // Implicit X based on index
 
     // Axis Binding
-    pub x_key: &'static str,
-    pub y_key: &'static str,
+    // Removed x_key: All series share the Chart's global X axis.
+    pub y_key: String,
 
     // Appearance
     pub color: Color,
@@ -54,18 +37,13 @@ pub struct LineSeries {
 }
 
 impl LineSeries {
-    pub fn new(
-        name: impl Into<String>,
-        color: Color,
-        x_key: &'static str,
-        y_key: &'static str,
-    ) -> Self {
+    /// Creates a new series.
+    /// By default, binds to the standard "Y" axis.
+    pub fn new(name: impl Into<String>, color: Color) -> Self {
         Self {
             name: name.into(),
-            data: Vec::new(),
-            // Default binding. If "X" or "Y" don't exist in State, chart will create them.
-            x_key,
-            y_key,
+            values: Vec::new(),
+            y_key: "Y".to_string(),
             color,
             width: 2.0,
             show_markers: false,
@@ -73,10 +51,9 @@ impl LineSeries {
         }
     }
 
-    /// Binds this series to specific axes.
-    pub fn axis(mut self, x_id: &'static str, y_id: &'static str) -> Self {
-        self.x_key = x_id;
-        self.y_key = y_id;
+    /// Binds this series to a specific Y-axis (e.g., "Temperature", "Pressure").
+    pub fn axis(mut self, y_id: impl Into<String>) -> Self {
+        self.y_key = y_id.into();
         self
     }
 
@@ -97,39 +74,39 @@ impl LineSeries {
 
     // --- Data Methods ---
 
-    pub fn push(mut self, label: &'static str, value: f64) -> Self {
-        self.data.push(DataPoint::new(label, value));
+    pub fn push(mut self, value: f64) -> Self {
+        self.values.push(value);
         self
     }
 
-    pub fn push_value(&mut self, value: f64) {
-        self.data.push(DataPoint::new("", value));
+    pub fn extend(mut self, values: impl IntoIterator<Item = f64>) -> Self {
+        self.values.extend(values);
+        self
     }
 }
 
+// Implement Items for LineSeries so it can draw itself
 impl Items<f64> for LineSeries {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, _theme: &Theme) {
-        if self.data.len() < 2 {
+        if self.values.len() < 2 {
             return;
         }
 
-        // 1. Prepare Points (X is Index)
+        // 1. Prepare Points
+        // X is implicitly the index (0.0, 1.0, 2.0...)
         let points: Vec<PlotPoint<f64>> = self
-            .data
+            .values
             .iter()
             .enumerate()
-            .map(|(i, p)| PlotPoint::new(i as f64, p.value))
+            .map(|(i, &v)| PlotPoint::new(i as f64, v))
             .collect();
 
         // 2. Draw Fill
         if let Some(fill_color) = self.fill_color {
             if let Some(first) = points.first() {
                 if let Some(last) = points.last() {
-                    let min_y = self
-                        .data
-                        .iter()
-                        .map(|p| p.value)
-                        .fold(f64::INFINITY, f64::min);
+                    // Find visual floor (min value) to close the polygon
+                    let min_y = self.values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
 
                     let mut fill_points = points.clone();
                     fill_points.push(PlotPoint::new(last.x, min_y));
@@ -162,12 +139,14 @@ impl Items<f64> for LineSeries {
 }
 
 // =========================================================
-//  Line Chart (The Coordinator)
+//  Line Chart (The Orchestrator)
 // =========================================================
 
 pub struct LineChart {
     state: State<AxisId, f64>,
     series: Vec<LineSeries>,
+    // The chart maintains the list of known axes to avoid recreating them
+    defined_axes: Vec<String>,
 }
 
 impl LineChart {
@@ -178,6 +157,7 @@ impl LineChart {
         Self {
             state: State::new(),
             series: Vec::new(),
+            defined_axes: Vec::new(),
         }
     }
 
@@ -198,21 +178,24 @@ impl LineChart {
     //  Configuration
     // =========================================================
 
-    /// Explicitly configure an axis in the State.
-    /// This is how you "create" an axis manually.
-    pub fn with_axis(&mut self, id: &'static str, axis: Axis<f64>) {
-        self.state.set_axis(id, axis);
+    /// Configure a custom axis (e.g. "Temperature" on the Right).
+    pub fn with_axis(&mut self, id: impl Into<String>, axis: Axis<f64>) {
+        let key = id.into();
+        self.state.set_axis(key.clone(), axis);
+        if !self.defined_axes.contains(&key) {
+            self.defined_axes.push(key);
+        }
         self.auto_scale();
     }
 
-    /// Adds a series. Ensures required axes exist in State.
+    /// Adds a series. Ensures its required Y-axis exists.
     pub fn push_series(&mut self, series: LineSeries) {
         self.ensure_axes_exist(&series);
         self.series.push(series);
         self.auto_scale();
     }
 
-    pub fn clear_series(&mut self) {
+    pub fn clear(&mut self) {
         self.series.clear();
         self.auto_scale();
     }
@@ -221,40 +204,71 @@ impl LineChart {
     //  Data Injection
     // =========================================================
 
-    pub fn series_count(&self) -> usize {
-        self.series.len()
+    /// Pushes a Label + Value pair.
+    /// The label is currently ignored (future proofing), but the API is stable.
+    /// The value is added to the LAST series (or a default one is created).
+    pub fn push(&mut self, _label: impl Into<String>, value: f64) {
+        // Create default series if empty
+        if self.series.is_empty() {
+            let default_series = LineSeries::new("Series 1", Color::from_rgb(0.2, 0.4, 0.8));
+            self.ensure_axes_exist(&default_series);
+            self.series.push(default_series);
+        }
+
+        if let Some(last) = self.series.last_mut() {
+            last.values.push(value);
+        }
+
+        self.auto_scale();
     }
 
-    pub fn push_value_last_series(&mut self, value: f64) {
-        if let Some(last_series) = self.series.last_mut() {
-            last_series.push_value(value);
+    pub fn push_value(&mut self, value: f64) {
+        self.push("", value);
+    }
+
+    pub fn push_to(&mut self, index: usize, _label: impl Into<String>, value: f64) {
+        if let Some(series) = self.series.get_mut(index) {
+            series.values.push(value);
+            self.auto_scale();
         }
+    }
+
+    pub fn push_value_to(&mut self, index: usize, value: f64) {
+        self.push_to(index, "", value);
+    }
+
+    // Helper for main.rs compatibility
+    pub fn push_value_last_series(&mut self, value: f64) {
+        self.push_value(value);
+    }
+
+    pub fn series_count(&self) -> usize {
+        self.series.len()
     }
 
     // =========================================================
     //  Internal Logic
     // =========================================================
 
-    /// Checks State for axes. If missing, creates defaults.
     fn ensure_axes_exist(&mut self, series: &LineSeries) {
-        // Source of Truth: self.state.get_axis()
-
-        if self.state.get_axis(&series.x_key).is_none() {
+        // 1. Ensure Global X exists
+        let x_key = Self::X.to_string();
+        if !self.defined_axes.contains(&x_key) {
             self.state.set_axis(
-                series.x_key.clone(),
-                Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
+                x_key.clone(),
+                Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
             );
+            self.defined_axes.push(x_key);
         }
 
-        if self.state.get_axis(&series.y_key).is_none() {
+        // 2. Ensure Series-Specific Y exists
+        if !self.defined_axes.contains(&series.y_key) {
             self.state.set_axis(
                 series.y_key.clone(),
-                Axis::new(Linear::new(0.0, 100.0), axis::Position::Left),
+                Axis::new(Linear::new(0.0, 1.0), axis::Position::Left),
             );
+            self.defined_axes.push(series.y_key.clone());
         }
-
-        // PRint axes
-        println!("{:?}", self.state.axes());
     }
 
     fn auto_scale(&mut self) {
@@ -262,38 +276,45 @@ impl LineChart {
             return;
         }
 
-        let mut bounds: HashMap<&'static str, (f64, f64)> = HashMap::new();
+        // 1. Scale Global X-Axis
+        let max_len = self
+            .series
+            .iter()
+            .map(|s| s.values.len())
+            .max()
+            .unwrap_or(0);
+        let x_max = (max_len as f64 - 1.0).max(0.0);
+
+        let x_key = Self::X.to_string();
+        if let Some(x_axis) = self.state.get_axis_mut(&x_key) {
+            x_axis.scale_mut().set_domain(0.0, x_max);
+        }
+
+        // 2. Scale Y-Axes (Grouped by key)
+        let mut y_bounds: HashMap<String, (f64, f64)> = HashMap::new();
 
         for s in &self.series {
-            if s.data.is_empty() {
+            if s.values.is_empty() {
                 continue;
             }
 
-            let x_count = s.data.len() as f64;
-            let s_min_x = 0.0;
-            let s_max_x = (x_count - 1.0).max(0.0);
-
-            let mut s_min_y = f64::MAX;
-            let mut s_max_y = f64::MIN;
-            for p in &s.data {
-                s_min_y = s_min_y.min(p.value);
-                s_max_y = s_max_y.max(p.value);
+            let mut min = f64::MAX;
+            let mut max = f64::MIN;
+            for &v in &s.values {
+                min = min.min(v);
+                max = max.max(v);
             }
 
-            // Global Update
-            let x_entry = bounds.entry(s.x_key.into()).or_insert((f64::MAX, f64::MIN));
-            x_entry.0 = x_entry.0.min(s_min_x);
-            x_entry.1 = x_entry.1.max(s_max_x);
-
-            let y_entry = bounds.entry(s.y_key.into()).or_insert((f64::MAX, f64::MIN));
-            y_entry.0 = y_entry.0.min(s_min_y);
-            y_entry.1 = y_entry.1.max(s_max_y);
+            let entry = y_bounds
+                .entry(s.y_key.clone())
+                .or_insert((f64::MAX, f64::MIN));
+            entry.0 = entry.0.min(min);
+            entry.1 = entry.1.max(max);
         }
 
-        // Apply to Axes using State
-        for (axis_id, (min, max)) in bounds {
+        for (axis_id, (min, max)) in y_bounds {
             if let Some(axis) = self.state.get_axis_mut(&axis_id) {
-                // Heuristic: Padding for Y, tight for X
+                // 5% Padding
                 let padding = if max > min { (max - min) * 0.05 } else { 1.0 };
                 axis.scale_mut().set_domain(min, max + padding);
             }
@@ -307,11 +328,9 @@ impl LineChart {
     pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
         let mut chart = Chart::new(&self.state);
 
-        println!("{:?}", self.series);
-        println!("{:?}", self.state);
-
         for series in &self.series {
-            chart = chart.layer(series, series.x_key, series.y_key);
+            // Layer series: X is always Global X, Y is series-specific Y
+            chart = chart.layer(series, Self::X.to_string(), series.y_key.clone());
         }
 
         chart

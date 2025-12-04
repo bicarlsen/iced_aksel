@@ -8,6 +8,7 @@ use iced::{
 };
 
 mod bar;
+mod combined;
 mod gauge;
 mod line;
 
@@ -16,7 +17,7 @@ use gauge::Gauge;
 use iced_aksel::{Axis, axis::Position};
 use line::LineChart;
 
-use crate::line::{DataPoint, LineSeries};
+use crate::{combined::CombinedChart, line::LineSeries};
 
 fn main() -> iced::Result {
     ExampleApp::run()
@@ -32,6 +33,7 @@ struct ExampleApp {
     bar_chart: BarChart,
     gauge_chart: Gauge,
     line_chart: LineChart,
+    combined_chart: CombinedChart,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +72,7 @@ impl ExampleApp {
                     .zone_opacity(0.7)
                     .format(|v| format!("{:.2}", v)),
                 line_chart: LineChart::new(),
+                combined_chart: CombinedChart::new(),
             },
             Task::none(),
         )
@@ -94,10 +97,11 @@ impl ExampleApp {
                     .add_data((format!["{}", new_label], new_value));
 
                 self.line_chart.push_value_last_series(new_value);
+                self.combined_chart.push_value(new_value);
             }
             Message::AddSeries => {
-                let line_series = LineSeries::new("Line series", Color::WHITE, "X1", "Y1");
-                self.line_chart.push_series(line_series);
+                let series = LineSeries::new("Line series", generate_pastel_color());
+                self.line_chart.push_series(series);
             }
             Message::ToggleOrientation => {
                 self.bar_chart.toggle_orientation();
@@ -173,6 +177,21 @@ impl ExampleApp {
         column![line_chart, panel].into()
     }
 
+    fn combinedchart_view(&self) -> Element<'_, Message> {
+        // let new_data_confirm_btn = button("Data +")
+        //     .on_press(Message::AddData)
+        //     .width(iced::Length::Fill);
+        // let new_series_confirm_btn = button("Lineseries +")
+        //     .on_press(Message::AddSeries)
+        //     .width(iced::Length::Fill);
+
+        let combined_chart = self.combined_chart.chart();
+
+        // let panel = row![new_data_confirm_btn, new_series_confirm_btn].spacing(16.);
+
+        column![combined_chart].into()
+    }
+
     fn theme(&self) -> Theme {
         self.theme.clone()
     }
@@ -188,4 +207,14 @@ impl ExampleApp {
             .antialiasing(true)
             .run()
     }
+}
+
+/// Generate random pastel color
+fn generate_pastel_color() -> Color {
+    let blue = 128 + rand::random::<u8>() % 128;
+    Color::from_rgb8(
+        128 + rand::random::<u8>() % 128,
+        128 + rand::random::<u8>() % 128,
+        blue,
+    )
 }
