@@ -5,7 +5,7 @@ use crate::{
 };
 use aksel::{Float, PlotPoint, Transform};
 use iced::{
-    Color, Rectangle,
+    Color,
     advanced::graphics::{color::pack, mesh::SolidVertex2D},
 };
 use lyon::math::{Point, Vector};

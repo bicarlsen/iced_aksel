@@ -6,13 +6,12 @@
 //! - Toggleable Bollinger Bands (BBands) indicator.
 //! - An interactive settings bar with checkboxes and text inputs.
 
-use core::panic;
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use aksel::{PlotPoint, scale::Linear};
 use chrono::TimeZone;
 use iced::{
-    Color, Element, Point, Subscription, Task, Theme,
+    Color, Element, Subscription, Task, Theme,
     mouse::ScrollDelta,
     theme::palette::Extended,
     time::Instant,
@@ -51,7 +50,7 @@ enum Message {
     OnPlotScroll(iced::Point, ScrollDelta),
     /// A message sent when an axis is dragged (for zooming).
     OnAxisDrag(AxisId, f32),
-    OnAxisDoubleClick(AxisId, f32),
+    OnAxisDoubleClick(AxisId),
 
     // --- New Messages for UI Settings ---
     /// Toggles the visibility of the Volume panel.
@@ -212,7 +211,7 @@ impl ExampleApp {
             .on_drag(Message::OnPlotDrag)
             .on_scroll(Message::OnPlotScroll)
             .on_axis_drag(Message::OnAxisDrag)
-            .on_axis_double_click(Message::OnAxisDoubleClick);
+            .on_axis_double_click(|id, _| Message::OnAxisDoubleClick(id));
 
         // --- Build the Settings UI ---
         let settings_bar = self.build_settings_ui();
@@ -245,7 +244,7 @@ impl ExampleApp {
             "Range: {:.0} - {:.0} ({:.0} candles)",
             x_domain.0,
             x_domain.1,
-            x_domain.1 - x_domain.0
+            (x_domain.1 - x_domain.0).min(CANDLES_AMOUNT as f64)
         ))
         .size(16);
 
@@ -459,7 +458,7 @@ impl CandlestickChart {
                 self.handle_axis_drag(id, delta);
                 self.rebuild_layers();
             }
-            Message::OnAxisDoubleClick(id, _) => {
+            Message::OnAxisDoubleClick(id) => {
                 if id == Y_AXIS_ID {
                     self.settings.y_lock = true;
                     self.update_y_lock_domain();
@@ -508,6 +507,21 @@ impl CandlestickChart {
                     .zoom(factor as f64, Some(cursor_pos.y as f64));
             }
         }
+
+        self.clamp_x_axis();
+    }
+
+    fn clamp_x_axis(&mut self) {
+        let x_axis = self
+            .state
+            .get_axis_mut(&X_AXIS_ID)
+            .expect("X-axis must exist");
+
+        // Make sure we don't go outside the bounds of the candles
+        let (&min, &max) = x_axis.scale().domain();
+        x_axis
+            .scale_mut()
+            .set_domain(min.max(0.0), max.min(CANDLES_AMOUNT as f64));
     }
 
     /// Logic for panning the chart.
@@ -518,6 +532,7 @@ impl CandlestickChart {
             .expect("X-axis must exist")
             .scale_mut()
             .pan(delta.x as f64);
+        self.clamp_x_axis();
 
         // --- Pan Y-Axes (Conditionally) ---
         if !self.settings.y_lock {
@@ -590,7 +605,7 @@ impl CandlestickChart {
             .expect("X-axis must exist")
             .scale()
             .domain();
-        let visible_x_range = (x_domain.0.floor() as i64)..=(x_domain.1.ceil() as i64);
+        let visible_x_range = (x_domain.0.floor() as i64 - 1)..=(x_domain.1.ceil() as i64);
 
         let calculation_offset = self.settings.bband_period.max(self.settings.sma_period) as i64;
         let calculation_x_range = ((x_domain.0.floor() as i64).saturating_sub(calculation_offset))
@@ -754,14 +769,9 @@ struct CandleItems {
 impl<R: plot::Renderer> plot::Items<f64, R> for CandleItems {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, theme: &iced::Theme) {
         let palette = theme.extended_palette();
-        let bounds = plot.bounds();
         // Create rectangles from candle data during draw
         for (time, candle) in &self.candles {
             let x = *time as f64;
-
-            if !bounds.contains_x(&x) {
-                continue;
-            };
 
             let color = candle.color(palette);
 
