@@ -205,7 +205,7 @@ impl BarChart {
     fn setup_scales(state: &mut State<AxisId, f64>, orientation: &Orientation) {
         let bar_scale = Linear::new_with_tick_generator(0.0, 1.0, |scale| {
             let (&start, &end) = scale.domain();
-            TickIter::new((start as i64..end as i64).map(|n| Tick {
+            TickIter::new((start as i64..(end + 1.0) as i64).map(|n| Tick {
                 value: n as f64,
                 level: 0,
             }))
