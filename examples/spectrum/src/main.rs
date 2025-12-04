@@ -166,6 +166,7 @@ impl AnalyzerApp {
         })
         .with_tick_renderer(frequency_tick_renderer)
         .skip_overlapping_labels(8.0);
+
         let axis_y = Axis::new(scale::Linear::new(MIN_DB, MAX_DB), Position::Left)
             .with_grid_renderer(|tick| {
                 if tick.level > 1 {
@@ -180,8 +181,8 @@ impl AnalyzerApp {
             .skip_overlapping_labels(8.0)
             .with_cursor_formatter(|value| {
                 Some(Label {
-                    size: 10.0.into(),
                     content: format_db_label(value),
+                    ..Default::default()
                 })
             });
 
@@ -312,8 +313,8 @@ fn frequency_tick_renderer(ctx: TickLabelContext<f64>) -> Option<TickLine> {
     };
 
     line.label = Some(Label {
-        size: Pixels(10.0),
         content: format_frequency_label(ctx.tick.value),
+        ..Default::default()
     });
 
     Some(line)
@@ -328,8 +329,8 @@ fn db_tick_renderer(ctx: TickLabelContext<f64>) -> Option<TickLine> {
 
     if ctx.tick.level <= 1 {
         line.label = Some(Label {
-            size: Pixels(8.0),
             content: format_db_label(ctx.tick.value),
+            ..Default::default()
         });
     }
 
