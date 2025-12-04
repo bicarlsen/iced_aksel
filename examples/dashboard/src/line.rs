@@ -9,6 +9,7 @@ use iced_aksel::{
     plot::{Items, Plot},
 };
 use std::collections::HashMap;
+use std::time::Instant;
 
 // Import shapes
 use iced_aksel::Stroke;
@@ -66,20 +67,12 @@ impl LineSeries {
         self
     }
 
-    // --- Data Methods ---
-
-    pub fn push(mut self, value: f64) -> Self {
+    pub fn push(&mut self, value: f64) {
         self.values.push(value);
-        self
-    }
-
-    pub fn extend(mut self, values: impl IntoIterator<Item = f64>) -> Self {
-        self.values.extend(values);
-        self
     }
 }
 
-// Implement Items for LineSeries so it can draw itself
+// Implement Items for LineSeries (Standard Drawing)
 impl Items<f64> for LineSeries {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, _theme: &Theme) {
         if self.values.len() < 2 {
@@ -97,15 +90,10 @@ impl Items<f64> for LineSeries {
         if let Some(fill_color) = self.fill_color {
             if let Some(first) = points.first() {
                 if let Some(last) = points.last() {
-                    // FIX: Use a virtual floor to ensure fill reaches the axis bottom.
-                    // Using data min leaves a gap if the axis goes lower.
-                    // -1.0e20 is effectively negative infinity for screen coords.
-                    let min_y = -1.0e20;
-
+                    let min_y = -1.0e20; // Virtual floor
                     let mut fill_points = points.clone();
                     fill_points.push(PlotPoint::new(last.x, min_y));
                     fill_points.push(PlotPoint::new(first.x, min_y));
-
                     plot.add_shape(Polygon::new(fill_points).fill(fill_color));
                 }
             }
@@ -148,8 +136,13 @@ pub struct LineChart {
 
     // Fill Config
     fill_enabled: bool,
-    fill_alpha: f32,        // Current alpha used for drawing
-    target_fill_alpha: f32, // Saved preference for "On" state
+    current_fill_alpha: f32,
+    target_fill_alpha: f32, // User preference
+
+    // Animation State
+    animation_speed: Option<f64>,
+    last_tick: Option<Instant>,
+    opacity: f32, // 0.0 to 1.0 (Controls whole chart fade)
 }
 
 impl LineChart {
@@ -166,8 +159,12 @@ impl LineChart {
             stacked: false,
 
             fill_enabled: false,
-            fill_alpha: 0.0,
-            target_fill_alpha: 0.2, // Default nice transparency
+            current_fill_alpha: 0.0,
+            target_fill_alpha: 0.2,
+
+            animation_speed: None,
+            last_tick: None,
+            opacity: 1.0,
         }
     }
 
@@ -182,51 +179,51 @@ impl LineChart {
 
     // --- Configuration ---
 
+    pub fn animated(mut self, speed: f64) -> Self {
+        self.animation_speed = Some(speed.max(0.0).min(1.0));
+        self
+    }
+
     pub fn legend(mut self, show: bool) -> Self {
         self.show_legend = show;
         self
     }
 
-    /// Sets the target alpha for area fills.
-    /// This updates the preference. If fill is currently enabled, it updates the view too.
     pub fn fill_alpha(mut self, alpha: f32) -> Self {
         self.target_fill_alpha = alpha.max(0.0).min(1.0);
-
+        // If fill is enabled, jump/start transitioning to new alpha
         if self.fill_enabled {
-            self.fill_alpha = self.target_fill_alpha;
-            self.update_series_fill();
+            if self.animation_speed.is_none() {
+                self.current_fill_alpha = self.target_fill_alpha;
+                self.update_series_fill();
+            }
         }
         self
     }
 
-    /// Runtime setter for fill alpha preference.
     pub fn set_fill_alpha(&mut self, alpha: f32) {
         self.target_fill_alpha = alpha.max(0.0).min(1.0);
-        if self.fill_enabled {
-            self.fill_alpha = self.target_fill_alpha;
+    }
+
+    pub fn toggle_fill(&mut self) {
+        self.fill_enabled = !self.fill_enabled;
+
+        // If no animation, snap immediately
+        if self.animation_speed.is_none() {
+            self.current_fill_alpha = if self.fill_enabled {
+                self.target_fill_alpha
+            } else {
+                0.0
+            };
             self.update_series_fill();
         }
     }
 
-    /// Toggles area filling on/off.
-    pub fn toggle_fill(&mut self) {
-        self.fill_enabled = !self.fill_enabled;
-
-        self.fill_alpha = if self.fill_enabled {
-            self.target_fill_alpha
-        } else {
-            0.0
-        };
-
-        self.update_series_fill();
-    }
-
-    /// Internal helper to propagate fill settings to all series
     fn update_series_fill(&mut self) {
         for s in &mut self.series {
             let mut color = s.color;
-            color.a = self.fill_alpha;
-            s.fill_color = if self.fill_alpha > 0.0 {
+            color.a = self.current_fill_alpha;
+            s.fill_color = if self.current_fill_alpha > 0.0 {
                 Some(color)
             } else {
                 None
@@ -241,13 +238,19 @@ impl LineChart {
     }
 
     pub fn set_stacked(&mut self, stacked: bool) {
-        self.stacked = stacked;
-        self.auto_scale();
+        if self.stacked != stacked {
+            self.stacked = stacked;
+
+            // If animating, reset opacity to create a "Scene Cut" effect
+            if self.animation_speed.is_some() {
+                self.opacity = 0.0;
+            }
+            self.auto_scale();
+        }
     }
 
     pub fn toggle_stacked(&mut self) {
-        self.stacked = !self.stacked;
-        self.auto_scale();
+        self.set_stacked(!self.stacked);
     }
 
     pub fn with_axis(&mut self, id: impl Into<String>, axis: Axis<f64>) {
@@ -260,10 +263,9 @@ impl LineChart {
     }
 
     pub fn push_series(&mut self, mut series: LineSeries) {
-        // Apply global fill style to new series immediately
-        if self.fill_alpha > 0.0 {
+        if self.current_fill_alpha > 0.0 {
             let mut color = series.color;
-            color.a = self.fill_alpha;
+            color.a = self.current_fill_alpha;
             series.fill_color = Some(color);
         }
 
@@ -280,6 +282,51 @@ impl LineChart {
 
     pub fn get_last(&self) -> Option<&LineSeries> {
         self.series.last()
+    }
+
+    // --- Physics ---
+
+    pub fn tick(&mut self, now: Instant) {
+        let Some(speed_normalized) = self.animation_speed else {
+            return;
+        };
+
+        let dt = if let Some(last) = self.last_tick {
+            (now - last).as_secs_f32() as f64
+        } else {
+            0.0
+        };
+        self.last_tick = Some(now);
+
+        let physics_speed = speed_normalized * 10.0;
+        let decay = (-physics_speed * dt).exp();
+
+        // 1. Animate Opacity (Scene Transition)
+        if self.opacity < 1.0 {
+            let fade_speed = 3.0; // Speed of "fade in"
+            self.opacity += (dt * fade_speed) as f32;
+            if self.opacity > 1.0 {
+                self.opacity = 1.0;
+            }
+        }
+
+        // 2. Animate Fill Alpha
+        let target_alpha = if self.fill_enabled {
+            self.target_fill_alpha
+        } else {
+            0.0
+        };
+        let diff_alpha = target_alpha - self.current_fill_alpha;
+
+        if diff_alpha.abs() > 1e-5 {
+            // Use linear interpolation for alpha to prevent "never reaching 0" issues visually
+            // or use the exponential decay for smoothness. Linear is often cleaner for fades.
+            self.current_fill_alpha = target_alpha + diff_alpha * (decay as f32);
+            self.update_series_fill();
+        } else if self.current_fill_alpha != target_alpha {
+            self.current_fill_alpha = target_alpha;
+            self.update_series_fill();
+        }
     }
 
     // --- Data Injection ---
@@ -303,8 +350,9 @@ impl LineChart {
         }
 
         if let Some(last) = self.series.last_mut() {
-            last.values.push(value);
+            last.push(value);
         }
+
         self.auto_scale();
     }
 
@@ -410,6 +458,7 @@ impl LineChart {
         let mut y_bounds: HashMap<String, (f64, f64)> = HashMap::new();
 
         if self.stacked {
+            // Stacked Scaling: Sum of values
             let mut stacked_sums: HashMap<String, Vec<f64>> = HashMap::new();
             for s in &self.series {
                 let sums = stacked_sums.entry(s.y_key.clone()).or_insert_with(Vec::new);
@@ -425,6 +474,7 @@ impl LineChart {
                 y_bounds.insert(key, (0.0, max_h));
             }
         } else {
+            // Standard Scaling: Max of individual values
             for s in &self.series {
                 if s.values.is_empty() {
                     continue;
@@ -446,7 +496,10 @@ impl LineChart {
         for (axis_id, (min, max)) in y_bounds {
             if let Some(axis) = self.state.get_axis_mut(&axis_id) {
                 let padding = if max > min { (max - min) * 0.05 } else { 1.0 };
-                axis.scale_mut().set_domain(min, max + padding);
+
+                // If stacked, ensure min is 0
+                let final_min = if self.stacked { 0.0 } else { min };
+                axis.scale_mut().set_domain(final_min, max + padding);
             }
         }
     }
@@ -458,100 +511,103 @@ impl LineChart {
     pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
         let mut chart = Chart::new(&self.state);
 
-        if self.stacked {
-            let first_y = self
-                .series
-                .first()
-                .map(|s| s.y_key.clone())
-                .unwrap_or(Self::Y.to_string());
-            chart = chart.layer(self, Self::X.to_string(), first_y);
-        } else {
-            for series in &self.series {
-                chart = chart.layer(series, Self::X.to_string(), series.y_key.clone());
-            }
-
-            if self.show_legend {
-                chart = chart.layer(self, Self::X.to_string(), Self::Y.to_string());
-            }
-        }
+        // We use the chart itself as the renderer to handle the scene opacity
+        // and stacking logic consistently.
+        let first_y = self
+            .series
+            .first()
+            .map(|s| s.y_key.clone())
+            .unwrap_or(Self::Y.to_string());
+        chart = chart.layer(self, Self::X.to_string(), first_y);
 
         chart
     }
 }
 
-// Items Implementation for LineChart
-// Handles Stacked Drawing AND Legend Drawing
+// Unified Renderer
 impl Items<f64> for LineChart {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
-        // 1. Draw Stacked Lines (Only if mode is Stacked)
-        if self.stacked {
-            let mut baseline: Vec<f64> = Vec::new();
+        // --- Apply Scene Opacity ---
+        let alpha_mod = self.opacity;
 
-            for (idx, s) in self.series.iter().enumerate() {
-                if s.values.len() < 2 {
-                    continue;
+        // 1. Determine Chart Floor (Visually)
+        let chart_floor = if let Some(axis) = self.state.get_axis(&Self::Y.to_string()) {
+            *axis.scale().domain().0
+        } else {
+            0.0
+        };
+
+        // 2. Draw Series
+        let mut baseline: Vec<f64> = Vec::new();
+
+        for s in &self.series {
+            if s.values.len() < 2 {
+                continue;
+            }
+
+            if baseline.len() < s.values.len() {
+                baseline.resize(s.values.len(), 0.0);
+            }
+
+            // Calculate Visual Points
+            let points: Vec<PlotPoint<f64>> = s
+                .values
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| {
+                    let effective_base = if self.stacked { baseline[i] } else { 0.0 };
+                    let total = effective_base + v;
+                    PlotPoint::new(i as f64, total)
+                })
+                .collect();
+
+            // Draw Fill
+            if let Some(fill_color) = s.fill_color {
+                let mut fill_poly = points.clone();
+
+                for (i, _) in s.values.iter().enumerate().take(s.values.len()).rev() {
+                    let base_val = if self.stacked { baseline[i] } else { 0.0 };
+                    let render_base = if self.stacked { base_val } else { -1.0e20 };
+
+                    fill_poly.push(PlotPoint::new(i as f64, render_base));
                 }
 
-                if baseline.len() < s.values.len() {
-                    baseline.resize(s.values.len(), 0.0);
+                let mut color = fill_color;
+                color.a *= alpha_mod; // Fade in/out
+                plot.add_shape(Polygon::new(fill_poly).fill(color));
+            }
+
+            // Draw Stroke
+            let mut stroke_color = s.color;
+            stroke_color.a *= alpha_mod; // Fade in/out
+
+            plot.add_shape(Polyline {
+                points: points.clone(),
+                stroke: Stroke::new(stroke_color, Length::Screen(s.width)),
+                extend_start: false,
+                extend_end: false,
+                arrow_start: false,
+                arrow_end: false,
+                arrow_size: 10.0,
+            });
+
+            // Draw Markers
+            if s.show_markers {
+                for point in &points {
+                    let marker_size = Length::Screen(s.width * 2.0 + 2.0);
+                    plot.add_shape(
+                        Rectangle::new(*point, marker_size, marker_size).fill(stroke_color),
+                    );
                 }
+            }
 
-                // Calculate Top Points
-                let top_points: Vec<PlotPoint<f64>> = s
-                    .values
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &v)| {
-                        let total = baseline[i] + v;
-                        PlotPoint::new(i as f64, total)
-                    })
-                    .collect();
-
-                // Draw Fill
-                // Note: Only use fill if alpha > 0
-                if self.fill_alpha > 0.0 {
-                    let mut fill_poly = top_points.clone();
-
-                    if idx == 0 {
-                        // FIX: First series in stack fills to Virtual Floor
-                        let virtual_floor = -1.0e20;
-                        if let (Some(first), Some(last)) = (top_points.first(), top_points.last()) {
-                            fill_poly.push(PlotPoint::new(last.x, virtual_floor));
-                            fill_poly.push(PlotPoint::new(first.x, virtual_floor));
-                        }
-                    } else {
-                        // Connect back to baseline of previous series
-                        for (i, &base_val) in baseline.iter().enumerate().take(s.values.len()).rev()
-                        {
-                            fill_poly.push(PlotPoint::new(i as f64, base_val));
-                        }
-                    }
-
-                    // Generate color with alpha on the fly
-                    let mut fill_color = s.color;
-                    fill_color.a = self.fill_alpha;
-                    plot.add_shape(Polygon::new(fill_poly).fill(fill_color));
-                }
-
-                // Draw Stroke
-                plot.add_shape(Polyline {
-                    points: top_points.clone(),
-                    stroke: Stroke::new(s.color, Length::Screen(s.width)),
-                    extend_start: false,
-                    extend_end: false,
-                    arrow_start: false,
-                    arrow_end: false,
-                    arrow_size: 10.0,
-                });
-
-                // Update Baseline
-                for (i, &v) in s.values.iter().enumerate() {
-                    baseline[i] += v;
-                }
+            // Accumulate
+            for (i, &v) in s.values.iter().enumerate() {
+                baseline[i] += v;
             }
         }
 
-        // 2. Draw Legend
+        // 3. Draw Legend
         if self.show_legend {
             let palette = theme.palette();
 
@@ -569,20 +625,26 @@ impl Items<f64> for LineChart {
                 for (i, series) in self.series.iter().enumerate() {
                     let y_pos = start_y - (i as f64 * step_y);
 
+                    let mut legend_color = series.color;
+                    legend_color.a *= alpha_mod;
+
                     plot.add_shape(
                         Rectangle::new(
                             PlotPoint::new(start_x, y_pos),
                             Length::Screen(10.0),
                             Length::Screen(10.0),
                         )
-                        .fill(series.color),
+                        .fill(legend_color),
                     );
 
                     let text_offset = (x_max - x_min) * 0.02;
 
+                    let mut text_color = palette.text;
+                    text_color.a *= alpha_mod;
+
                     plot.add_shape(
                         Label::new(&series.name, PlotPoint::new(start_x + text_offset, y_pos))
-                            .fill(palette.text)
+                            .fill(text_color)
                             .size(12.0)
                             .align(Horizontal::Left, Vertical::Center),
                     );

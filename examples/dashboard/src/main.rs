@@ -98,7 +98,7 @@ impl ExampleApp {
                     .zone(gauge::Zone::Danger(100.))
                     .zone_opacity(0.7)
                     .format(|v| format!("{:.2}", v)),
-                line_chart: LineChart::new().legend(true).fill_alpha(0.25),
+                line_chart: LineChart::new().legend(true).fill_alpha(0.25).animated(0.5),
                 bar_chart_labels: vec![
                     "You".to_string(),
                     "Decide".to_string(),
@@ -117,6 +117,7 @@ impl ExampleApp {
             // Automation
             Message::AnimationTick(now) => {
                 self.gauge_chart.tick(now);
+                self.line_chart.tick(now);
                 Task::none()
             }
 
