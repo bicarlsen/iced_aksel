@@ -5,237 +5,145 @@ use iced::{
 };
 use iced_aksel::{
     Axis, Chart, Length, State,
-    axis::{self, TickLine},
+    axis::{self, GridLine, TickLine},
     plot::{Items, Plot},
 };
+use std::collections::HashMap;
 
 // Import shapes
 use iced_aksel::Stroke;
-use iced_aksel::shape::Polyline;
-// Using Rectangle for markers as a robust fallback
-use iced_aksel::shape::{Label, Rectangle};
+use iced_aksel::shape::{Label, Polygon, Polyline, Rectangle};
 
 type AxisId = &'static str;
 
-#[derive(Debug, Clone, Copy)]
+// --- Data Structure ---
+
+#[derive(Debug, Clone)]
 pub struct DataPoint {
-    pub x: f64,
-    pub y: f64,
+    pub label: String,
+    pub value: f64,
 }
 
 impl DataPoint {
-    pub fn new(x: f64, y: f64) -> Self {
-        Self { x, y }
+    pub fn new(label: &'static str, value: f64) -> Self {
+        Self {
+            label: label.into(),
+            value,
+        }
     }
 }
 
-impl From<(f64, f64)> for DataPoint {
-    fn from((x, y): (f64, f64)) -> Self {
-        Self { x, y }
-    }
-}
+// =========================================================
+//  Line Series (The Renderable Item)
+// =========================================================
 
-/// A simplified Line Chart focused on a single data series.
-pub struct LineChart {
-    state: State<AxisId, f64>,
+#[derive(Debug, Clone)]
+pub struct LineSeries {
+    pub name: String,
+    pub data: Vec<DataPoint>,
 
-    // Data
-    data: Vec<DataPoint>,
+    // Axis Binding
+    pub x_key: &'static str,
+    pub y_key: &'static str,
 
     // Appearance
-    color: Option<Color>,
-    width: f32,
-    show_markers: bool,
-
-    // Configuration options
-    fixed_x_range: Option<(f64, f64)>,
-    fixed_y_range: Option<(f64, f64)>,
+    pub color: Color,
+    pub width: f32,
+    pub show_markers: bool,
+    pub fill_color: Option<Color>,
 }
 
-impl LineChart {
-    const X_AXIS: &str = "X";
-    const Y_AXIS: &str = "Y";
-
-    /// Creates a new, empty Line Chart with default settings.
-    pub fn new() -> Self {
-        let mut state = State::new();
-
-        // Initialize axes with a default 0.0-1.0 range
-        state.set_axis(
-            Self::X_AXIS,
-            Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
-        );
-        state.set_axis(
-            Self::Y_AXIS,
-            Axis::new(Linear::new(0.0, 1.0), axis::Position::Left).with_tick_renderer(|ctx| {
-                match ctx.tick.level {
-                    0 => Some(TickLine::simple(format!("{:.2}", ctx.tick.value))),
-                    _ => None,
-                }
-            }),
-        );
-
+impl LineSeries {
+    pub fn new(
+        name: impl Into<String>,
+        color: Color,
+        x_key: &'static str,
+        y_key: &'static str,
+    ) -> Self {
         Self {
-            state,
+            name: name.into(),
             data: Vec::new(),
-
-            // defaults
-            color: None,
+            // Default binding. If "X" or "Y" don't exist in State, chart will create them.
+            x_key,
+            y_key,
+            color,
             width: 2.0,
             show_markers: false,
-
-            fixed_x_range: None,
-            fixed_y_range: None,
+            fill_color: None,
         }
     }
 
-    // =========================================================
-    //  Builder API (Configuration)
-    //  Define the LOOK and BEHAVIOR here.
-    // =========================================================
-
-    /// Sets the color of the line. Uses Theme Primary if None.
-    pub fn color(mut self, color: Color) -> Self {
-        self.color = Some(color);
+    /// Binds this series to specific axes.
+    pub fn axis(mut self, x_id: &'static str, y_id: &'static str) -> Self {
+        self.x_key = x_id;
+        self.y_key = y_id;
         self
     }
 
-    /// Sets the width of the line in pixels.
     pub fn width(mut self, width: f32) -> Self {
         self.width = width;
         self
     }
 
-    /// Toggles circular markers at each data point.
     pub fn markers(mut self, show: bool) -> Self {
         self.show_markers = show;
         self
     }
 
-    /// Sets a fixed range for the X-axis (disables auto-scaling for X).
-    pub fn x_range(mut self, min: f64, max: f64) -> Self {
-        self.fixed_x_range = Some((min, max));
-        self.update_scales();
+    pub fn fill(mut self, color: Color) -> Self {
+        self.fill_color = Some(color);
         self
     }
 
-    /// Sets a fixed range for the Y-axis (disables auto-scaling for Y).
-    pub fn y_range(mut self, min: f64, max: f64) -> Self {
-        self.fixed_y_range = Some((min, max));
-        self.update_scales();
+    // --- Data Methods ---
+
+    pub fn push(mut self, label: &'static str, value: f64) -> Self {
+        self.data.push(DataPoint::new(label, value));
         self
     }
 
-    // =========================================================
-    //  Runtime Methods (Data Management)
-    //  Call these in your `update` loop.
-    // =========================================================
-
-    /// Adds a new Y value. The X value is automatically calculated
-    /// based on the current number of points (0.0, 1.0, 2.0...).
-    pub fn push(&mut self, y: f64) {
-        let x = self.data.len() as f64;
-        self.data.push(DataPoint::new(x, y));
-        self.update_scales();
-    }
-
-    /// Adds a specific (x, y) data point.
-    pub fn push_point(&mut self, x: f64, y: f64) {
-        self.data.push(DataPoint::new(x, y));
-        self.update_scales();
-    }
-
-    /// Replaces the dataset entirely.
-    pub fn set_data(&mut self, data: Vec<impl Into<DataPoint>>) {
-        self.data = data.into_iter().map(|d| d.into()).collect();
-        self.update_scales();
-    }
-
-    /// Clears all data points.
-    pub fn clear(&mut self) {
-        self.data.clear();
-        self.update_scales();
-    }
-
-    // =========================================================
-    //  Internal Logic
-    // =========================================================
-
-    fn update_scales(&mut self) {
-        // 1. Determine X Range
-        let (min_x, max_x) = if let Some(range) = self.fixed_x_range {
-            range
-        } else {
-            self.calculate_auto_range(|p| p.x)
-        };
-
-        // 2. Determine Y Range
-        let (min_y, max_y) = if let Some(range) = self.fixed_y_range {
-            range
-        } else {
-            self.calculate_auto_range(|p| p.y)
-        };
-
-        // 3. Apply to Axes
-        self.state
-            .get_axis_mut(&Self::X_AXIS)
-            .unwrap()
-            .scale_mut()
-            .set_domain(min_x, max_x);
-
-        self.state
-            .get_axis_mut(&Self::Y_AXIS)
-            .unwrap()
-            .scale_mut()
-            .set_domain(min_y, max_y);
-    }
-
-    fn calculate_auto_range(&self, selector: impl Fn(&DataPoint) -> f64) -> (f64, f64) {
-        if self.data.is_empty() {
-            return (0.0, 1.0);
-        }
-
-        let mut min = f64::MAX;
-        let mut max = f64::MIN;
-
-        for p in &self.data {
-            let val = selector(p);
-            min = min.min(val);
-            max = max.max(val);
-        }
-
-        // Add 5% padding so lines don't hug the edges
-        let padding = (max - min) * 0.05;
-        let padding = if padding == 0.0 { 1.0 } else { padding };
-
-        (min - padding, max + padding)
-    }
-
-    // --- View ---
-
-    pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
-        Chart::new(&self.state).layer(self, Self::X_AXIS, Self::Y_AXIS)
+    pub fn push_value(&mut self, value: f64) {
+        self.data.push(DataPoint::new("", value));
     }
 }
 
-// --- Drawing Logic ---
-
-impl Items<f64> for LineChart {
-    fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
+impl Items<f64> for LineSeries {
+    fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, _theme: &Theme) {
         if self.data.len() < 2 {
             return;
         }
 
-        let palette = theme.palette();
-        let line_color = self.color.unwrap_or(palette.primary);
+        // 1. Prepare Points (X is Index)
+        let points: Vec<PlotPoint<f64>> = self
+            .data
+            .iter()
+            .enumerate()
+            .map(|(i, p)| PlotPoint::new(i as f64, p.value))
+            .collect();
 
-        let points: Vec<PlotPoint<f64>> =
-            self.data.iter().map(|p| PlotPoint::new(p.x, p.y)).collect();
+        // 2. Draw Fill
+        if let Some(fill_color) = self.fill_color {
+            if let Some(first) = points.first() {
+                if let Some(last) = points.last() {
+                    let min_y = self
+                        .data
+                        .iter()
+                        .map(|p| p.value)
+                        .fold(f64::INFINITY, f64::min);
 
-        // Draw Line
+                    let mut fill_points = points.clone();
+                    fill_points.push(PlotPoint::new(last.x, min_y));
+                    fill_points.push(PlotPoint::new(first.x, min_y));
+
+                    plot.add_shape(Polygon::new(fill_points).fill(fill_color));
+                }
+            }
+        }
+
+        // 3. Draw Stroke
         plot.add_shape(Polyline {
             points: points.clone(),
-            stroke: Stroke::new(line_color, Length::Screen(self.width)),
+            stroke: Stroke::new(self.color, Length::Screen(self.width)),
             extend_start: false,
             extend_end: false,
             arrow_start: false,
@@ -243,12 +151,169 @@ impl Items<f64> for LineChart {
             arrow_size: 10.0,
         });
 
-        // Draw Markers
+        // 4. Draw Markers
         if self.show_markers {
             for point in points {
                 let marker_size = Length::Screen(self.width * 2.5);
-                plot.add_shape(Rectangle::new(point, marker_size, marker_size).fill(line_color));
+                plot.add_shape(Rectangle::new(point, marker_size, marker_size).fill(self.color));
             }
         }
+    }
+}
+
+// =========================================================
+//  Line Chart (The Coordinator)
+// =========================================================
+
+pub struct LineChart {
+    state: State<AxisId, f64>,
+    series: Vec<LineSeries>,
+}
+
+impl LineChart {
+    pub const X: &'static str = "X";
+    pub const Y: &'static str = "Y";
+
+    pub fn new() -> Self {
+        Self {
+            state: State::new(),
+            series: Vec::new(),
+        }
+    }
+
+    /// Pre-registers standard axes.
+    pub fn with_default_axes(mut self) -> Self {
+        self.with_axis(
+            Self::X,
+            Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
+        );
+        self.with_axis(
+            Self::Y,
+            Axis::new(Linear::new(0.0, 1.0), axis::Position::Left),
+        );
+        self
+    }
+
+    // =========================================================
+    //  Configuration
+    // =========================================================
+
+    /// Explicitly configure an axis in the State.
+    /// This is how you "create" an axis manually.
+    pub fn with_axis(&mut self, id: &'static str, axis: Axis<f64>) {
+        self.state.set_axis(id, axis);
+        self.auto_scale();
+    }
+
+    /// Adds a series. Ensures required axes exist in State.
+    pub fn push_series(&mut self, series: LineSeries) {
+        self.ensure_axes_exist(&series);
+        self.series.push(series);
+        self.auto_scale();
+    }
+
+    pub fn clear_series(&mut self) {
+        self.series.clear();
+        self.auto_scale();
+    }
+
+    // =========================================================
+    //  Data Injection
+    // =========================================================
+
+    pub fn series_count(&self) -> usize {
+        self.series.len()
+    }
+
+    pub fn push_value_last_series(&mut self, value: f64) {
+        if let Some(last_series) = self.series.last_mut() {
+            last_series.push_value(value);
+        }
+    }
+
+    // =========================================================
+    //  Internal Logic
+    // =========================================================
+
+    /// Checks State for axes. If missing, creates defaults.
+    fn ensure_axes_exist(&mut self, series: &LineSeries) {
+        // Source of Truth: self.state.get_axis()
+
+        if self.state.get_axis(&series.x_key).is_none() {
+            self.state.set_axis(
+                series.x_key.clone(),
+                Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
+            );
+        }
+
+        if self.state.get_axis(&series.y_key).is_none() {
+            self.state.set_axis(
+                series.y_key.clone(),
+                Axis::new(Linear::new(0.0, 100.0), axis::Position::Left),
+            );
+        }
+
+        // PRint axes
+        println!("{:?}", self.state.axes());
+    }
+
+    fn auto_scale(&mut self) {
+        if self.series.is_empty() {
+            return;
+        }
+
+        let mut bounds: HashMap<&'static str, (f64, f64)> = HashMap::new();
+
+        for s in &self.series {
+            if s.data.is_empty() {
+                continue;
+            }
+
+            let x_count = s.data.len() as f64;
+            let s_min_x = 0.0;
+            let s_max_x = (x_count - 1.0).max(0.0);
+
+            let mut s_min_y = f64::MAX;
+            let mut s_max_y = f64::MIN;
+            for p in &s.data {
+                s_min_y = s_min_y.min(p.value);
+                s_max_y = s_max_y.max(p.value);
+            }
+
+            // Global Update
+            let x_entry = bounds.entry(s.x_key.into()).or_insert((f64::MAX, f64::MIN));
+            x_entry.0 = x_entry.0.min(s_min_x);
+            x_entry.1 = x_entry.1.max(s_max_x);
+
+            let y_entry = bounds.entry(s.y_key.into()).or_insert((f64::MAX, f64::MIN));
+            y_entry.0 = y_entry.0.min(s_min_y);
+            y_entry.1 = y_entry.1.max(s_max_y);
+        }
+
+        // Apply to Axes using State
+        for (axis_id, (min, max)) in bounds {
+            if let Some(axis) = self.state.get_axis_mut(&axis_id) {
+                // Heuristic: Padding for Y, tight for X
+                let padding = if max > min { (max - min) * 0.05 } else { 1.0 };
+                axis.scale_mut().set_domain(min, max + padding);
+            }
+        }
+    }
+
+    // =========================================================
+    //  View
+    // =========================================================
+
+    pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
+        let mut chart = Chart::new(&self.state);
+
+        println!("{:?}", self.series);
+        println!("{:?}", self.state);
+
+        for series in &self.series {
+            chart = chart.layer(series, series.x_key, series.y_key);
+        }
+
+        chart
     }
 }

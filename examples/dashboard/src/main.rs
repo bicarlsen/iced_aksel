@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use aksel::scale::Linear;
 use iced::{
     Color, Element, Subscription, Task, Theme,
     widget::{button, column, pick_list, row, text_input},
@@ -12,9 +13,10 @@ mod line;
 
 use bar::BarChart;
 use gauge::Gauge;
+use iced_aksel::{Axis, axis::Position};
 use line::LineChart;
 
-use crate::line::DataPoint;
+use crate::line::{DataPoint, LineSeries};
 
 fn main() -> iced::Result {
     ExampleApp::run()
@@ -44,13 +46,15 @@ enum Message {
     AddData,
     ToggleOrientation,
 
+    // Linechart
+    AddSeries,
+
     // Gauge
     UpdateGaugeValue(f64),
 }
 
 impl ExampleApp {
     fn init() -> (Self, Task<Message>) {
-        let line_chart = LineChart::new();
         (
             Self {
                 theme: iced::Theme::Dark,
@@ -89,7 +93,11 @@ impl ExampleApp {
                 self.bar_chart
                     .add_data((format!["{}", new_label], new_value));
 
-                self.line_chart.push(new_value);
+                self.line_chart.push_value_last_series(new_value);
+            }
+            Message::AddSeries => {
+                let line_series = LineSeries::new("Line series", Color::WHITE, "X1", "Y1");
+                self.line_chart.push_series(line_series);
             }
             Message::ToggleOrientation => {
                 self.bar_chart.toggle_orientation();
@@ -151,16 +159,16 @@ impl ExampleApp {
     }
 
     fn linechart_view(&self) -> Element<'_, Message> {
-        let new_data_confirm_btn = button("+")
+        let new_data_confirm_btn = button("Data +")
             .on_press(Message::AddData)
             .width(iced::Length::Fill);
-        // let toggle_orientation_btn = button("Toggle orientation")
-        //     .on_press(Message::ToggleOrientation)
-        //     .width(iced::Length::Fill);
+        let new_series_confirm_btn = button("Lineseries +")
+            .on_press(Message::AddSeries)
+            .width(iced::Length::Fill);
 
         let line_chart = self.line_chart.chart();
 
-        let panel = row![new_data_confirm_btn].spacing(16.);
+        let panel = row![new_data_confirm_btn, new_series_confirm_btn].spacing(16.);
 
         column![line_chart, panel].into()
     }

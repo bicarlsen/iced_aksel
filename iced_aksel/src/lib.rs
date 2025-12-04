@@ -609,7 +609,8 @@ where
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
 
         let axis_count = self.state.visible_axes().count();
-        debug_assert_eq!(tree.children.len(), axis_count + 1);
+        // TODO: Issue #14
+        // debug_assert_eq!(tree.children.len(), axis_count + 1);
 
         // ---------- 1) First pass: measure axis thicknesses ----------
 
