@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{fmt::Display, time::Instant};
 
 use aksel::scale::Linear;
 use iced::{
@@ -16,16 +16,36 @@ use bar::BarChart;
 use gauge::Gauge;
 use iced_aksel::{Axis, axis::Position};
 use line::LineChart;
+use rand::Rng;
 
-use crate::{combined::CombinedChart, line::LineSeries};
+use crate::combined::{BarSeries, LineSeries, Series};
 
 fn main() -> iced::Result {
     ExampleApp::run()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SeriesType {
+    Line,
+    Bar,
+}
+
+impl Display for SeriesType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SeriesType::Line => write!(f, "Line"),
+            SeriesType::Bar => write!(f, "Bar"),
+        }
+    }
+}
+
 // --- Application State ---
 
 struct ExampleApp {
+    // Widgets
+    series_type: SeriesType,
+    input_value: f64,
+
     // Settings
     theme: iced::Theme,
 
@@ -33,7 +53,9 @@ struct ExampleApp {
     bar_chart: BarChart,
     gauge_chart: Gauge,
     line_chart: LineChart,
-    combined_chart: CombinedChart,
+
+    // Customizable chart
+    combined_state: combined::State,
 }
 
 #[derive(Debug, Clone)]
@@ -45,20 +67,31 @@ enum Message {
     SwitchTheme(iced::Theme),
 
     // Barchart
-    AddData,
+    AddBarData,
     ToggleOrientation,
 
     // Linechart
-    AddSeries,
+    // AddLineSeries,
 
     // Gauge
     UpdateGaugeValue(f64),
+
+    // Customizablechart
+    SyncChart,
+    AddLineSeries,
+    AddBarSeries,
+    AddCustomData,
+    ChartTypeChanged(SeriesType),
+    InputValueChanged(String),
 }
 
 impl ExampleApp {
     fn init() -> (Self, Task<Message>) {
         (
             Self {
+                series_type: SeriesType::Bar,
+                input_value: 0.0,
+
                 theme: iced::Theme::Dark,
 
                 bar_chart: BarChart::new(bar::Orientation::Vertical),
@@ -72,7 +105,7 @@ impl ExampleApp {
                     .zone_opacity(0.7)
                     .format(|v| format!("{:.2}", v)),
                 line_chart: LineChart::new(),
-                combined_chart: CombinedChart::new(),
+                combined_state: combined::State::new(),
             },
             Task::none(),
         )
@@ -82,32 +115,67 @@ impl ExampleApp {
         match message {
             Message::AnimationTick(now) => {
                 self.gauge_chart.tick(now);
+                Task::none()
             }
             Message::UpdateGaugeValue(value) => {
                 let new_value = self.gauge_chart.get_value() + value;
                 self.gauge_chart.set_value(new_value);
+                Task::none()
             }
             Message::SwitchTheme(theme) => {
                 self.theme = theme;
+                Task::none()
             }
-            Message::AddData => {
+            Message::AddBarData => {
                 let new_label = self.bar_chart.get_data().len();
                 let new_value = rand::random_range(5.0..100.0);
                 self.bar_chart
                     .add_data((format!["{}", new_label], new_value));
 
                 self.line_chart.push_value_last_series(new_value);
-                self.combined_chart.push_value(new_value);
+                Task::none()
             }
-            Message::AddSeries => {
-                let series = LineSeries::new("Line series", generate_pastel_color());
-                self.line_chart.push_series(series);
-            }
+            // Message::AddLineSeries => {
+            // let series = LineSeries::new("Line series", generate_pastel_color());
+            // self.line_chart.push_series(series);
+            // Task::none()
+            // }
             Message::ToggleOrientation => {
                 self.bar_chart.toggle_orientation();
+                Task::none()
+            }
+            Message::SyncChart => {
+                // self.combined_state
+                //     .sync(&self.series.data(), &vec!["1".to_string(), "2".to_string()]);
+                Task::none()
+            }
+            Message::AddLineSeries => {
+                let series = LineSeries::new("Line series", vec![], generate_pastel_color());
+                self.combined_state
+                    .add_series(Series::Line(series), "Y".to_string());
+                Task::done(Message::SyncChart)
+            }
+            Message::AddBarSeries => {
+                let series = BarSeries::new("Bar series", vec![], generate_pastel_color());
+                self.combined_state
+                    .add_series(Series::Bar(series), "Y".to_string());
+                Task::done(Message::SyncChart)
+            }
+            Message::AddCustomData => {
+                let rnd_num = rand::rng().random_range(0.0..=10.0);
+
+                self.combined_state.add_data_to_last_series(rnd_num);
+                Task::done(Message::SyncChart)
+            }
+            Message::ChartTypeChanged(series_type) => {
+                self.series_type = series_type;
+                Task::none()
+            }
+            Message::InputValueChanged(value) => {
+                self.input_value = value.parse().unwrap_or(0.0);
+                Task::none()
             }
         }
-        Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -117,79 +185,15 @@ impl ExampleApp {
         })
         .width(iced::Length::Fill);
 
-        let bar_chart_box1 = column![self.barchart_view()].width(iced::Length::Fill);
-        let bar_chart_box2 = column![self.gaugechart_view()].width(iced::Length::Fill);
+        let chart = combined::CombinedChart::new(&self.combined_state).chart();
 
-        let row1 = row![bar_chart_box1, bar_chart_box2]
-            .height(iced::Length::Fixed(360.))
-            .spacing(16.)
-            .padding(16.);
+        let btn1 = button("Add LineSeries").on_press(Message::AddLineSeries);
+        let btn2 = button("Add BarSeries").on_press(Message::AddBarSeries);
+        let btn3 = button("Add Datapoint").on_press(Message::AddCustomData);
 
-        let row2 = row![self.linechart_view()]
-            .height(iced::Length::Fixed(360.))
-            .spacing(16.)
-            .padding(16.);
+        let panel1 = row![btn1, btn2];
 
-        column![theme_toggle, row1, row2].into()
-    }
-
-    fn barchart_view(&self) -> Element<'_, Message> {
-        let new_data_confirm_btn = button("+")
-            .on_press(Message::AddData)
-            .width(iced::Length::Fill);
-        let toggle_orientation_btn = button("Toggle orientation")
-            .on_press(Message::ToggleOrientation)
-            .width(iced::Length::Fill);
-        let bar_chart = self.bar_chart.chart();
-
-        let panel = row![new_data_confirm_btn, toggle_orientation_btn].spacing(16.);
-
-        column![bar_chart, panel].into()
-    }
-
-    fn gaugechart_view(&self) -> Element<'_, Message> {
-        let add_gauge_num = button("+")
-            .on_press(Message::UpdateGaugeValue(5.))
-            .width(iced::Length::Fill);
-        let sub_gauge_num = button("-")
-            .on_press(Message::UpdateGaugeValue(-5.))
-            .width(iced::Length::Fill);
-
-        let gauge_chart = self.gauge_chart.chart();
-
-        let panel = row![add_gauge_num, sub_gauge_num].spacing(16.);
-
-        column![gauge_chart, panel].into()
-    }
-
-    fn linechart_view(&self) -> Element<'_, Message> {
-        let new_data_confirm_btn = button("Data +")
-            .on_press(Message::AddData)
-            .width(iced::Length::Fill);
-        let new_series_confirm_btn = button("Lineseries +")
-            .on_press(Message::AddSeries)
-            .width(iced::Length::Fill);
-
-        let line_chart = self.line_chart.chart();
-
-        let panel = row![new_data_confirm_btn, new_series_confirm_btn].spacing(16.);
-
-        column![line_chart, panel].into()
-    }
-
-    fn combinedchart_view(&self) -> Element<'_, Message> {
-        // let new_data_confirm_btn = button("Data +")
-        //     .on_press(Message::AddData)
-        //     .width(iced::Length::Fill);
-        // let new_series_confirm_btn = button("Lineseries +")
-        //     .on_press(Message::AddSeries)
-        //     .width(iced::Length::Fill);
-
-        let combined_chart = self.combined_chart.chart();
-
-        // let panel = row![new_data_confirm_btn, new_series_confirm_btn].spacing(16.);
-
-        column![combined_chart].into()
+        column![theme_toggle, panel1, btn3, chart].into()
     }
 
     fn theme(&self) -> Theme {

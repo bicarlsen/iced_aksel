@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{collections::HashSet, hash::Hash};
 
 use aksel::{Float, PlotPoint, PlotRect};
 use derivative::Derivative;
@@ -40,6 +40,14 @@ where
 
     pub const fn axes(&self) -> &IndexMap<AxisId, Axis<Domain>> {
         &self.axes
+    }
+
+    pub const fn axes_mut(&mut self) -> &mut IndexMap<AxisId, Axis<Domain>> {
+        &mut self.axes
+    }
+
+    pub fn retain_axes(&mut self, active_axes: &[AxisId]) {
+        self.axes.retain(|k, _| active_axes.contains(k));
     }
 
     pub fn visible_axes(&self) -> impl Iterator<Item = (&AxisId, &Axis<Domain>)> {

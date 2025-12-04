@@ -4,460 +4,251 @@ use iced::{
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
-    Axis, Chart, Length, State,
-    axis::{self, GridLine, TickLine},
+    Axis, Chart, Length, State as ChartState,
+    axis::{self, GridLine, Orientation, TickLine},
     plot::{Items, Plot},
 };
-use std::collections::HashMap;
+use rand::Rng;
+use std::collections::{HashMap, HashSet};
 
 // Import shapes
 use iced_aksel::Stroke;
 use iced_aksel::shape::{Label, Polygon, Polyline, Rectangle};
 
+mod series;
+
+pub use crate::combined::series::Series;
+pub use crate::combined::series::bar::BarSeries;
+pub use crate::combined::series::line::LineSeries;
+
 type AxisId = String;
 
 // =========================================================
-//  Shared Data Structure
+//  State (The Orchestrator)
 // =========================================================
 
-#[derive(Debug, Clone)]
-pub struct DataPoint {
-    pub label: String,
-    pub value: f64,
+pub struct State {
+    // Manages the axis for `Chart`
+    chart_state: ChartState<AxisId, f64>,
+
+    // Manages the data for the charting.
+    data: Vec<(AxisId, Series)>,
 }
 
-impl DataPoint {
-    pub fn new(label: impl Into<String>, value: f64) -> Self {
-        Self {
-            label: label.into(),
-            value,
-        }
-    }
-}
-
-// =========================================================
-//  Line Series Implementation
-// =========================================================
-
-#[derive(Debug, Clone)]
-pub struct LineSeries {
-    pub name: String,
-    pub values: Vec<f64>,
-    pub y_key: String,
-
-    // Appearance
-    pub color: Color,
-    pub width: f32,
-    pub show_markers: bool,
-    pub fill_color: Option<Color>,
-}
-
-impl LineSeries {
-    pub fn new(name: impl Into<String>, color: Color) -> Self {
-        Self {
-            name: name.into(),
-            values: Vec::new(),
-            y_key: "Y".to_string(),
-            color,
-            width: 2.0,
-            show_markers: false,
-            fill_color: None,
-        }
-    }
-
-    pub fn axis(mut self, y_id: impl Into<String>) -> Self {
-        self.y_key = y_id.into();
-        self
-    }
-
-    pub fn width(mut self, width: f32) -> Self {
-        self.width = width;
-        self
-    }
-
-    pub fn markers(mut self, show: bool) -> Self {
-        self.show_markers = show;
-        self
-    }
-
-    pub fn fill(mut self, color: Color) -> Self {
-        self.fill_color = Some(color);
-        self
-    }
-
-    pub fn push(mut self, value: f64) -> Self {
-        self.values.push(value);
-        self
-    }
-
-    pub fn extend(mut self, values: impl IntoIterator<Item = f64>) -> Self {
-        self.values.extend(values);
-        self
-    }
-}
-
-impl Items<f64> for LineSeries {
-    fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, _theme: &Theme) {
-        if self.values.len() < 2 {
-            return;
-        }
-
-        let points: Vec<PlotPoint<f64>> = self
-            .values
-            .iter()
-            .enumerate()
-            .map(|(i, &v)| PlotPoint::new(i as f64, v))
-            .collect();
-
-        // Draw Fill
-        if let Some(fill_color) = self.fill_color {
-            if let Some(first) = points.first() {
-                if let Some(last) = points.last() {
-                    let min_y = self.values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-                    let mut fill_points = points.clone();
-                    fill_points.push(PlotPoint::new(last.x, min_y));
-                    fill_points.push(PlotPoint::new(first.x, min_y));
-                    plot.add_shape(Polygon::new(fill_points).fill(fill_color));
-                }
-            }
-        }
-
-        // Draw Stroke
-        plot.add_shape(Polyline {
-            points: points.clone(),
-            stroke: Stroke::new(self.color, Length::Screen(self.width)),
-            extend_start: false,
-            extend_end: false,
-            arrow_start: false,
-            arrow_end: false,
-            arrow_size: 10.0,
-        });
-
-        // Draw Markers
-        if self.show_markers {
-            for point in points {
-                let marker_size = Length::Screen(self.width * 2.5);
-                plot.add_shape(Rectangle::new(point, marker_size, marker_size).fill(self.color));
-            }
-        }
-    }
-}
-
-// =========================================================
-//  Bar Series Implementation
-// =========================================================
-
-#[derive(Debug, Clone)]
-pub struct BarSeries {
-    pub name: String,
-    pub values: Vec<f64>,
-    pub y_key: String,
-
-    // Appearance
-    pub color: Color,
-    pub bar_width: f64, // 0.0 - 1.0 relative to index step
-}
-
-impl BarSeries {
-    pub fn new(name: impl Into<String>, color: Color) -> Self {
-        Self {
-            name: name.into(),
-            values: Vec::new(),
-            y_key: "Y".to_string(),
-            color,
-            bar_width: 0.6, // Default to 60% width
-        }
-    }
-
-    pub fn axis(mut self, y_id: impl Into<String>) -> Self {
-        self.y_key = y_id.into();
-        self
-    }
-
-    pub fn bar_width(mut self, width: f64) -> Self {
-        self.bar_width = width.max(0.1).min(1.0);
-        self
-    }
-
-    pub fn push(mut self, value: f64) -> Self {
-        self.values.push(value);
-        self
-    }
-
-    pub fn extend(mut self, values: impl IntoIterator<Item = f64>) -> Self {
-        self.values.extend(values);
-        self
-    }
-}
-
-impl Items<f64> for BarSeries {
-    fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, _theme: &Theme) {
-        if self.values.is_empty() {
-            return;
-        }
-
-        for (i, &val) in self.values.iter().enumerate() {
-            let center = PlotPoint::new(i as f64, val / 2.0);
-
-            plot.add_shape(
-                Rectangle::new(
-                    center,
-                    Length::Plot(self.bar_width),
-                    Length::Plot(val.abs()),
-                )
-                .fill(self.color),
-            );
-        }
-    }
-}
-
-// =========================================================
-//  Polymorphic Series Wrapper
-// =========================================================
-
-#[derive(Debug, Clone)]
-pub enum Series {
-    Line(LineSeries),
-    Bar(BarSeries),
-}
-
-impl Series {
-    pub fn y_key(&self) -> &str {
-        match self {
-            Series::Line(s) => &s.y_key,
-            Series::Bar(s) => &s.y_key,
-        }
-    }
-
-    pub fn values(&self) -> &[f64] {
-        match self {
-            Series::Line(s) => &s.values,
-            Series::Bar(s) => &s.values,
-        }
-    }
-
-    pub fn values_mut(&mut self) -> &mut Vec<f64> {
-        match self {
-            Series::Line(s) => &mut s.values,
-            Series::Bar(s) => &mut s.values,
-        }
-    }
-}
-
-impl Items<f64> for Series {
-    fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
-        match self {
-            Series::Line(s) => s.draw(plot, theme),
-            Series::Bar(s) => s.draw(plot, theme),
-        }
-    }
-}
-
-// =========================================================
-//  Combined Chart (The Coordinator)
-// =========================================================
-
-pub struct CombinedChart {
-    state: State<AxisId, f64>,
-    series: Vec<Series>,
-    labels: Vec<String>,
-    defined_axes: Vec<String>,
-}
-
-impl CombinedChart {
-    pub const X: &'static str = "X";
-    pub const Y: &'static str = "Y";
+impl State {
+    pub const X_AXIS_ID: &'static str = "X";
+    pub const Y_AXIS_ID: &'static str = "Y";
 
     pub fn new() -> Self {
+        let mut chart_state = ChartState::new();
+
+        // Initialize default axes
+        chart_state.set_axis(
+            Self::X_AXIS_ID.to_string(),
+            Axis::new(Linear::new(0.0, 5.0), axis::Position::Bottom),
+        );
+        chart_state.set_axis(
+            Self::Y_AXIS_ID.to_string(),
+            Axis::new(Linear::new(0.0, 100.0), axis::Position::Left),
+        );
+
         Self {
-            state: State::new(),
-            series: Vec::new(),
-            labels: Vec::new(),
-            defined_axes: Vec::new(),
+            chart_state,
+            data: vec![],
         }
     }
 
-    pub fn with_default_axes(mut self) -> Self {
-        self.with_axis(
-            Self::X,
-            Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
+    pub fn get_data(&self) -> &[(AxisId, Series)] {
+        &self.data
+    }
+
+    pub fn get_data_last(&self) -> Option<&Series> {
+        self.data.last().map(|(_, series)| series)
+    }
+
+    // --- Series Management Pipeline ---
+
+    pub fn add_series(&mut self, series: Series, y_axis_id: String) {
+        self.ensure_axis_capacity(&series, &y_axis_id);
+        self.data.push((y_axis_id, series));
+        self.update_bounds();
+    }
+
+    pub fn add_data_to_random_series(&mut self, value: f64) {
+        if self.data.is_empty() {
+            return;
+        }
+
+        let idx = rand::rng().random_range(0..self.data.len());
+        self.data[idx].1.push_value(value);
+
+        self.update_bounds();
+    }
+
+    pub fn add_data_to_last_series(&mut self, value: f64) {
+        if self.data.is_empty() {
+            return;
+        }
+
+        let idx = self.data.len() - 1;
+        self.data[idx].1.push_value(value);
+
+        self.update_bounds();
+    }
+
+    pub fn add_data_to_series(&mut self, idx: usize, value: f64) {
+        if let Some((_, series)) = self.data.get_mut(idx) {
+            series.push_value(value);
+            self.update_bounds();
+        }
+    }
+
+    // --- Synchronization Pipeline (Call in Update) ---
+
+    pub fn sync(&mut self, labels: &[String]) {
+        // 1. Cleanup
+        self.prune_unused_axes();
+
+        // 2. Update Scales
+        self.update_bounds();
+
+        // 3. Update Labels (Tick Renderer)
+        self.update_x_axis_labels(labels);
+    }
+
+    // --- Internal Logic Helpers ---
+
+    /// Checks if a Y-axis exists for the new series. If not, creates it with a safe initial range.
+    fn ensure_axis_capacity(&mut self, series: &Series, y_axis_id: &str) {
+        if self.chart_state.get_axis(&y_axis_id.to_string()).is_some() {
+            return;
+        }
+
+        let max_y = if series.values().is_empty() {
+            100.0
+        } else {
+            series.highest_value() * 1.1 // 10% margin
+        };
+
+        self.chart_state.set_axis(
+            y_axis_id.to_string(),
+            Axis::new(Linear::new(0.0, max_y), axis::Position::Left),
         );
-        self.with_axis(
-            Self::Y,
-            Axis::new(Linear::new(0.0, 1.0), axis::Position::Left),
-        );
-        self
     }
 
-    // --- Configuration ---
+    /// Removes axes from the chart state that are no longer referenced by any series.
+    fn prune_unused_axes(&mut self) {
+        let mut active_axes = Vec::new();
+        active_axes.push(Self::X_AXIS_ID.to_string()); // Keep X
 
-    pub fn with_axis(&mut self, id: impl Into<String>, axis: Axis<f64>) {
-        let key = id.into();
-        self.state.set_axis(key.clone(), axis);
-        if !self.defined_axes.contains(&key) {
-            self.defined_axes.push(key);
-        }
-        self.auto_scale();
-    }
-
-    pub fn push_series(&mut self, series: Series) {
-        self.ensure_axes_exist(&series);
-        self.series.push(series);
-        self.auto_scale();
-    }
-
-    // --- Data Injection ---
-
-    pub fn push(&mut self, label: impl Into<String>, value: f64) {
-        let label = label.into();
-
-        if self.series.is_empty() {
-            let default = Series::Line(LineSeries::new("Series 1", Color::from_rgb(0.2, 0.4, 0.8)));
-            self.ensure_axes_exist(&default);
-            self.series.push(default);
+        for (axis_id, _) in &self.data {
+            active_axes.push(axis_id.clone());
         }
 
-        // Logic split to satisfy borrow checker:
-        // 1. Determine if we need to update labels based on the last series' current length
-        let mut update_labels = false;
-        if let Some(last) = self.series.last() {
-            if last.values().len() >= self.labels.len() {
-                update_labels = true;
+        self.chart_state.retain_axes(&active_axes);
+    }
+
+    /// Triggers a recalculation of X and Y bounds based on current data.
+    fn update_bounds(&mut self) {
+        self.resize_x_axis();
+        self.resize_y_axes();
+    }
+
+    fn resize_x_axis(&mut self) {
+        let max_len = self
+            .data
+            .iter()
+            .map(|(_, s)| s.values().len())
+            .max()
+            .unwrap_or(0);
+
+        let has_bars = self.data.iter().any(|(_, s)| matches!(s, Series::Bar(_)));
+
+        let (min, max) = if has_bars {
+            // Bars need padding on sides (-0.6 to len+0.6)
+            (-0.6, (max_len as f64 - 1.0).max(0.0) + 0.6)
+        } else {
+            // Lines fit tightly (0.0 to len-1.0)
+            (0.0, (max_len as f64 - 1.0).max(0.0))
+        };
+
+        if let Some(axis) = self.chart_state.get_axis_mut(&Self::X_AXIS_ID.to_string()) {
+            axis.scale_mut().set_domain(min, max);
+        }
+    }
+
+    fn resize_y_axes(&mut self) {
+        // Calculate max Y for every distinct axis
+        let mut y_max_map: HashMap<String, f64> = HashMap::new();
+
+        for (axis_id, series) in &self.data {
+            let max = series.highest_value();
+            let entry = y_max_map.entry(axis_id.clone()).or_insert(f64::MIN);
+            *entry = entry.max(max);
+        }
+
+        // Apply bounds
+        for (axis_id, max_val) in y_max_map {
+            if let Some(axis) = self.chart_state.get_axis_mut(&axis_id) {
+                let limit = if max_val == 0.0 { 10.0 } else { max_val * 1.1 };
+                axis.scale_mut().set_domain(0.0, limit);
             }
         }
-
-        // 2. Perform label update if needed
-        if update_labels {
-            self.labels.push(label);
-            self.update_x_axis_labels();
-        }
-
-        // 3. Perform value push
-        if let Some(last) = self.series.last_mut() {
-            last.values_mut().push(value);
-        }
-
-        self.auto_scale();
     }
 
-    pub fn push_value(&mut self, value: f64) {
-        self.push("", value);
-    }
+    fn update_x_axis_labels(&mut self, labels: &[String]) {
+        let x_id = Self::X_AXIS_ID.to_string();
+        let labels = labels.to_vec();
 
-    pub fn clear(&mut self) {
-        if let Some(first) = self.series.get_mut(0) {
-            first.values_mut().clear();
-        }
-        self.labels.clear();
-        self.auto_scale();
-    }
-
-    // --- Logic ---
-
-    fn ensure_axes_exist(&mut self, series: &Series) {
-        if !self.defined_axes.contains(&Self::X.to_string()) {
-            self.state.set_axis(
-                Self::X.to_string(),
-                Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
-            );
-            self.defined_axes.push(Self::X.to_string());
-            self.update_x_axis_labels();
-        }
-
-        let y_key = series.y_key();
-        if !self.defined_axes.contains(&y_key.to_string()) {
-            self.state.set_axis(
-                y_key.to_string(),
-                Axis::new(Linear::new(0.0, 1.0), axis::Position::Left),
-            );
-            self.defined_axes.push(y_key.to_string());
-        }
-    }
-
-    fn update_x_axis_labels(&mut self) {
-        let labels = self.labels.clone();
-        let x_key = Self::X.to_string();
-
-        let (min, max) = if let Some(a) = self.state.get_axis(&x_key) {
-            let (min, max) = a.scale().domain();
-            (*min, *max)
+        // Preserve current scale
+        let (min, max) = if let Some(a) = self.chart_state.get_axis(&x_id) {
+            let d = a.scale().domain();
+            (*d.0, *d.1)
         } else {
             (0.0, 1.0)
         };
 
-        // Use with_tick_renderer (Builder) instead of set_tick_renderer (Setter)
-        // to correctly return the Axis struct.
         let axis = Axis::new(Linear::new(min, max), axis::Position::Bottom).with_tick_renderer(
             move |ctx| {
-                let idx = ctx.tick.value.round();
-                if (ctx.tick.value - idx).abs() > 0.001 {
+                let val = ctx.tick.value;
+
+                // Only show labels for integer indices
+                if (val.round() - val).abs() > 0.001 {
                     return None;
                 }
-                let idx = idx as usize;
-                if idx < labels.len() {
-                    Some(TickLine::simple(labels[idx].clone()))
-                } else {
-                    None
+
+                let idx = val as isize;
+                if idx < 0 || idx as usize >= labels.len() {
+                    return None;
                 }
+
+                Some(TickLine::simple(labels[idx as usize].clone()))
             },
         );
 
-        self.state.set_axis(x_key, axis);
+        self.chart_state.set_axis(x_id, axis);
+    }
+}
+
+// =========================================================
+//  3. THE VIEW (Ephemeral Widget)
+// =========================================================
+
+pub struct CombinedChart<'a> {
+    state: &'a State,
+}
+
+impl<'a> CombinedChart<'a> {
+    pub fn new(state: &'a State) -> Self {
+        Self { state }
     }
 
-    fn auto_scale(&mut self) {
-        if self.series.is_empty() {
-            return;
-        }
+    pub fn chart<Message>(self) -> Chart<'a, AxisId, f64, Message> {
+        let mut chart = Chart::new(&self.state.chart_state);
 
-        let max_len = self
-            .series
-            .iter()
-            .map(|s| s.values().len())
-            .max()
-            .unwrap_or(0);
-        let x_max = (max_len as f64 - 1.0).max(0.0);
-
-        let x_key_str = Self::X.to_string();
-        if let Some(x_axis) = self.state.get_axis_mut(&x_key_str) {
-            x_axis.scale_mut().set_domain(0.0, x_max);
-        }
-
-        let mut y_bounds: HashMap<String, (f64, f64)> = HashMap::new();
-
-        for s in &self.series {
-            let values = s.values();
-            if values.is_empty() {
-                continue;
-            }
-
-            let mut min = f64::MAX;
-            let mut max = f64::MIN;
-            for &v in values {
-                min = min.min(v);
-                max = max.max(v);
-            }
-
-            let entry = y_bounds
-                .entry(s.y_key().to_string())
-                .or_insert((f64::MAX, f64::MIN));
-            entry.0 = entry.0.min(min);
-            entry.1 = entry.1.max(max);
-        }
-
-        for (axis_id, (min, max)) in y_bounds {
-            if let Some(axis) = self.state.get_axis_mut(&axis_id) {
-                let padding = if max > min { (max - min) * 0.05 } else { 1.0 };
-                axis.scale_mut().set_domain(min, max + padding);
-            }
-        }
-    }
-
-    pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
-        let mut chart = Chart::new(&self.state);
-
-        let mut sorted_series: Vec<&Series> = self.series.iter().collect();
-        sorted_series.sort_by(|a, b| {
+        // Sort: Bars (0) -> Lines (1)
+        let mut sorted_data: Vec<&(AxisId, Series)> = self.state.data.iter().collect();
+        sorted_data.sort_by(|(_, a), (_, b)| {
             let rank_a = match a {
                 Series::Bar(_) => 0,
                 Series::Line(_) => 1,
@@ -469,8 +260,8 @@ impl CombinedChart {
             rank_a.cmp(&rank_b)
         });
 
-        for series in sorted_series {
-            chart = chart.layer(series, Self::X.to_string(), series.y_key().to_string());
+        for (y_axis_id, series) in sorted_data {
+            chart = chart.layer(series, State::X_AXIS_ID.to_string(), y_axis_id.clone());
         }
 
         chart
