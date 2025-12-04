@@ -26,7 +26,6 @@ pub struct LineSeries {
     pub values: Vec<f64>, // Implicit X based on index
 
     // Axis Binding
-    // Removed x_key: All series share the Chart's global X axis.
     pub y_key: String,
 
     // Appearance
@@ -167,10 +166,7 @@ impl LineChart {
             Self::X,
             Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
         );
-        self.with_axis(
-            Self::Y,
-            Axis::new(Linear::new(0.0, 1.0), axis::Position::Left),
-        );
+        self.with_axis(Self::Y, y_axis(0.0, 1.0));
         self
     }
 
@@ -198,6 +194,10 @@ impl LineChart {
     pub fn clear(&mut self) {
         self.series.clear();
         self.auto_scale();
+    }
+
+    pub fn get_last(&self) -> Option<&LineSeries> {
+        self.series.last()
     }
 
     // =========================================================
@@ -263,10 +263,7 @@ impl LineChart {
 
         // 2. Ensure Series-Specific Y exists
         if !self.defined_axes.contains(&series.y_key) {
-            self.state.set_axis(
-                series.y_key.clone(),
-                Axis::new(Linear::new(0.0, 1.0), axis::Position::Left),
-            );
+            self.state.set_axis(series.y_key.clone(), y_axis(0., 1.));
             self.defined_axes.push(series.y_key.clone());
         }
     }
@@ -335,4 +332,16 @@ impl LineChart {
 
         chart
     }
+}
+
+fn y_axis(min_y: f64, max_y: f64) -> Axis<f64> {
+    Axis::new(Linear::new(min_y, max_y), axis::Position::Left).with_tick_renderer(|ctx| {
+        match ctx.tick.level {
+            0 => {
+                let line = TickLine::simple(format!("{:.2}", ctx.tick.value));
+                Some(line)
+            }
+            _ => None,
+        }
+    })
 }

@@ -23,10 +23,6 @@ pub use crate::combined::series::line::LineSeries;
 
 type AxisId = String;
 
-// =========================================================
-//  State (The Orchestrator)
-// =========================================================
-
 pub struct State {
     // Manages the axis for `Chart`
     chart_state: ChartState<AxisId, f64>,
@@ -58,30 +54,18 @@ impl State {
         }
     }
 
-    pub fn get_data(&self) -> &[(AxisId, Series)] {
+    pub fn get_all_series(&self) -> &[(AxisId, Series)] {
         &self.data
     }
 
-    pub fn get_data_last(&self) -> Option<&Series> {
+    pub fn get_series_last(&self) -> Option<&Series> {
         self.data.last().map(|(_, series)| series)
     }
 
     // --- Series Management Pipeline ---
-
     pub fn add_series(&mut self, series: Series, y_axis_id: String) {
         self.ensure_axis_capacity(&series, &y_axis_id);
         self.data.push((y_axis_id, series));
-        self.update_bounds();
-    }
-
-    pub fn add_data_to_random_series(&mut self, value: f64) {
-        if self.data.is_empty() {
-            return;
-        }
-
-        let idx = rand::rng().random_range(0..self.data.len());
-        self.data[idx].1.push_value(value);
-
         self.update_bounds();
     }
 
@@ -115,8 +99,6 @@ impl State {
         // 3. Update Labels (Tick Renderer)
         self.update_x_axis_labels(labels);
     }
-
-    // --- Internal Logic Helpers ---
 
     /// Checks if a Y-axis exists for the new series. If not, creates it with a safe initial range.
     fn ensure_axis_capacity(&mut self, series: &Series, y_axis_id: &str) {
@@ -230,10 +212,6 @@ impl State {
     }
 }
 
-// =========================================================
-//  3. THE VIEW (Ephemeral Widget)
-// =========================================================
-
 pub struct CombinedChart<'a> {
     state: &'a State,
 }
@@ -246,7 +224,6 @@ impl<'a> CombinedChart<'a> {
     pub fn chart<Message>(self) -> Chart<'a, AxisId, f64, Message> {
         let mut chart = Chart::new(&self.state.chart_state);
 
-        // Sort: Bars (0) -> Lines (1)
         let mut sorted_data: Vec<&(AxisId, Series)> = self.state.data.iter().collect();
         sorted_data.sort_by(|(_, a), (_, b)| {
             let rank_a = match a {

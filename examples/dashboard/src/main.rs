@@ -1,4 +1,4 @@
-use std::{fmt::Display, time::Instant};
+use std::{fmt::Display, ops::Sub, time::Instant};
 
 use aksel::scale::Linear;
 use iced::{
@@ -16,9 +16,9 @@ use bar::BarChart;
 use gauge::Gauge;
 use iced_aksel::{Axis, axis::Position};
 use line::LineChart;
-use rand::Rng;
+use rand::{Rng, seq::IndexedRandom};
 
-use crate::combined::{BarSeries, LineSeries, Series};
+use crate::line::LineSeries;
 
 fn main() -> iced::Result {
     ExampleApp::run()
@@ -54,6 +54,9 @@ struct ExampleApp {
     gauge_chart: Gauge,
     line_chart: LineChart,
 
+    // Labels
+    bar_chart_labels: Vec<String>,
+
     // Customizable chart
     combined_state: combined::State,
 }
@@ -66,23 +69,27 @@ enum Message {
     // Widget values
     SwitchTheme(iced::Theme),
 
+    // Collective data
+    AddBarDataPoint,
+    AddLineDataPoint,
+    AddLineSeries,
+
     // Barchart
-    AddBarData,
-    ToggleOrientation,
+    // AddBarData,
+    // ToggleOrientation,
 
     // Linechart
     // AddLineSeries,
 
     // Gauge
     UpdateGaugeValue(f64),
-
     // Customizablechart
-    SyncChart,
-    AddLineSeries,
-    AddBarSeries,
-    AddCustomData,
-    ChartTypeChanged(SeriesType),
-    InputValueChanged(String),
+    // SyncChart,
+    // AddLineSeries,
+    // AddBarSeries,
+    // AddCustomData,
+    // ChartTypeChanged(SeriesType),
+    // InputValueChanged(String),
 }
 
 impl ExampleApp {
@@ -105,6 +112,13 @@ impl ExampleApp {
                     .zone_opacity(0.7)
                     .format(|v| format!("{:.2}", v)),
                 line_chart: LineChart::new(),
+                bar_chart_labels: vec![
+                    "You".to_string(),
+                    "Decide".to_string(),
+                    "Your".to_string(),
+                    "Own".to_string(),
+                    "Labels".to_string(),
+                ],
                 combined_state: combined::State::new(),
             },
             Task::none(),
@@ -113,66 +127,50 @@ impl ExampleApp {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            // GENERAL
             Message::AnimationTick(now) => {
                 self.gauge_chart.tick(now);
-                Task::none()
-            }
-            Message::UpdateGaugeValue(value) => {
-                let new_value = self.gauge_chart.get_value() + value;
-                self.gauge_chart.set_value(new_value);
                 Task::none()
             }
             Message::SwitchTheme(theme) => {
                 self.theme = theme;
                 Task::none()
             }
-            Message::AddBarData => {
-                let new_label = self.bar_chart.get_data().len();
-                let new_value = rand::random_range(5.0..100.0);
-                self.bar_chart
-                    .add_data((format!["{}", new_label], new_value));
+            // BAR
+            Message::AddBarDataPoint => {
+                let len = self.bar_chart.get_data().len();
+                let new_value = rand::random_range(0.0..=10.0);
+                let label = format!("Label {}", len + 1);
+                self.bar_chart.add_data((label, new_value));
+                Task::none()
+            }
 
+            // LINE
+            Message::AddLineDataPoint => {
+                let new_value = {
+                    if let Some(last) = self.line_chart.get_last() {
+                        0.0f64.max(
+                            last.values.last().unwrap_or(&10.0) + rand::random_range(-3.0..5.0),
+                        )
+                    } else {
+                        10.0
+                    }
+                };
                 self.line_chart.push_value_last_series(new_value);
                 Task::none()
             }
-            // Message::AddLineSeries => {
-            // let series = LineSeries::new("Line series", generate_pastel_color());
-            // self.line_chart.push_series(series);
-            // Task::none()
-            // }
-            Message::ToggleOrientation => {
-                self.bar_chart.toggle_orientation();
-                Task::none()
-            }
-            Message::SyncChart => {
-                // self.combined_state
-                //     .sync(&self.series.data(), &vec!["1".to_string(), "2".to_string()]);
-                Task::none()
-            }
-            Message::AddLineSeries => {
-                let series = LineSeries::new("Line series", vec![], generate_pastel_color());
-                self.combined_state
-                    .add_series(Series::Line(series), "Y".to_string());
-                Task::done(Message::SyncChart)
-            }
-            Message::AddBarSeries => {
-                let series = BarSeries::new("Bar series", vec![], generate_pastel_color());
-                self.combined_state
-                    .add_series(Series::Bar(series), "Y".to_string());
-                Task::done(Message::SyncChart)
-            }
-            Message::AddCustomData => {
-                let rnd_num = rand::rng().random_range(0.0..=10.0);
 
-                self.combined_state.add_data_to_last_series(rnd_num);
-                Task::done(Message::SyncChart)
-            }
-            Message::ChartTypeChanged(series_type) => {
-                self.series_type = series_type;
+            Message::AddLineSeries => {
+                let new_series =
+                    LineSeries::new("New Series", generate_random_pastel(&self.theme()));
+                self.line_chart.push_series(new_series);
                 Task::none()
             }
-            Message::InputValueChanged(value) => {
-                self.input_value = value.parse().unwrap_or(0.0);
+
+            // GAUGE
+            Message::UpdateGaugeValue(value) => {
+                let new_value = self.gauge_chart.get_value() + value;
+                self.gauge_chart.set_value(new_value);
                 Task::none()
             }
         }
@@ -185,15 +183,20 @@ impl ExampleApp {
         })
         .width(iced::Length::Fill);
 
-        let chart = combined::CombinedChart::new(&self.combined_state).chart();
+        // let chart = combined::CombinedChart::new(&self.combined_state);
 
-        let btn1 = button("Add LineSeries").on_press(Message::AddLineSeries);
-        let btn2 = button("Add BarSeries").on_press(Message::AddBarSeries);
-        let btn3 = button("Add Datapoint").on_press(Message::AddCustomData);
+        // let btn1 = button("Add LineSeries").on_press(Message::AddLineSeries);
+        // let btn2 = button("Add BarSeries").on_press(Message::AddBarSeries);
+        // let btn3 = button("Add Datapoint").on_press(Message::AddCustomData);
 
-        let panel1 = row![btn1, btn2];
+        let bar_col = self.barchart_view();
+        let gauge_col = self.gaugechart_view();
+        let line_col = self.linechart_view();
 
-        column![theme_toggle, panel1, btn3, chart].into()
+        let top = row![bar_col, gauge_col];
+        let mid = row![line_col];
+
+        column![theme_toggle, top, mid].into()
     }
 
     fn theme(&self) -> Theme {
@@ -211,6 +214,44 @@ impl ExampleApp {
             .antialiasing(true)
             .run()
     }
+
+    fn barchart_view(&self) -> Element<'_, Message> {
+        let new_data_confirm_btn = button("+").on_press(Message::AddBarDataPoint);
+        // let toggle_orientation_btn = button("Toggle orientation")
+        //     .on_press(Message::ToggleOrientation)
+        //     ;
+        let bar_chart = self.bar_chart.chart();
+
+        let panel = row![new_data_confirm_btn].spacing(16.);
+
+        column![bar_chart, panel].into()
+    }
+
+    fn gaugechart_view(&self) -> Element<'_, Message> {
+        let add_gauge_num = button("+").on_press(Message::UpdateGaugeValue(7.5));
+        let sub_gauge_num = button("-").on_press(Message::UpdateGaugeValue(-7.5));
+
+        let gauge_chart = self.gauge_chart.chart();
+
+        let panel = row![add_gauge_num, sub_gauge_num].spacing(16.);
+
+        column![gauge_chart, panel].into()
+    }
+
+    fn linechart_view(&self) -> Element<'_, Message> {
+        let new_data_confirm_btn = button("Data +")
+            .on_press(Message::AddLineDataPoint)
+            .width(iced::Length::Fill);
+        let new_series_confirm_btn = button("Series +")
+            .on_press(Message::AddLineSeries)
+            .width(iced::Length::Fill);
+
+        let line_chart = self.line_chart.chart();
+
+        let panel = row![new_data_confirm_btn, new_series_confirm_btn].spacing(16.);
+
+        column![line_chart, panel].into()
+    }
 }
 
 /// Generate random pastel color
@@ -221,4 +262,35 @@ fn generate_pastel_color() -> Color {
         128 + rand::random::<u8>() % 128,
         blue,
     )
+}
+
+fn generate_random_pastel(theme: &Theme) -> Color {
+    let palette = theme.palette();
+
+    // 1. Create a pool of "vivid" candidates
+    // We explicitly exclude 'background' and 'text' to ensure the result is colorful.
+    let candidates = [
+        palette.primary,
+        palette.success,
+        palette.danger,
+        palette.warning, // Uncomment if your iced version supports warning
+        palette.text,
+    ];
+
+    // 2. Pick a random color from the candidates
+    let mut rng = rand::thread_rng();
+    let selected_color = candidates.choose(&mut rng).unwrap_or(&palette.primary); // Fallback just in case
+
+    // 3. Mix with white to make it pastel (0.6 is 60% white)
+    mix_with_white(*selected_color, 0.6)
+}
+
+/// Helper: Mixes a color with white to tint it
+fn mix_with_white(color: Color, factor: f32) -> Color {
+    Color {
+        r: color.r + (1.0 - color.r) * factor,
+        g: color.g + (1.0 - color.g) * factor,
+        b: color.b + (1.0 - color.b) * factor,
+        a: color.a,
+    }
 }
