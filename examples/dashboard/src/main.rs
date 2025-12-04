@@ -137,16 +137,16 @@ impl ExampleApp {
             }
 
             Message::AddLineDataPoint => {
-                let new_value = {
-                    if let Some(last) = self.line_chart.get_last() {
-                        0.0f64.max(
-                            last.values.last().unwrap_or(&10.0) + rand::random_range(-3.0..5.0),
-                        )
-                    } else {
-                        10.0
-                    }
-                };
-                self.line_chart.push_value_last_series(new_value);
+                // let new_value = {
+                //     if let Some(last) = self.line_chart.get_last() {
+                //         0.0f64.max(
+                //             last.values.last().unwrap_or(&10.0) + rand::random_range(-3.0..5.0),
+                //         )
+                //     } else {
+                //         10.0
+                //     }
+                // };
+                self.line_chart.push_value(rand::random_range(0.0..10.0));
                 Task::none()
             }
 
