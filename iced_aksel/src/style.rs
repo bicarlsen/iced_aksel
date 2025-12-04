@@ -2,7 +2,6 @@ use iced::{Color, Pixels, Theme};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Style {
-    pub background: Color,
     pub cursor: PlotCursor,
     pub axis: AxisStyle,
     pub grid_color: Color,
@@ -53,7 +52,6 @@ pub fn default(theme: &Theme) -> Style {
     let palette = theme.extended_palette();
 
     Style {
-        background: palette.background.weakest.color,
         cursor: PlotCursor {
             color: palette.background.weaker.color,
             width: 1.0.into(),
