@@ -1,7 +1,7 @@
 use std::{fmt::Display, time::Instant};
 
 use iced::{
-    Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme,
+    Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme, font,
     widget::{Space, button, column, container, pick_list, row, text},
 };
 
@@ -21,28 +21,32 @@ pub fn main() -> iced::Result {
     ExampleApp::run()
 }
 
-// --- Application State ---
+// --- Constants for "Curated" feel ---
+const BRAND_COLORS: [Color; 5] = [
+    Color::from_rgb(0.4, 0.6, 0.9), // Soft Blue
+    Color::from_rgb(0.9, 0.4, 0.4), // Soft Red
+    Color::from_rgb(0.4, 0.8, 0.5), // Soft Green
+    Color::from_rgb(0.9, 0.7, 0.2), // Soft Yellow
+    Color::from_rgb(0.7, 0.5, 0.9), // Soft Purple
+];
 
 struct ExampleApp {
     theme: Theme,
     bar_chart: BarChart,
     gauge_chart: Gauge,
     line_chart: LineChart,
+    color_index: usize,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
     AnimationTick(Instant),
     SwitchTheme(Theme),
-    // Data - Line
     AddLineDataPoint,
     AddLineSeries,
     ToggleStacked,
-    ToggleFill,
-    // Data - Bar
     AddBarDataPoint,
     ToggleOrientation,
-    // Data - Gauge
     UpdateGaugeValue(f64),
 }
 
@@ -51,18 +55,22 @@ impl ExampleApp {
         (
             Self {
                 theme: Theme::Dark,
+                color_index: 0,
 
                 bar_chart: BarChart::new(bar::Orientation::Vertical).animated(0.3),
 
-                gauge_chart: Gauge::new("Speed", 0., 100.)
+                // Fix: Pass empty string for title to "hide" it inside the chart
+                // since we are rendering our own custom header outside.
+                gauge_chart: Gauge::new("", 0., 100.)
                     .animated(0.5)
                     .value_pos(gauge::Placement::Center)
-                    .title_pos(gauge::Placement::Custom(0.5, 0.90))
+                    // Removed .title_pos(Placement::None) as it doesn't exist.
+                    // Empty string above handles the "No Title" look.
                     .zone(gauge::Zone::Success(65.))
                     .zone(gauge::Zone::Warning(75.))
                     .zone(gauge::Zone::Danger(100.))
-                    .zone_opacity(0.7)
-                    .format(|v| format!("{:.1}", v)),
+                    .zone_opacity(0.5)
+                    .format(|v| format!("{:.0}", v)),
 
                 line_chart: LineChart::new().legend(true).fill_alpha(0.25).animated(0.5),
             },
@@ -84,8 +92,8 @@ impl ExampleApp {
             }
             Message::AddBarDataPoint => {
                 let len = self.bar_chart.get_data().len();
-                let new_value = rand::random_range(0.0..=10.0);
-                let label = format!("Label {}", len + 1);
+                let new_value = rand::random_range(1.0..=10.0);
+                let label = format!("Q{}", len + 1);
                 self.bar_chart.add_data((label, new_value));
                 Task::none()
             }
@@ -94,16 +102,16 @@ impl ExampleApp {
                 Task::none()
             }
             Message::AddLineSeries => {
-                let new_series = LineSeries::new("New Series", generate_random_pastel(&self.theme));
+                // Curated color cycling
+                let color = BRAND_COLORS[self.color_index % BRAND_COLORS.len()];
+                self.color_index += 1;
+
+                let new_series = LineSeries::new("Metric", color);
                 self.line_chart.push_series(new_series);
                 Task::none()
             }
             Message::ToggleStacked => {
                 self.line_chart.toggle_stacked();
-                Task::none()
-            }
-            Message::ToggleFill => {
-                self.line_chart.toggle_fill();
                 Task::none()
             }
             Message::ToggleOrientation => {
@@ -119,92 +127,73 @@ impl ExampleApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        // --- 1. Bar Chart Section ---
-        let bar_controls = row![
-            button("Add Point")
-                .on_press(Message::AddBarDataPoint)
-                .width(Length::Fill),
-            button("Rotate")
-                .on_press(Message::ToggleOrientation)
-                .width(Length::Fill),
+        // --- 1. Top Section ---
+
+        // A. Bar Chart Widget
+        let bar_header_actions = row![
+            action_button("⟳", Message::ToggleOrientation),
+            action_button("+", Message::AddBarDataPoint),
         ]
-        .spacing(10);
+        .spacing(5);
 
-        // NOTE: Controls are now outside the glassy_container
-        let bar_section = column![
-            glassy_container(self.bar_chart.chart().padding(Padding::new(20.)))
-                .height(Length::Fill),
-            Space::default().height(10.0),
-            bar_controls
-        ];
+        // Fix: Use Padding::from(10.0) or 10.into()
+        let bar_widget = widget_card(
+            "Revenue Sources",
+            self.bar_chart.chart().padding(Padding::from(10.0)),
+            bar_header_actions,
+            &self.theme,
+        );
 
-        // --- 2. Gauge Section ---
-        let gauge_controls = row![
-            button("- 10")
-                .on_press(Message::UpdateGaugeValue(-10.0))
-                .width(Length::Fill),
-            button("+ 10")
-                .on_press(Message::UpdateGaugeValue(10.0))
-                .width(Length::Fill),
+        // B. Gauge Widget
+        let gauge_header_actions = row![
+            action_button("-", Message::UpdateGaugeValue(-10.0)),
+            action_button("+", Message::UpdateGaugeValue(10.0)),
         ]
-        .spacing(10);
+        .spacing(5);
 
-        let gauge_section = column![
-            glassy_container(
-                container(self.gauge_chart.chart())
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_x(Length::Fill)
-            )
-            .height(Length::Fill),
-            Space::default().height(10.0),
-            gauge_controls
-        ];
+        let gauge_widget = widget_card(
+            "System Load",
+            container(self.gauge_chart.chart())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .center_x(Length::Fill),
+            gauge_header_actions,
+            &self.theme,
+        );
 
-        // --- 3. Line Chart Section ---
-        let line_controls = row![
-            button("Add Data")
-                .on_press(Message::AddLineDataPoint)
-                .width(Length::Fill),
-            button("Add Series")
-                .on_press(Message::AddLineSeries)
-                .width(Length::Fill),
-            button("Stack")
-                .on_press(Message::ToggleStacked)
-                .width(Length::Fill),
-            button("Alpha")
-                .on_press(Message::ToggleFill)
-                .width(Length::Fill),
+        // --- 2. Bottom Section ---
+
+        // C. Line Chart Widget
+        let line_header_actions = row![
+            action_button("Data", Message::AddLineDataPoint),
+            action_button("Series", Message::AddLineSeries),
+            action_button("Stack", Message::ToggleStacked),
         ]
-        .spacing(10);
+        .spacing(5);
 
-        let line_section = column![
-            glassy_container(self.line_chart.chart().padding(Padding::new(20.)))
-                .height(Length::Fill),
-            Space::default().height(10.0),
-            line_controls
-        ];
+        // Fix: Use Padding::from(10.0)
+        let line_widget = widget_card(
+            "Traffic History",
+            self.line_chart.chart().padding(Padding::from(10.0)),
+            line_header_actions,
+            &self.theme,
+        );
 
-        // --- Layout Assembly ---
-
-        // Top Row: 2/3 for Bar, 1/3 for Gauge
+        // --- Layout ---
         let top_row = row![
-            bar_section.width(Length::FillPortion(2)),
-            gauge_section.width(Length::FillPortion(1)),
+            bar_widget.width(Length::FillPortion(2)),
+            gauge_widget.width(Length::FillPortion(1)),
         ]
         .spacing(20)
         .height(Length::FillPortion(1));
 
-        // Bottom Row: Full Width
-        let bottom_row = line_section
+        let bottom_row = line_widget
             .width(Length::Fill)
             .height(Length::FillPortion(1));
 
-        // Theme Switcher
         let theme_picker =
             pick_list(Theme::ALL, Some(&self.theme), Message::SwitchTheme).width(Length::Fill);
 
-        // Final Combine
         column![theme_picker, top_row, bottom_row]
             .spacing(20)
             .padding(20)
@@ -224,50 +213,58 @@ impl ExampleApp {
     }
 }
 
-/// The specific styling you requested:
-/// Background = Text Color @ 2.5% Alpha
-/// Border = Text Color @ 10% Alpha
+// --- Professional UI Components ---
+
+fn widget_card<'a>(
+    title: &'a str,
+    content: impl Into<Element<'a, Message>>,
+    actions: impl Into<Element<'a, Message>>,
+    theme: &Theme,
+) -> container::Container<'a, Message> {
+    // Fix: Space::new(Length::Fill, Length::Shrink) acts as a horizontal spacer
+    let spacer = Space::new().width(Length::Fill).height(Length::Shrink);
+
+    // Fix: Use .color() directly on text, not inside .style() closure
+    let header = row![
+        text(title)
+            .font(font::Font::with_name("Inter"))
+            .size(14)
+            .color(theme.palette().text.scale_alpha(0.7)),
+        spacer,
+        actions.into()
+    ]
+    .align_y(Alignment::Center)
+    .padding(Padding::new(0.0).bottom(10.0));
+
+    let body = container(content).width(Length::Fill).height(Length::Fill);
+
+    glassy_container(column![header, body])
+}
+
 fn glassy_container<'a>(
     content: impl Into<Element<'a, Message>>,
 ) -> container::Container<'a, Message> {
-    container(content).style(|t| {
+    container(content).padding(15).style(|t| {
         let palette = t.palette();
 
         let mut bg = palette.text;
-        bg.a = 0.025;
+        bg.a = 0.03;
 
         let mut border_color = palette.text;
-        border_color.a = 0.1;
+        border_color.a = 0.08;
 
         container::Style::default().background(bg).border(Border {
             color: border_color,
             width: 1.0,
-            radius: 8.0.into(),
+            radius: 12.0.into(),
         })
     })
 }
 
-// --- Helpers ---
-
-fn generate_random_pastel(theme: &Theme) -> Color {
-    let palette = theme.palette();
-    let candidates = [
-        palette.primary,
-        palette.success,
-        palette.danger,
-        palette.text,
-    ];
-
-    let mut rng = rand::rng();
-    let selected = candidates.choose(&mut rng).unwrap_or(&palette.primary);
-    mix_with_white(*selected, 0.6)
-}
-
-fn mix_with_white(color: Color, factor: f32) -> Color {
-    Color {
-        r: color.r + (1.0 - color.r) * factor,
-        g: color.g + (1.0 - color.g) * factor,
-        b: color.b + (1.0 - color.b) * factor,
-        a: color.a,
-    }
+// Fix: explicit lifetime 'a added to `label`
+fn action_button<'a>(label: &'a str, msg: Message) -> button::Button<'a, Message> {
+    button(text(label).size(12).align_x(Alignment::Center))
+        .on_press(msg)
+        .padding([4, 10])
+        .style(button::secondary)
 }

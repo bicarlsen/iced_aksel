@@ -184,6 +184,7 @@ impl LineChart {
 
     pub fn fill_alpha(mut self, alpha: f32) -> Self {
         self.target_fill_alpha = alpha.max(0.0).min(1.0);
+        // If already enabled, we might need to update current immediately if not animating
         if self.fill_enabled {
             if self.animation_speed.is_none() {
                 self.current_fill_alpha = self.target_fill_alpha;
@@ -219,24 +220,32 @@ impl LineChart {
     }
 
     pub fn stacked(mut self, stacked: bool) -> Self {
-        self.target_stack_factor = if stacked { 1.0 } else { 0.0 };
-        if self.animation_speed.is_none() {
-            self.current_stack_factor = self.target_stack_factor;
-            self.snap_axes();
-        }
+        self.set_stacked(stacked);
         self
     }
 
-    pub fn toggle_stacked(&mut self) {
-        self.target_stack_factor = if self.target_stack_factor > 0.5 {
-            0.0
-        } else {
-            1.0
-        };
+    pub fn set_stacked(&mut self, stacked: bool) {
+        self.target_stack_factor = if stacked { 1.0 } else { 0.0 };
+
+        // Link Fill Enabled to Stacked State
+        self.fill_enabled = stacked;
+
         if self.animation_speed.is_none() {
             self.current_stack_factor = self.target_stack_factor;
+            self.current_fill_alpha = if self.fill_enabled {
+                self.target_fill_alpha
+            } else {
+                0.0
+            };
+            self.update_series_fill();
             self.snap_axes();
         }
+        // Note: if animating, 'tick' will handle the transition of fill_alpha
+    }
+
+    pub fn toggle_stacked(&mut self) {
+        let new_stacked_state = self.target_stack_factor <= 0.5; // Toggle
+        self.set_stacked(new_stacked_state);
     }
 
     pub fn with_axis(&mut self, id: impl Into<String>, axis: Axis<f64>) {
@@ -245,7 +254,6 @@ impl LineChart {
         if !self.defined_axes.contains(&key) {
             self.defined_axes.push(key);
         }
-        self.auto_scale();
     }
 
     pub fn push_series(&mut self, mut series: LineSeries) {
@@ -257,13 +265,20 @@ impl LineChart {
 
         self.ensure_axes_exist(&series);
         self.series.push(series);
-        self.auto_scale();
+
+        if self.animation_speed.is_none() {
+            self.snap_axes();
+        }
     }
 
     pub fn clear(&mut self) {
         self.series.clear();
         self.labels.clear();
         self.snap_axes();
+    }
+
+    pub fn get_last(&self) -> Option<&LineSeries> {
+        self.series.last()
     }
 
     // --- Physics ---
@@ -283,35 +298,12 @@ impl LineChart {
         let physics_speed = speed_normalized * 10.0;
         let alpha = 1.0 - (-physics_speed * dt).exp();
 
-        let axis_speed = physics_speed * 2.0;
-        let axis_alpha = 1.0 - (-axis_speed * dt).exp();
-
-        let smooth_axis_val = |current: f64, target: f64| -> f64 {
-            let diff = target - current;
-            if diff.abs() < 0.005 {
-                return target;
-            }
-            let step_exp = diff * axis_alpha;
-            let min_velocity = 0.5;
-            let step_lin = min_velocity * dt * diff.signum();
-            let step = if step_exp.abs() > step_lin.abs() {
-                step_exp
-            } else {
-                step_lin
-            };
-            if step.abs() >= diff.abs() {
-                target
-            } else {
-                current + step
-            }
-        };
-
         // 1. Calculate Targets
         let (target_x, target_ys) = self.calculate_targets();
 
-        // 2. Animate Axes (Simultaneous)
-        let next_x0 = smooth_axis_val(self.current_x_domain.0, target_x.0);
-        let next_x1 = smooth_axis_val(self.current_x_domain.1, target_x.1);
+        // 2. Animate Axes
+        let next_x0 = self.current_x_domain.0 + (target_x.0 - self.current_x_domain.0) * alpha;
+        let next_x1 = self.current_x_domain.1 + (target_x.1 - self.current_x_domain.1) * alpha;
         self.current_x_domain = (next_x0, next_x1);
 
         if let Some(axis) = self.state.get_axis_mut(&Self::X.to_string()) {
@@ -321,15 +313,15 @@ impl LineChart {
 
         for (id, target) in target_ys {
             let current = self.current_y_domains.entry(id.clone()).or_insert(target);
-            current.0 = smooth_axis_val(current.0, target.0);
-            current.1 = smooth_axis_val(current.1, target.1);
+            current.0 += (target.0 - current.0) * alpha;
+            current.1 += (target.1 - current.1) * alpha;
 
             if let Some(axis) = self.state.get_axis_mut(&id) {
                 axis.scale_mut().set_domain(current.0, current.1);
             }
         }
 
-        // 3. Animate Content (Simultaneous)
+        // 3. Animate Content
         for s in &mut self.series {
             s.tick(alpha);
         }
@@ -358,7 +350,6 @@ impl LineChart {
         }
     }
 
-    // Helper: Instantly snap axes to targets (for init or animation off)
     fn snap_axes(&mut self) {
         let (tx, tys) = self.calculate_targets();
         self.current_x_domain = tx;
@@ -383,7 +374,6 @@ impl LineChart {
         }
     }
 
-    // Calculates where the axes SHOULD be based on Target Values & Target Stack
     fn calculate_targets(&self) -> ((f64, f64), HashMap<String, (f64, f64)>) {
         if self.series.is_empty() {
             return ((0.0, 1.0), HashMap::new());
@@ -455,7 +445,12 @@ impl LineChart {
             last.push(value);
         }
 
-        self.auto_scale();
+        if self.animation_speed.is_none() {
+            for s in &mut self.series {
+                s.current_values = s.target_values.clone();
+            }
+            self.snap_axes();
+        }
     }
 
     pub fn push_value(&mut self, value: f64) {
@@ -478,7 +473,12 @@ impl LineChart {
             series.push(value);
         }
 
-        self.auto_scale();
+        if self.animation_speed.is_none() {
+            if let Some(s) = self.series.get_mut(index) {
+                s.snap();
+            }
+            self.snap_axes();
+        }
     }
 
     pub fn push_value_to(&mut self, index: usize, value: f64) {
@@ -529,7 +529,7 @@ impl LineChart {
         if !self.defined_axes.contains(&x_key) {
             self.state.set_axis(
                 x_key.clone(),
-                Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom).invisible(),
+                Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
             );
             self.defined_axes.push(x_key);
             self.update_x_axis_labels();
