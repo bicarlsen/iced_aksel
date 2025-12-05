@@ -593,8 +593,6 @@ where
 
     fn children(&self) -> Vec<Tree> {
         // One child per Axis + one for content.
-        // Axis is leaf/state-less in our example; Tree::empty() is fine,
-        // or Tree::new(&axis) if you add state later.
         let mut children: Vec<Tree> = self.state.axes().iter().map(|_| Tree::empty()).collect();
         children.push(Tree::empty()); // content
         children
@@ -606,12 +604,10 @@ where
         Size::new(self.width, self.height)
     }
 
-    fn layout(&mut self, tree: &mut Tree, _renderer: &Renderer, limits: &Limits) -> Node {
+    fn layout(&mut self, _tree: &mut Tree, _renderer: &Renderer, limits: &Limits) -> Node {
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
 
         let axis_count = self.state.axes().len();
-        // TODO: Issue #14
-        debug_assert_eq!(tree.children.len(), axis_count + 1);
 
         // ---------- 1) First pass: measure axis thicknesses ----------
 
