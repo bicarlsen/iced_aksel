@@ -3,7 +3,7 @@ use std::{fmt::Debug, hash::Hash};
 use aksel::{Float, Scale, ScreenRect, Transform};
 use derive_more::{Display, Error};
 use iced::{
-    Element, Event, Padding, Point, Rectangle, Size,
+    Color, Element, Event, Padding, Point, Rectangle, Size,
     advanced::{
         Layout, Widget,
         layout::{self, Limits, Node},
@@ -795,7 +795,7 @@ where
                 bounds,
                 ..Default::default()
             },
-            style.background,
+            Color::TRANSPARENT,
         );
 
         // Init mesh-rendering dependencies

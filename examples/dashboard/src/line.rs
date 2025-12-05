@@ -529,7 +529,7 @@ impl LineChart {
         if !self.defined_axes.contains(&x_key) {
             self.state.set_axis(
                 x_key.clone(),
-                Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom),
+                Axis::new(Linear::new(0.0, 1.0), axis::Position::Bottom).invisible(),
             );
             self.defined_axes.push(x_key);
             self.update_x_axis_labels();
