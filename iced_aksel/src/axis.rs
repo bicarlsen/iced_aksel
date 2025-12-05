@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use aksel::{Float, Tick};
 use derivative::Derivative;
 use iced::{
@@ -142,15 +144,21 @@ pub struct TickLabelContext<D> {
     pub tick: Tick<D>,
     pub normalized_position: f32,
     pub axis_bounds: Rectangle,
+    pub scale_domain: (D, D),
     pub orientation: Orientation,
 }
 
-impl<D> TickLabelContext<D> {
+impl<D: Float> TickLabelContext<D> {
     pub const fn axis_span(&self) -> f32 {
         match self.orientation {
             Orientation::Horizontal => self.axis_bounds.width,
             Orientation::Vertical => self.axis_bounds.height,
         }
+    }
+
+    pub fn scale_span(&self) -> D {
+        let (min, max) = self.scale_domain;
+        min.abs_sub(max)
     }
 }
 
@@ -210,8 +218,8 @@ impl<D> LabelPolicy<D> {
     }
 }
 
-/// DISCUSS: Skal grids og axis-ticks altid være det samme?
-type TickRendererFn<D> = Box<dyn Fn(TickLabelContext<D>) -> Option<TickLine>>;
+// TODO: Can we, somehow, refactor out Rc<RefCell<T>>? Or is it okay as it is?
+type TickRendererFn<D> = Rc<RefCell<dyn FnMut(TickLabelContext<D>) -> Option<TickLine>>>;
 type LabelFormatter<D> = Box<dyn Fn(D) -> Option<Label>>;
 type GridRendererFn<D> = Box<dyn Fn(Tick<D>) -> Option<GridLine>>;
 
@@ -268,7 +276,7 @@ impl<D: Float> Axis<D> {
             })
         });
 
-        let tick_renderer = Box::new(|ctx: TickLabelContext<D>| {
+        let tick_renderer = Rc::new(RefCell::new(|ctx: TickLabelContext<D>| {
             Some(TickLine {
                 thickness: 1.0.into(),
                 length: match ctx.tick.level {
@@ -278,7 +286,7 @@ impl<D: Float> Axis<D> {
                 .into(),
                 label: None,
             })
-        });
+        }));
 
         Self {
             position,
@@ -322,9 +330,9 @@ impl<D: Float> Axis<D> {
 
     pub fn with_tick_renderer<F>(mut self, renderer: F) -> Self
     where
-        F: Fn(TickLabelContext<D>) -> Option<TickLine> + 'static,
+        F: FnMut(TickLabelContext<D>) -> Option<TickLine> + 'static,
     {
-        self.tick_renderer = Some(Box::new(renderer));
+        self.tick_renderer = Some(Rc::new(RefCell::new(renderer)));
         self
     }
 
@@ -332,7 +340,7 @@ impl<D: Float> Axis<D> {
     where
         F: Fn(TickLabelContext<D>) -> Option<TickLine> + 'static,
     {
-        self.tick_renderer = Some(Box::new(renderer));
+        self.tick_renderer = Some(Rc::new(RefCell::new(renderer)));
     }
 
     pub fn label_policy(mut self, policy: LabelPolicy<D>) -> Self {
@@ -475,14 +483,16 @@ impl<D: Float> Axis<D> {
         let mut label_candidates = Vec::new();
 
         // Render tick-related stuff (Axis ticks and grid)
+        let (&d_min, &d_max) = self.scale.domain();
         for tick in self.scale().ticks().into_iter() {
             let pos_norm = self.scale().normalize(&tick.value).to_f32().unwrap();
 
-            let tick_line = self.tick_renderer.as_ref().and_then(|f| {
-                f(TickLabelContext {
+            let tick_line = self.tick_renderer.as_ref().and_then(|renderer| {
+                renderer.borrow_mut()(TickLabelContext {
                     tick,
                     normalized_position: pos_norm,
                     axis_bounds: bounds,
+                    scale_domain: (d_max, d_min),
                     orientation,
                 })
             });

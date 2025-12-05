@@ -6,10 +6,13 @@
 //! - Toggleable Bollinger Bands (BBands) indicator.
 //! - An interactive settings bar with checkboxes and text inputs.
 
-use std::{collections::BTreeMap, ops::RangeInclusive};
+use std::{
+    collections::{BTreeMap, HashSet},
+    ops::RangeInclusive,
+};
 
 use aksel::{PlotPoint, scale::Linear};
-use chrono::TimeZone;
+use chrono::{Datelike, TimeZone, Timelike};
 use iced::{
     Color, Element, Subscription, Task, Theme,
     mouse::ScrollDelta,
@@ -717,15 +720,43 @@ impl CandlestickChart {
     /// Factory for creating the main X-axis (with labels).
     fn create_x_axis(range: (f64, f64)) -> Axis<f64> {
         let scale = Linear::new(range.0, range.1);
-        let tick_renderer = |ctx: TickLabelContext<f64>| -> Option<TickLine> {
+        let mut current_month = u32::MAX;
+        let mut shown_month = false;
+        let tick_renderer = move |ctx: TickLabelContext<f64>| -> Option<TickLine> {
+            let span = ctx.scale_span() as i64;
             let timestamp_seconds = ctx.tick.value as i64 * 60; // Assuming 1 unit = 1 minute
             let datetime = chrono::Utc.timestamp_opt(timestamp_seconds, 0).single()?;
-            let text = datetime.format("%H:%M").to_string();
+
+            let text = match span {
+                ..10080 => {
+                    shown_month = false;
+                    if datetime.minute() == 0 && datetime.hour() == 0 {
+                        datetime.format("%a").to_string()
+                    } else {
+                        datetime.format("%H:%M").to_string()
+                    }
+                }
+                // 10080 minutes = 7 day
+                10080.. => {
+                    if datetime.month() != current_month {
+                        current_month = datetime.month();
+                        shown_month = false;
+                    }
+
+                    if !shown_month {
+                        shown_month = true;
+                        datetime.format("%b").to_string()
+                    } else {
+                        datetime.format("%d").to_string()
+                    }
+                }
+            };
+
             Some(TickLine::simple(text))
         };
         Axis::new(scale, Position::Bottom)
             .with_tick_renderer(tick_renderer)
-            .skip_overlapping_labels(8.0)
+            .skip_overlapping_labels(12.0)
     }
 
     /// Factory for creating the Price Y-axis.
