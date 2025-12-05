@@ -167,9 +167,6 @@ impl<D: Float> Arc<D> {
             let center = Point::new(cx, cy);
 
             // Rule 1: Inner Stroke Alignment
-            // Stroke is centered on the path.
-            // Inner Edge = Path - Width/2 -> Path = Inner + Width/2
-            // Outer Edge = Path + Width/2 -> Path = Outer - Width/2
             let s_inner = inner_r + width / 2.0;
             let s_outer = outer_r - width / 2.0;
 
@@ -187,7 +184,6 @@ impl<D: Float> Arc<D> {
                 // --- Full Circle Logic (Two separate rings) ---
 
                 // 1. Outer Ring
-                // We start at angle 0 for simplicity
                 let outer_start = center + Vector::new(s_outer, 0.0);
                 builder.begin(outer_start);
                 let outer_arc = lyon::geom::Arc {
@@ -205,7 +201,7 @@ impl<D: Float> Arc<D> {
                 // 2. Inner Ring (Only if it's a donut, not a solid pie)
                 if inner_r > 0.5 {
                     let inner_start = center + Vector::new(s_inner, 0.0);
-                    builder.begin(inner_start); // Start new sub-path
+                    builder.begin(inner_start);
                     let inner_arc = lyon::geom::Arc {
                         center,
                         radii: Vector::new(s_inner, s_inner),
@@ -233,14 +229,11 @@ impl<D: Float> Arc<D> {
                 if is_pie_center {
                     // Path: Center -> OuterStart -> Arc -> Center -> Close
 
-                    // 1. Move to Center
                     builder.begin(center);
 
-                    // 2. Line to Outer Start
                     let outer_start = center + Vector::new(start_cos, start_sin) * s_outer;
                     builder.line_to(outer_start);
 
-                    // 3. Outer Arc
                     let outer_arc = lyon::geom::Arc {
                         center,
                         radii: Vector::new(s_outer, s_outer),
@@ -252,20 +245,16 @@ impl<D: Float> Arc<D> {
                         builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
                     });
 
-                    // 4. Line back to Center (Implicitly handled by close, but explicit is safer for miter)
                     builder.close();
                 } else {
                     // Path: InnerStart -> OuterStart -> OuterArc -> InnerEnd -> InnerBackArc -> Close
 
-                    // 1. Move to Inner Start
                     let inner_start = center + Vector::new(start_cos, start_sin) * s_inner;
                     builder.begin(inner_start);
 
-                    // 2. Line to Outer Start
                     let outer_start = center + Vector::new(start_cos, start_sin) * s_outer;
                     builder.line_to(outer_start);
 
-                    // 3. Outer Arc
                     let outer_arc = lyon::geom::Arc {
                         center,
                         radii: Vector::new(s_outer, s_outer),
@@ -277,11 +266,9 @@ impl<D: Float> Arc<D> {
                         builder.cubic_bezier_to(segment.ctrl1, segment.ctrl2, segment.to);
                     });
 
-                    // 4. Line to Inner End
                     let inner_end = center + Vector::new(end_cos, end_sin) * s_inner;
                     builder.line_to(inner_end);
 
-                    // 5. Inner Arc Backwards
                     let inner_arc = lyon::geom::Arc {
                         center,
                         radii: Vector::new(s_inner, s_inner),
@@ -307,9 +294,20 @@ impl<D: Float> Arc<D> {
         match len {
             Length::Screen(px) => px,
             Length::Plot(units) => {
-                let p0 = transform.x_to_screen(&D::zero());
-                let p1 = transform.x_to_screen(&units);
-                (p1 - p0).abs()
+                // Calculate scale for X (Horizontal)
+                let p0_x = transform.x_to_screen(&D::zero());
+                let p1_x = transform.x_to_screen(&units);
+                let size_x = (p1_x - p0_x).abs();
+
+                // Calculate scale for Y (Vertical)
+                let p0_y = transform.y_to_screen(&D::zero());
+                let p1_y = transform.y_to_screen(&units);
+                let size_y = (p1_y - p0_y).abs();
+
+                // KEY CHANGE: Use the minimum of X/Y scales.
+                // This constrains the geometry to the tightest dimension,
+                // ensuring perfect circles regardless of aspect ratio.
+                size_x.min(size_y)
             }
         }
     }
@@ -329,8 +327,8 @@ impl<D: Float> Arc<D> {
         let packed_color = pack(color);
         let sweep = (end_angle - start_angle).abs();
 
-        // Level of Detail matches Circle to keep edge fidelity consistent.
-        let segments = (r_outer * 2.0).max(24.0).min(128.0) as usize;
+        let arc_len = sweep * r_outer;
+        let segments = (arc_len / 5.0).max(4.0).min(128.0) as usize;
 
         let step = sweep / segments as f32;
         let dir = if end_angle > start_angle { 1.0 } else { -1.0 };
