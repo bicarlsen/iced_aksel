@@ -415,6 +415,9 @@ impl<D: Float> Axis<D> {
     /// For now it's a placeholder; customize this later using
     /// `tick_renderer`, fonts, padding, etc.
     pub const fn thickness(&self) -> Pixels {
+        if self.invisible {
+            return Pixels(0.0);
+        }
         self.thickness
     }
 
@@ -476,6 +479,10 @@ impl<D: Float> Axis<D> {
             + iced::advanced::text::Renderer<Font = iced::Font>,
         Theme: Catalog,
     {
+        if self.invisible && self.grid_renderer.is_none() {
+            return; // We don't need to render anything
+        }
+
         let theme = style.axis;
         let bounds = layout.bounds();
         let orientation = Orientation::from(self.position());
@@ -484,28 +491,31 @@ impl<D: Float> Axis<D> {
 
         // Render tick-related stuff (Axis ticks and grid)
         let (&d_min, &d_max) = self.scale.domain();
+
         for tick in self.scale().ticks().into_iter() {
             let pos_norm = self.scale().normalize(&tick.value).to_f32().unwrap();
 
-            let tick_line = self.tick_renderer.as_ref().and_then(|renderer| {
-                renderer.borrow_mut()(TickLabelContext {
-                    tick,
-                    normalized_position: pos_norm,
-                    axis_bounds: bounds,
-                    scale_domain: (d_max, d_min),
-                    orientation,
-                })
-            });
-
-            if let Some(mut line) = tick_line {
-                if let Some(label) = line.label.take() {
-                    label_candidates.push(LabelCandidate {
+            if self.is_visible() {
+                let tick_line = self.tick_renderer.as_ref().and_then(|renderer| {
+                    renderer.borrow_mut()(TickLabelContext {
                         tick,
                         normalized_position: pos_norm,
-                        label,
-                    });
+                        axis_bounds: bounds,
+                        scale_domain: (d_max, d_min),
+                        orientation,
+                    })
+                });
+
+                if let Some(mut line) = tick_line {
+                    if let Some(label) = line.label.take() {
+                        label_candidates.push(LabelCandidate {
+                            tick,
+                            normalized_position: pos_norm,
+                            label,
+                        });
+                    }
+                    self.draw_tick_line(&theme, line, &bounds, mesh_buffer, pos_norm);
                 }
-                self.draw_tick_line(&theme, line, &bounds, mesh_buffer, pos_norm);
             }
 
             if let Some(line) = self.grid_renderer.as_ref().and_then(|f| f(tick)) {
@@ -525,7 +535,8 @@ impl<D: Float> Axis<D> {
         // Combined plot and axis bounds
         let full_bounds = plot_bounds.union(&bounds);
 
-        if self.render_cursor
+        if self.is_visible()
+            && self.render_cursor
             && let Some(cursor_pos) = cursor.position_over(full_bounds)
         {
             renderer.start_layer(bounds);

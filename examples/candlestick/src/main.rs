@@ -773,7 +773,7 @@ impl CandlestickChart {
     /// Factory for creating the Volume Y-axis.
     fn create_vol_axis(range: (f64, f64)) -> Axis<f64> {
         let scale = Linear::new(range.0, range.1);
-        Axis::new(scale, Position::Right).invisible()
+        Axis::new(scale, Position::Right).invisible().without_grid()
     }
 }
 

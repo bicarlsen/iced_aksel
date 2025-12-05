@@ -338,7 +338,7 @@ where
             return;
         }
 
-        for (i, (id, axis)) in self.state.visible_axes().enumerate() {
+        for (i, (id, axis)) in self.state.axes().iter().enumerate() {
             let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
             let Some(position) = cursor.position() else {
@@ -519,7 +519,8 @@ where
 
             if let Some((i, (id, axis))) = self
                 .state
-                .visible_axes()
+                .axes()
+                .iter()
                 .enumerate()
                 .find(|(_, (axis_id, _))| *axis_id == dragging_id)
             {
@@ -545,7 +546,7 @@ where
         }
         // Handle axis hover (only when idle and cursor is over an axis)
         else if matches!(action, Action::Idle) {
-            for (i, (id, axis)) in self.state.visible_axes().enumerate() {
+            for (i, (id, axis)) in self.state.axes().iter().enumerate() {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
                 if cursor.position_over(axis_bounds).is_none() {
@@ -594,7 +595,7 @@ where
         // One child per Axis + one for content.
         // Axis is leaf/state-less in our example; Tree::empty() is fine,
         // or Tree::new(&axis) if you add state later.
-        let mut children: Vec<Tree> = self.state.visible_axes().map(|_| Tree::empty()).collect();
+        let mut children: Vec<Tree> = self.state.axes().iter().map(|_| Tree::empty()).collect();
         children.push(Tree::empty()); // content
         children
     }
@@ -608,9 +609,9 @@ where
     fn layout(&mut self, tree: &mut Tree, _renderer: &Renderer, limits: &Limits) -> Node {
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
 
-        let axis_count = self.state.visible_axes().count();
+        let axis_count = self.state.axes().len();
         // TODO: Issue #14
-        // debug_assert_eq!(tree.children.len(), axis_count + 1);
+        debug_assert_eq!(tree.children.len(), axis_count + 1);
 
         // ---------- 1) First pass: measure axis thicknesses ----------
 
@@ -619,7 +620,7 @@ where
         let mut left_total = self.padding.left;
         let mut right_total = self.padding.right;
 
-        for (_, axis) in self.state.visible_axes() {
+        for (_, axis) in self.state.axes() {
             let thickness = axis.thickness().0;
             match axis.position() {
                 Position::Top => top_total += thickness,
@@ -646,7 +647,7 @@ where
         let mut left_x = self.padding.left;
         let mut right_x = left_total + chart_width;
 
-        for (_, axis) in self.state.visible_axes() {
+        for (_, axis) in self.state.axes() {
             let thickness = axis.thickness().0;
             let node = match axis.position() {
                 Position::Top => {
@@ -745,7 +746,7 @@ where
                         }
                     } else {
                         // Check if scrolling over an axis
-                        for (i, (id, axis)) in self.state.visible_axes().enumerate() {
+                        for (i, (id, axis)) in self.state.axes().iter().enumerate() {
                             let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
                             if cursor.position_over(axis_bounds).is_some() {
@@ -809,7 +810,7 @@ where
         };
 
         // Render axes and grids
-        for (i, (_, axis)) in self.state.visible_axes().enumerate() {
+        for (i, (_, axis)) in self.state.axes().iter().enumerate() {
             let axis_layout = layout.children().nth(i).unwrap();
             axis.draw::<Renderer, Theme>(
                 renderer,
