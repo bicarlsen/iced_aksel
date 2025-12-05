@@ -221,11 +221,15 @@ impl Gauge {
 
         self.chart_state.set_axis(
             Self::X_AXIS,
-            Axis::new(Linear::new(-limit, limit), axis::Position::Bottom).invisible(),
+            Axis::new(Linear::new(-limit, limit), axis::Position::Bottom)
+                .invisible()
+                .without_grid(),
         );
         self.chart_state.set_axis(
             Self::Y_AXIS,
-            Axis::new(Linear::new(-limit, limit), axis::Position::Left).invisible(),
+            Axis::new(Linear::new(-limit, limit), axis::Position::Left)
+                .invisible()
+                .without_grid(),
         );
     }
 
