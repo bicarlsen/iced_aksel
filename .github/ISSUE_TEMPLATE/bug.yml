@@ -1,0 +1,43 @@
+name: 🐛 Report a bug
+description: Something's not working as expected..
+title: "[Bug]: <title>"
+type: bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking your time to fill out this bug report!
+
+        Please fill in the below fields as described.
+
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search the repository for any existing issues that describe and/or relate to the bug
+      options:
+        - label: I've searched the existing issues, and didn't find a match
+          required: true
+
+  - type: textarea
+    attributes:
+      label: Bug behaviour
+      description: A concise description of what you're experiencing.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: What could we do to reproduce the bug?
+      placeholder: |
+        1. Do this..
+        2. Do that..
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Other info
+      description: OS, PC specs, or any other info that might be useful
+      render: shell

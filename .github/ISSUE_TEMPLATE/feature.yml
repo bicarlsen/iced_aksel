@@ -1,0 +1,26 @@
+name: 🌟 Feature request
+description: I'd like to suggest a feature!
+title: "[Feature]: <title>"
+type: feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking your time to suggesting a feature!
+
+        Please fill in the below fields as described
+
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search the repository for any existing issues that describe and/or relate to your suggestion
+      options:
+        - label: I've searched the existing issues, and didn't find a match
+          required: true
+
+  - type: textarea
+    attributes:
+      label: description
+      description: Please describe the feature in as much detail as possible.
+    validations:
+      required: true
