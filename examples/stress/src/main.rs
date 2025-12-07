@@ -419,11 +419,11 @@ impl StressTestApp {
 
         state.set_axis(
             AXIS_ID_X,
-            Axis::new(Linear::new(0.0, 1000.0), Position::Bottom),
+            Axis::new(Linear::new(0.0, 1000.0), Position::Bottom).invisible(),
         );
         state.set_axis(
             AXIS_ID_Y,
-            Axis::new(Linear::new(0.0, 1000.0), Position::Left),
+            Axis::new(Linear::new(0.0, 1000.0), Position::Left).invisible(),
         );
 
         let mut app = Self {
@@ -847,7 +847,7 @@ impl StressTestApp {
                     let delta = now.duration_since(last).as_secs_f32();
                     if delta > 0.0 {
                         let instant_fps = 1.0 / delta;
-                        self.fps = self.fps * 0.9 + instant_fps * 0.1;
+                        self.fps = 144f32.min(self.fps * 0.9 + instant_fps * 0.1);
                         self.frame_times.push(delta * 1000.0);
                         if self.frame_times.len() > 60 {
                             self.frame_times.remove(0);
@@ -1110,7 +1110,7 @@ impl StressTestApp {
             slider_row(
                 "Circles",
                 self.circle_count as f32,
-                150000.0,
+                15000.0,
                 Message::CircleCountChanged
             ),
             slider_row(
@@ -1122,31 +1122,31 @@ impl StressTestApp {
             slider_row(
                 "Lines",
                 self.line_count as f32,
-                150000.0,
+                15000.0,
                 Message::LineCountChanged
             ),
             slider_row(
                 "Polylines",
                 self.polyline_count as f32,
-                150000.0,
+                15000.0,
                 Message::PolylineCountChanged
             ),
             slider_row(
                 "Arcs",
                 self.arc_count as f32,
-                150000.0,
+                15000.0,
                 Message::ArcCountChanged
             ),
             slider_row(
                 "Polygons",
                 self.polygon_count as f32,
-                150000.0,
+                15000.0,
                 Message::PolygonCountChanged
             ),
             slider_row(
                 "Labels",
                 self.label_count as f32,
-                150000.0,
+                15000.0,
                 Message::LabelCountChanged
             ),
         ]
