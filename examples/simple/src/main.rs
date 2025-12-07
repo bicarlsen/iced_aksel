@@ -1,11 +1,15 @@
 use std::f64::consts::PI;
 
-use aksel::{Float, PlotPoint, PlotRect, scale::Linear};
+use aksel::{PlotPoint, PlotRect, scale::Linear};
 use iced::{Color, Element, Task, Theme};
-use iced_aksel::{Axis, Chart, DragDelta, Shape, State, axis, plot::Items, shape::Polygon};
+use iced_aksel::{Axis, Chart, DragDelta, State, axis, plot::Items, shape::Polygon};
+use rand::Rng;
 
 const X_ID: &str = "linear_x";
 const Y_ID: &str = "linear_y";
+
+const AXIS_MIN: f64 = 0.0;
+const AXIS_MAX: f64 = 100.0;
 
 type AxisId = &'static str;
 
@@ -14,10 +18,8 @@ fn main() -> iced::Result {
 }
 
 // --- Application State ---
-
 struct ExampleApp {
-    state: State<AxisId, f64>,
-
+    chart_state: State<AxisId, f64>,
     star_system: SolarSystem,
 }
 
@@ -33,27 +35,27 @@ impl ExampleApp {
         // Initialize axes 0-100 on both axis
         chart_state.set_axis(
             X_ID,
-            Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
+            Axis::new(Linear::new(AXIS_MIN, AXIS_MAX), axis::Position::Bottom),
         );
         chart_state.set_axis(
             Y_ID,
-            Axis::new(Linear::new(0.0, 100.0), axis::Position::Right),
+            Axis::new(Linear::new(AXIS_MIN, AXIS_MAX), axis::Position::Right),
         );
         (
             Self {
-                state: chart_state,
-                star_system: SolarSystem::new(vec![], 5.0),
+                chart_state,
+                star_system: SolarSystem::new(generate_values(100), 5.0),
             },
             Task::none(),
         )
     }
 
-    fn update(&mut self, message: Message) -> Task<Message> {
+    fn update(&mut self, _message: Message) -> Task<Message> {
         Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let chart = Chart::new(&self.state)
+        let chart = Chart::new(&self.chart_state)
             .layer(&self.star_system, X_ID, Y_ID)
             .on_drag(Message::ChartDragged);
         chart.into()
@@ -72,30 +74,27 @@ struct SolarSystem {
 }
 
 impl SolarSystem {
-    fn new(points: Vec<PlotPoint>, star_size: f64) -> Self {
-        SolarSystem { points, star_size }
+    const fn new(points: Vec<PlotPoint>, star_size: f64) -> Self {
+        Self { points, star_size }
     }
 }
 
 impl Items<f64> for SolarSystem {
-    fn draw(&self, plot: &mut iced_aksel::Plot<f64, iced::Renderer>, theme: &iced::Theme) {
+    fn draw(&self, plot: &mut iced_aksel::Plot<f64, iced::Renderer>, _theme: &iced::Theme) {
         // Prepare values
         let bounds = plot.bounds();
-        let filtered_star_points: Vec<&PlotPoint> =
-            self.points.iter().filter(|&v| bounds.contains(v)).collect();
 
         for point in &self.points {
             // Create 2D rect for culling
-            let rect = PlotRect::from_center(*point, self.star_size, self.star_size);
+            // let rect = PlotRect::from_center(*point, self.star_size, self.star_size);
 
             // Cull data out of visible range
-            if !bounds.intersects(&rect) {
-                continue;
-            }
+            // if !bounds.intersects(&rect) {
+            //     continue;
+            // }
 
             // Create shape
             let geometry = star_geometry(point, self.star_size);
-
             let shape = Polygon::new(geometry).fill(Color::WHITE);
 
             plot.add_shape(shape);
@@ -110,8 +109,8 @@ fn star_geometry(point: &PlotPoint, size: f64) -> Vec<PlotPoint> {
     let mut angle_offset = 0.0;
 
     for _ in 0..5 {
-        let x = point.x + size * angle.cos() * angle_offset;
-        let y = point.y + size * angle.sin() * angle_offset;
+        let x = (size * angle.cos()).mul_add(angle_offset, point.x);
+        let y = (size * angle.sin()).mul_add(angle_offset, point.y);
 
         points.push(PlotPoint::new(x, y));
 
@@ -119,4 +118,14 @@ fn star_geometry(point: &PlotPoint, size: f64) -> Vec<PlotPoint> {
     }
 
     points
+}
+
+fn generate_values(amount: usize) -> Vec<PlotPoint> {
+    let mut rng = rand::rng();
+    (0..amount)
+        .map(|_| PlotPoint {
+            x: rng.random_range(AXIS_MIN..=AXIS_MAX),
+            y: rng.random_range(AXIS_MIN..=AXIS_MAX),
+        })
+        .collect()
 }
