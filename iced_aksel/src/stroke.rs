@@ -7,11 +7,11 @@ use iced::Color;
 /// Strokes width will affect the look of each style
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StrokeStyle {
-    /// Will render solid lines, no gaps
+    /// Will render stroke as solid lines, no gaps
     Solid,
-    /// Will render dashed lines
+    /// Will render stroke as dashed lines
     Dashed,
-    /// Will render dotted lines
+    /// Will render stroke as dotted lines
     Dotted,
 }
 
