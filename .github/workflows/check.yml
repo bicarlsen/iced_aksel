@@ -28,7 +28,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Lint
-        run: cargo fmt -- --check --color-always
+        run: cargo fmt -- --check --color always
 
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
