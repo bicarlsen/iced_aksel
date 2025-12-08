@@ -24,7 +24,11 @@ pub use polyline::Polyline;
 pub use rectangle::Rectangle;
 pub use triangle::Triangle;
 
-/// A trait for unifying rendering across "primitives"
+/// A trait for creating shapes that can be rendered on a plot.
+///
+/// TODO: Comment, this will need a good example to see it in use. Especially the connection between
+/// tessellation and meshbuffer
+/// Should either use ctx.render_mesh() or ctx.render_text() for now
 pub trait Shape<D, Renderer = iced::Renderer>
 where
     D: Float,

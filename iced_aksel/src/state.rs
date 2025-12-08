@@ -6,13 +6,11 @@ use indexmap::IndexMap;
 
 use crate::Axis;
 
-// TODO: Check out if we need this again. Removed because of compilation error i dont understand
 #[derive(Default, Derivative)]
 #[derivative(Debug)]
+/// TODO: Document. Make big explanatory comments
 pub struct State<AxisId: Hash + Eq, Domain> {
     axes: IndexMap<AxisId, Axis<Domain>>,
-    // potentially more settings?
-    // and/or a history of what axis/series-id's we had last frame?
 }
 
 impl<AxisId, Domain> State<AxisId, Domain>
