@@ -28,8 +28,8 @@ enum Geometry<D> {
 /// equilateral triangles (via [`Triangle::equilateral`]).
 ///
 /// It utilizes a Hybrid Engine:
-/// - **Fill & Solid Stroke:** Uses manual vertex generation with miter-adjusted insets.
-/// - **Dashed/Dotted:** Falls back to Lyon.
+/// - **Fill & Solid Stroke:** Uses manual vertex generation with miter-adjusted insets. (very fast)
+/// - **Dashed/Dotted:** Falls back to Lyon (a lot slower at rendering tens of thousands).
 #[derive(Debug, Clone)]
 pub struct Triangle<D> {
     geometry: Geometry<D>,
@@ -50,7 +50,8 @@ impl<D: Float> Triangle<D> {
     //  Constructors
     // =========================================================================
 
-    /// Creates a generic triangle from three points in Plot Space.
+    /// Creates a generic triangle from three points in Plot Space. This will always scale with
+    /// chart zoom
     pub const fn new(p1: PlotPoint<D>, p2: PlotPoint<D>, p3: PlotPoint<D>) -> Self {
         Self {
             geometry: Geometry::Vertices([p1, p2, p3]),
