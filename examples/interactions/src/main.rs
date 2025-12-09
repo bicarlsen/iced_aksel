@@ -5,11 +5,11 @@ use iced::{
     keyboard,
     widget::{column, container, row, text},
 };
-use iced_aksel::shape::Polyline;
 use iced_aksel::{
     Axis, Chart, State, Stroke,
     axis::{self, GridLine, TickLine},
     plot::{Items, Plot},
+    shape::Polyline,
 };
 
 // -----------------------------------------------------------------------------
@@ -108,6 +108,8 @@ impl Interactions {
                     iced::mouse::ScrollDelta::Lines { y, .. }
                     | iced::mouse::ScrollDelta::Pixels { y, .. } => y,
                 };
+                // Positive Delta (Scroll Up) -> Zoom In (> 1.0)
+                // Negative Delta (Scroll Down) -> Zoom Out (< 1.0)
                 let factor = if delta_y > 0.0 { 1.10 } else { 0.90 };
 
                 // 2. Determine Targets (Default: X, Shift: Y, Ctrl: Both)
@@ -122,13 +124,13 @@ impl Interactions {
                 }
                 if zoom_y {
                     if let Some(axis) = self.state.get_axis_mut(&Self::AXIS_Y) {
-                        axis.scale_mut()
-                            .zoom(factor, Some(1.0 - cursor_norm.y as f64));
+                        axis.scale_mut().zoom(factor, Some(cursor_norm.y as f64));
                     }
                 }
             }
             Message::Dragged(delta) => {
-                // Pan Logic (Removed negative sign from delta.x)
+                // Pan Logic:
+                // We invert both axes to match the "Camera/Viewport" control feel requested.
                 self.state
                     .pan_scales(Self::AXIS_X, Self::AXIS_Y, delta.x as f64, delta.y as f64);
             }
@@ -139,6 +141,7 @@ impl Interactions {
 
                 if let (Some(x_ax), Some(y_ax)) = (x_axis, y_axis) {
                     let x = x_ax.scale().denormalize_opt(cursor_norm.x as f64);
+                    // Invert Y for denormalization to match Cartesian coordinates
                     let y = y_ax.scale().denormalize_opt(1.0 - cursor_norm.y as f64);
 
                     if let (Some(x), Some(y)) = (x, y) {
