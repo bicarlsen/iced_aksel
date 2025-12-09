@@ -121,8 +121,11 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressRectangles {
                     LengthMode::Screen => Length::Screen(self.stroke_width),
                     LengthMode::Plot => Length::Plot(self.stroke_width as f64),
                 };
-                rect =
-                    rect.stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
+                rect = rect.stroke(Stroke::with_style(
+                    Color::WHITE,
+                    thickness,
+                    self.stroke_style,
+                ));
             }
 
             if self.show_fill || self.show_stroke {
@@ -156,8 +159,11 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressCircles {
                     LengthMode::Screen => Length::Screen(self.stroke_width),
                     LengthMode::Plot => Length::Plot(self.stroke_width as f64),
                 };
-                circle = circle
-                    .stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
+                circle = circle.stroke(Stroke::with_style(
+                    Color::WHITE,
+                    thickness,
+                    self.stroke_style,
+                ));
             }
 
             if self.show_fill || self.show_stroke {
@@ -191,8 +197,11 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressTriangles {
                     LengthMode::Screen => Length::Screen(self.stroke_width),
                     LengthMode::Plot => Length::Plot(self.stroke_width as f64),
                 };
-                tri =
-                    tri.stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
+                tri = tri.stroke(Stroke::with_style(
+                    Color::WHITE,
+                    thickness,
+                    self.stroke_style,
+                ));
             }
 
             if self.show_fill || self.show_stroke {
@@ -230,7 +239,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressLines {
                 LengthMode::Plot => Length::Plot(self.stroke_width as f64),
             };
 
-            line.stroke = Stroke::new(color, thickness).with_style(self.stroke_style);
+            line.stroke = Stroke::with_style(color, thickness, self.stroke_style);
             line.arrow_start = self.arrow_start;
             line.arrow_end = self.arrow_end;
             line.extend_start = self.extend_start;
@@ -269,7 +278,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressPolylines {
                 LengthMode::Plot => Length::Plot(self.stroke_width as f64),
             };
 
-            poly.stroke = Stroke::new(color, thickness).with_style(self.stroke_style);
+            poly.stroke = Stroke::with_style(color, thickness, self.stroke_style);
             poly.arrow_start = self.arrow_start;
             poly.arrow_end = self.arrow_end;
             poly.extend_start = self.extend_start;
@@ -304,8 +313,11 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressArcs {
                     LengthMode::Screen => Length::Screen(self.stroke_width),
                     LengthMode::Plot => Length::Plot(self.stroke_width as f64),
                 };
-                arc =
-                    arc.stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
+                arc = arc.stroke(Stroke::with_style(
+                    Color::WHITE,
+                    thickness,
+                    self.stroke_style,
+                ));
             }
 
             if self.show_fill || self.show_stroke {
@@ -339,8 +351,11 @@ impl<R: plot::Renderer> plot::Items<f64, R> for StressPolygons {
                     LengthMode::Screen => Length::Screen(self.stroke_width),
                     LengthMode::Plot => Length::Plot(self.stroke_width as f64),
                 };
-                poly =
-                    poly.stroke(Stroke::new(Color::WHITE, thickness).with_style(self.stroke_style));
+                poly = poly.stroke(Stroke::with_style(
+                    Color::WHITE,
+                    thickness,
+                    self.stroke_style,
+                ));
             }
 
             if self.show_fill || self.show_stroke {
