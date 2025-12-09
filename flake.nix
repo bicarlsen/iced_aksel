@@ -25,14 +25,7 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
-        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default.override {
-          targets = [
-            "wasm32-unknown-unknown"
-            "x86_64-pc-windows-msvc"
-            "x86_64-unknown-linux-gnu"
-            "x86_64-apple-darwin"
-          ]; # Make sure we have all targets installed
-        };
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
       in
         with pkgs; {
           devShells.default = mkShell rec {
@@ -64,20 +57,21 @@
                 libGL
                 libxkbcommon
                 openssl
-                alsa-lib
               ]
               # Rust stuff (Cargo, rust-analyzer, rustfmt, clippy, etc.)
               ++ [rustToolchain]
               # If on linux
               ++ lib.optionals stdenv.isLinux [
+                alsa-lib
                 wayland
                 xorg.libX11
                 xorg.libXcursor
                 xorg.libXi
                 xorg.libXrandr
+                vulkan-loader
               ];
-            LD_LIBRARY_PATH =
-              builtins.foldl' (a: b: "${a}:${b}/lib") "${pkgs.vulkan-loader}/lib" buildInputs;
+
+            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 
             RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
           };

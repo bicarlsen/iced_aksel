@@ -1,0 +1,27 @@
+name: Update Flake Inputs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0" # Every Sunday at midnight UTC
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Update flake.lock
+        id: update
+        uses: DeterminateSystems/update-flake-lock@main
+        with:
+          pr-title: "nix: update flake inputs"
+          token: ${{ secrets.FLAKE_UPDATE_ACCESS_TOKEN }}
+
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash ${{ steps.update.outputs.pull-request-number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.FLAKE_UPDATE_ACCESS_TOKEN }}
