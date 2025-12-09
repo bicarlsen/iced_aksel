@@ -1,639 +1,343 @@
-//! Chart shape layer testing suite
-use std::fmt::Display;
-
 use aksel::{PlotPoint, scale::Linear};
 use iced::{
-    Color, Element, Length as UiLength, Point, Task, Theme,
-    mouse::ScrollDelta,
-    widget::{
-        Space, button, checkbox, column, combo_box, container, pick_list, row, slider, text,
-        text_input,
-    },
+    Color, Theme,
+    alignment::{Horizontal, Vertical},
 };
-use iced_aksel::{Axis, Chart, Length, Plot, State, Stroke, axis, plot, shape};
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use iced_aksel::{
+    Axis, Chart, Length, State,
+    axis::{self, GridLine},
+    plot::{Items, Plot},
+};
 
-const X_ID: &str = "linear_x";
-const Y_ID: &str = "linear_y";
+// Import all available shapes
+use iced_aksel::Stroke;
+use iced_aksel::shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle};
 
 type AxisId = &'static str;
 
-fn main() -> iced::Result {
-    ExampleApp::run()
+pub fn main() -> iced::Result {
+    iced::application(ShapeGallery::new, ShapeGallery::update, ShapeGallery::view)
+        .title("Shapes Gallery")
+        .antialiasing(true)
+        .run()
 }
 
-// --- Application State ---
-
-struct ExampleApp {
-    chart_state: State<AxisId, f64>,
-
-    // UI State
-    shapes_combo: combo_box::State<ShapeType>,
-
-    // Manual Input State for Colors (Strings)
-    input_stroke_r: String,
-    input_stroke_g: String,
-    input_stroke_b: String,
-
-    input_fill_r: String,
-    input_fill_g: String,
-    input_fill_b: String,
-
-    // Data & Configuration
-    env: TestingEnvironment,
+pub struct ShapeGallery {
+    state: State<AxisId, f64>,
 }
 
 #[derive(Debug, Clone)]
-enum Message {
-    // Chart Interactions
-    ChartClicked(Point<f32>),
-    ChartScrolled(Point<f32>, ScrollDelta),
-    ClearShapes,
-    UndoLastShape,
+pub enum Message {}
 
-    // Configuration Changes
-    ShapeChanged(ShapeType),
+impl ShapeGallery {
+    const X: &'static str = "X";
+    const Y: &'static str = "Y";
 
-    // Size Changes
-    SizeChanged(f32),
-    SizeUnitChanged(UnitType),
+    pub fn new() -> (Self, iced::Task<Message>) {
+        let mut state = State::new();
 
-    // Sector Specifics
-    SectorStartAngleChanged(f32),
-    SectorEndAngleChanged(f32),
-    SectorInnerRadiusChanged(f32),
+        // 1. Setup Canvas with ample padding for the grid
+        state.set_axis(
+            Self::X,
+            Axis::new(Linear::new(-15.0, 135.0), axis::Position::Bottom).invisible(),
+        );
 
-    // Style Changes
-    StrokeWidthChanged(f32),
-    StrokeWidthUnitChanged(UnitType),
-    FillEnabledChanged(bool),
+        state.set_axis(
+            Self::Y,
+            Axis::new(Linear::new(-10.0, 190.0), axis::Position::Left).invisible(),
+        );
 
-    // Color Input Changes
-    StrokeColorRChanged(String),
-    StrokeColorGChanged(String),
-    StrokeColorBChanged(String),
-    FillColorRChanged(String),
-    FillColorGChanged(String),
-    FillColorBChanged(String),
+        (Self { state }, iced::Task::none())
+    }
+
+    pub fn update(&mut self, _message: Message) -> iced::Task<Message> {
+        iced::Task::none()
+    }
+
+    pub fn view(&self) -> iced::Element<Message> {
+        Chart::new(&self.state).layer(self, Self::X, Self::Y).into()
+    }
 }
 
-impl ExampleApp {
-    fn init() -> (Self, Task<Message>) {
-        let mut chart_state = State::new();
+impl Items<f64> for ShapeGallery {
+    fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
+        let palette = theme.palette();
+        let text_color = palette.text;
 
-        // Initialize axes 0-100
-        chart_state.set_axis(
-            X_ID,
-            Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
-        );
-        chart_state.set_axis(
-            Y_ID,
-            Axis::new(Linear::new(0.0, 100.0), axis::Position::Right),
-        );
-
-        let env = TestingEnvironment::new();
-
-        (
-            Self {
-                chart_state,
-                shapes_combo: combo_box::State::new(ShapeType::iter().collect()),
-                input_stroke_r: "0.0".to_string(),
-                input_stroke_g: "0.0".to_string(),
-                input_stroke_b: "0.0".to_string(),
-                input_fill_r: "1.0".to_string(),
-                input_fill_g: "1.0".to_string(),
-                input_fill_b: "1.0".to_string(),
-                env,
-            },
-            Task::none(),
-        )
-    }
-
-    fn update(&mut self, message: Message) -> Task<Message> {
-        match message {
-            Message::ChartClicked(point) => {
-                if let (Some(x_axis), Some(y_axis)) = (
-                    self.chart_state.get_axis(&X_ID),
-                    self.chart_state.get_axis(&Y_ID),
-                ) {
-                    let plot_point = PlotPoint::new(
-                        x_axis.denormalize(point.x as f64),
-                        y_axis.denormalize(point.y as f64),
-                    );
-
-                    self.env.add_shape_at(plot_point);
-                }
-                Task::none()
-            }
-            Message::ChartScrolled(point, delta) => {
-                let y = match delta {
-                    ScrollDelta::Lines { y, .. } => y,
-                    ScrollDelta::Pixels { y, .. } => y / 15.0,
-                };
-
-                let factor = 1.05_f64.powf(y as f64);
-
-                if let Some(axis) = self.chart_state.get_axis_mut(&X_ID) {
-                    axis.scale_mut().zoom(factor, Some(point.x as f64));
-                }
-                if let Some(axis) = self.chart_state.get_axis_mut(&Y_ID) {
-                    axis.scale_mut().zoom(factor, Some(point.y as f64));
-                }
-                Task::none()
-            }
-            Message::ClearShapes => {
-                self.env.drawn_shapes.clear();
-                Task::none()
-            }
-            Message::UndoLastShape => {
-                self.env.drawn_shapes.pop();
-                Task::none()
-            }
-            Message::ShapeChanged(shape) => {
-                self.env.config.selected_shape = shape;
-                Task::none()
-            }
-            // Size Updates
-            Message::SizeChanged(size) => {
-                self.env.config.shape_size = size;
-                Task::none()
-            }
-            Message::SizeUnitChanged(unit) => {
-                self.env.config.shape_size_unit = unit;
-                Task::none()
-            }
-            // Sector Updates
-            Message::SectorStartAngleChanged(angle) => {
-                self.env.config.sector_start = angle;
-                Task::none()
-            }
-            Message::SectorEndAngleChanged(angle) => {
-                self.env.config.sector_end = angle;
-                Task::none()
-            }
-            Message::SectorInnerRadiusChanged(r) => {
-                self.env.config.sector_inner = r;
-                Task::none()
-            }
-            // Style Updates
-            Message::StrokeWidthChanged(width) => {
-                self.env.config.stroke_width = width;
-                Task::none()
-            }
-            Message::StrokeWidthUnitChanged(unit) => {
-                self.env.config.stroke_width_unit = unit;
-                Task::none()
-            }
-            Message::FillEnabledChanged(enabled) => {
-                self.env.config.fill_enabled = enabled;
-                Task::none()
-            }
-            // Color Updates
-            Message::StrokeColorRChanged(val) => {
-                self.input_stroke_r = val;
-                if let Ok(r) = self.input_stroke_r.parse::<f32>() {
-                    self.env.config.stroke_color.r = (r / 255.0).clamp(0.0, 1.0);
-                }
-                Task::none()
-            }
-            Message::StrokeColorGChanged(val) => {
-                self.input_stroke_g = val;
-                if let Ok(g) = self.input_stroke_g.parse::<f32>() {
-                    self.env.config.stroke_color.g = (g / 255.0).clamp(0.0, 1.0);
-                }
-                Task::none()
-            }
-            Message::StrokeColorBChanged(val) => {
-                self.input_stroke_b = val;
-                if let Ok(b) = self.input_stroke_b.parse::<f32>() {
-                    self.env.config.stroke_color.b = (b / 255.0).clamp(0.0, 1.0);
-                }
-                Task::none()
-            }
-            Message::FillColorRChanged(val) => {
-                self.input_fill_r = val;
-                if let Ok(r) = self.input_fill_r.parse::<f32>() {
-                    self.env.config.fill_color.r = (r / 255.0).clamp(0.0, 1.0);
-                }
-                Task::none()
-            }
-            Message::FillColorGChanged(val) => {
-                self.input_fill_g = val;
-                if let Ok(g) = self.input_fill_g.parse::<f32>() {
-                    self.env.config.fill_color.g = (g / 255.0).clamp(0.0, 1.0);
-                }
-                Task::none()
-            }
-            Message::FillColorBChanged(val) => {
-                self.input_fill_b = val;
-                if let Ok(b) = self.input_fill_b.parse::<f32>() {
-                    self.env.config.fill_color.b = (b / 255.0).clamp(0.0, 1.0);
-                }
-                Task::none()
-            }
-        }
-    }
-
-    fn view(&self) -> Element<'_, Message> {
-        // --- Control Panel ---
-        let mut controls = column![
-            text("Drawing Tool").size(18),
-            Space::new().height(UiLength::Fixed(10.0)),
-            // Tool Selection
-            container(column![
-                text("Tool:").size(14),
-                combo_box(
-                    &self.shapes_combo,
-                    "Select Tool",
-                    Some(&self.env.config.selected_shape),
-                    Message::ShapeChanged
-                )
-                .width(UiLength::Fill),
-            ])
-            .style(|_| container::Style {
-                background: Some(Color::from_rgb(0.15, 0.15, 0.15).into()),
-                ..Default::default()
-            })
-            .padding(10),
-            Space::new().height(UiLength::Fixed(10.0)),
-        ];
-
-        // --- Shape Specific Settings ---
-        let mut shape_settings = column![text("Shape Settings").size(14)];
-
-        // Common Size
-        shape_settings = shape_settings.push(column![
-            text(format!(
-                "Size (Radius/Width): {:.1}",
-                self.env.config.shape_size
-            )),
-            row![
-                slider(
-                    1.0..=100.0,
-                    self.env.config.shape_size,
-                    Message::SizeChanged
-                )
-                .step(0.5),
-                pick_list(
-                    UnitType::iter().collect::<Vec<_>>(),
-                    Some(self.env.config.shape_size_unit),
-                    Message::SizeUnitChanged
-                )
-                .width(UiLength::Shrink)
-            ]
-            .spacing(5)
-        ]);
-
-        // Specifics for Sector
-        if self.env.config.selected_shape == ShapeType::Sector {
-            shape_settings = shape_settings.push(Space::new().height(10));
-            shape_settings = shape_settings.push(text("Sector Angles (Deg)"));
-            shape_settings = shape_settings.push(
-                row![
-                    column![
-                        text(format!("Start: {:.0}", self.env.config.sector_start)).size(12),
-                        slider(
-                            0.0..=360.0,
-                            self.env.config.sector_start,
-                            Message::SectorStartAngleChanged
-                        ),
-                    ],
-                    column![
-                        text(format!("End: {:.0}", self.env.config.sector_end)).size(12),
-                        slider(
-                            0.0..=360.0,
-                            self.env.config.sector_end,
-                            Message::SectorEndAngleChanged
-                        ),
-                    ]
-                ]
-                .spacing(10),
+        // --- Helpers ---
+        let draw_row_label = |plot: &mut Plot<f64, iced::Renderer>, y: f64, title: &str| {
+            plot.add_shape(
+                Label::new(title, PlotPoint::new(-10.0, y))
+                    .size(14.0)
+                    .fill(text_color)
+                    .align(Horizontal::Left, Vertical::Center),
             );
-            shape_settings = shape_settings.push(column![
-                text(format!(
-                    "Inner Radius %: {:.0}",
-                    self.env.config.sector_inner
-                ))
-                .size(12),
-                slider(
-                    0.0..=90.0,
-                    self.env.config.sector_inner,
-                    Message::SectorInnerRadiusChanged
-                ),
-            ]);
-        }
+        };
 
-        controls = controls.push(
-            container(shape_settings)
-                .style(|_| container::Style {
-                    background: Some(Color::from_rgb(0.15, 0.15, 0.15).into()),
-                    ..Default::default()
-                })
-                .padding(10),
+        let draw_col_header = |plot: &mut Plot<f64, iced::Renderer>, x: f64, title: &str| {
+            plot.add_shape(
+                Label::new(title, PlotPoint::new(x, 180.0))
+                    .size(12.0)
+                    .fill(text_color)
+                    .align(Horizontal::Center, Vertical::Bottom),
+            );
+        };
+
+        // --- Column Headers ---
+        draw_col_header(plot, 25.0, "Plot\nFilled");
+        draw_col_header(plot, 50.0, "Plot\nStroked");
+        draw_col_header(plot, 75.0, "Fixed Px\nFilled");
+        draw_col_header(plot, 100.0, "Fixed Px\nStroked");
+
+        // =========================================================
+        //  ROW 1: RECTANGLES (Y = 160)
+        // =========================================================
+        let y = 160.0;
+        draw_row_label(plot, y, "Rect");
+
+        plot.add_shape(
+            Rectangle::new(
+                PlotPoint::new(25.0, y),
+                Length::Plot(12.0),
+                Length::Plot(12.0),
+            )
+            .fill(palette.primary),
         );
 
-        controls = controls.push(Space::new().height(UiLength::Fixed(10.0)));
-
-        // --- Style Settings ---
-        let style_settings = column![
-            text("Style Settings").size(14),
-            // Stroke
-            text(format!("Stroke Width: {:.1}", self.env.config.stroke_width)),
-            row![
-                slider(
-                    0.0..=20.0,
-                    self.env.config.stroke_width,
-                    Message::StrokeWidthChanged
-                )
-                .step(0.1),
-                pick_list(
-                    UnitType::iter().collect::<Vec<_>>(),
-                    Some(self.env.config.stroke_width_unit),
-                    Message::StrokeWidthUnitChanged
-                )
-                .width(UiLength::Shrink)
-            ]
-            .spacing(5),
-            text("Stroke Color (RGB):"),
-            row![
-                text_input("R", &self.input_stroke_r)
-                    .on_input(Message::StrokeColorRChanged)
-                    .width(UiLength::Fill),
-                text_input("G", &self.input_stroke_g)
-                    .on_input(Message::StrokeColorGChanged)
-                    .width(UiLength::Fill),
-                text_input("B", &self.input_stroke_b)
-                    .on_input(Message::StrokeColorBChanged)
-                    .width(UiLength::Fill),
-            ]
-            .spacing(5),
-            Space::new().height(10),
-            // Fill
-            checkbox(self.env.config.fill_enabled).on_toggle(Message::FillEnabledChanged),
-            text("Fill Color (RGB):"),
-            row![
-                text_input("R", &self.input_fill_r)
-                    .on_input(Message::FillColorRChanged)
-                    .width(UiLength::Fill),
-                text_input("G", &self.input_fill_g)
-                    .on_input(Message::FillColorGChanged)
-                    .width(UiLength::Fill),
-                text_input("B", &self.input_fill_b)
-                    .on_input(Message::FillColorBChanged)
-                    .width(UiLength::Fill),
-            ]
-            .spacing(5),
-        ];
-
-        controls = controls.push(
-            container(style_settings)
-                .style(|_| container::Style {
-                    background: Some(Color::from_rgb(0.15, 0.15, 0.15).into()),
-                    ..Default::default()
-                })
-                .padding(10),
+        plot.add_shape(
+            Rectangle::new(
+                PlotPoint::new(50.0, y),
+                Length::Plot(12.0),
+                Length::Plot(12.0),
+            )
+            .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
         );
 
-        controls = controls.push(Space::new().height(UiLength::Fixed(20.0)));
-
-        // --- Actions ---
-        controls = controls.push(
-            row![
-                button("Undo")
-                    .on_press(Message::UndoLastShape)
-                    .width(UiLength::Fill),
-                button("Clear All")
-                    .on_press(Message::ClearShapes)
-                    .width(UiLength::Fill),
-            ]
-            .spacing(10),
+        plot.add_shape(
+            Rectangle::new(
+                PlotPoint::new(75.0, y),
+                Length::Screen(25.0),
+                Length::Screen(25.0),
+            )
+            .fill(palette.success),
         );
 
-        controls = controls.padding(10).spacing(10).width(300);
+        plot.add_shape(
+            Rectangle::new(
+                PlotPoint::new(100.0, y),
+                Length::Screen(25.0),
+                Length::Screen(25.0),
+            )
+            .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+        );
 
-        // --- Chart ---
-        let chart = Chart::new(&self.chart_state)
-            .layer(&self.env, X_ID, Y_ID)
-            .on_click(Message::ChartClicked)
-            .on_scroll(Message::ChartScrolled);
+        // =========================================================
+        //  ROW 2: CIRCLES (Y = 135)
+        // =========================================================
+        let y = 135.0;
+        draw_row_label(plot, y, "Circle");
 
-        // --- Layout ---
-        container(row![controls, chart]).padding(20).into()
-    }
+        plot.add_shape(
+            Circle::new(PlotPoint::new(25.0, y), Length::Plot(6.0)).fill(palette.primary),
+        );
 
-    fn run() -> iced::Result {
-        iced::application(Self::init, Self::update, Self::view)
-            .theme(Theme::Dark)
-            .antialiasing(true)
-            .run()
-    }
-}
+        plot.add_shape(
+            Circle::new(PlotPoint::new(50.0, y), Length::Plot(6.0))
+                .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+        );
 
-// --- Enums ---
+        plot.add_shape(
+            Circle::new(PlotPoint::new(75.0, y), Length::Screen(12.0)).fill(palette.success),
+        );
 
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
-enum ShapeType {
-    Rectangle,
-    Circle,
-    Triangle,
-    Sector,
-    Polygon, // Used as Diamond Marker for now
-}
+        plot.add_shape(
+            Circle::new(PlotPoint::new(100.0, y), Length::Screen(12.0))
+                .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+        );
 
-impl Display for ShapeType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ShapeType::Polygon => write!(f, "Strange Polygon (Irregular)"),
-            ShapeType::Sector => write!(f, "Sector (Pie/Donut)"),
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
+        // =========================================================
+        //  ROW 3: ARCS (Y = 110)
+        // =========================================================
+        let y = 110.0;
+        draw_row_label(plot, y, "Arc");
 
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
-enum UnitType {
-    Screen,
-    Plot,
-}
+        plot.add_shape(
+            Arc::new(PlotPoint::new(25.0, y), Length::Plot(7.0), 0.0, 4.0).fill(palette.primary),
+        );
 
-impl Display for UnitType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnitType::Screen => write!(f, "Screen"),
-            UnitType::Plot => write!(f, "Plot"),
-        }
-    }
-}
+        plot.add_shape(
+            Arc::new(PlotPoint::new(50.0, y), Length::Plot(7.0), 0.0, 4.0)
+                .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+        );
 
-// --- Tool Configuration (The Brush) ---
+        plot.add_shape(
+            Arc::new(PlotPoint::new(75.0, y), Length::Screen(14.0), 0.0, 4.0).fill(palette.success),
+        );
 
-#[derive(Debug, Clone)]
-struct ToolConfig {
-    selected_shape: ShapeType,
-    shape_size: f32,
-    shape_size_unit: UnitType,
+        plot.add_shape(
+            Arc::new(PlotPoint::new(100.0, y), Length::Screen(14.0), 0.0, 4.0)
+                .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+        );
 
-    // Sector Specifics
-    sector_start: f32,
-    sector_end: f32,
-    sector_inner: f32, // Percent (0-90)
+        // =========================================================
+        //  ROW 4: TRIANGLES (Y = 85)
+        //  Using both vertex-defined and center/radius constructors
+        // =========================================================
+        let y = 85.0;
+        draw_row_label(plot, y, "Triangle");
 
-    stroke_width: f32,
-    stroke_width_unit: UnitType,
-    stroke_color: Color,
+        // 1. Plot Filled (Vertices)
+        plot.add_shape(
+            Triangle::new(
+                PlotPoint::new(20.0, y - 5.0),
+                PlotPoint::new(30.0, y - 5.0),
+                PlotPoint::new(25.0, y + 5.0),
+            )
+            .fill(palette.primary),
+        );
 
-    fill_enabled: bool,
-    fill_color: Color,
-}
+        // 2. Plot Stroked (Vertices)
+        plot.add_shape(
+            Triangle::new(
+                PlotPoint::new(45.0, y - 5.0),
+                PlotPoint::new(55.0, y - 5.0),
+                PlotPoint::new(50.0, y + 5.0),
+            )
+            .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+        );
 
-impl Default for ToolConfig {
-    fn default() -> Self {
-        Self {
-            selected_shape: ShapeType::Rectangle,
-            shape_size: 20.0,
-            shape_size_unit: UnitType::Plot,
+        // 3. Fixed Px Filled (Equilateral)
+        plot.add_shape(
+            Triangle::equilateral(
+                PlotPoint::new(75.0, y),
+                Length::Screen(14.0), // Radius in pixels
+            )
+            .fill(palette.success),
+        );
 
-            sector_start: 0.0,
-            sector_end: 270.0,
-            sector_inner: 0.0,
+        // 4. Fixed Px Stroked (Equilateral)
+        plot.add_shape(
+            Triangle::equilateral(PlotPoint::new(100.0, y), Length::Screen(14.0))
+                .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+        );
 
-            stroke_width: 2.0,
-            stroke_width_unit: UnitType::Screen,
-            stroke_color: Color::BLACK,
+        // =========================================================
+        //  ROW 5: POLYGONS (Y = 60)
+        // =========================================================
+        let y = 60.0;
+        draw_row_label(plot, y, "Polygon");
 
-            fill_enabled: true,
-            fill_color: Color::WHITE,
-        }
-    }
-}
+        let poly_pts = |cx: f64| {
+            vec![
+                PlotPoint::new(cx, y + 5.0),
+                PlotPoint::new(cx + 4.0, y + 2.0),
+                PlotPoint::new(cx + 2.0, y - 5.0),
+                PlotPoint::new(cx - 2.0, y - 5.0),
+                PlotPoint::new(cx - 4.0, y + 2.0),
+            ]
+        };
 
-// --- Data Handler / Environment ---
+        // 1. Filled
+        plot.add_shape(Polygon::new(poly_pts(25.0)).fill(palette.primary));
 
-struct PlacedShape {
-    shape_type: ShapeType,
-    position: PlotPoint,
-}
+        // 2. Stroked
+        plot.add_shape(
+            Polygon::new(poly_pts(50.0)).stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+        );
 
-struct TestingEnvironment {
-    // Current Settings (The "Brush")
-    pub config: ToolConfig,
+        // Polygons are purely vertex based, so "Fixed Px" isn't standard
+        plot.add_shape(
+            Label::new("N/A", PlotPoint::new(75.0, y))
+                .size(10.0)
+                .fill(Color::from_rgb(0.5, 0.5, 0.5)),
+        );
+        plot.add_shape(
+            Label::new("N/A", PlotPoint::new(100.0, y))
+                .size(10.0)
+                .fill(Color::from_rgb(0.5, 0.5, 0.5)),
+        );
 
-    // Persistent Storage
-    pub drawn_shapes: Vec<PlacedShape>,
-}
+        // =========================================================
+        //  ROW 6: LINES / POLYLINES (Y = 35)
+        // =========================================================
+        let y = 35.0;
+        draw_row_label(plot, y, "Path");
 
-impl TestingEnvironment {
-    fn new() -> Self {
-        Self {
-            config: ToolConfig::default(),
-            drawn_shapes: Vec::new(),
-        }
-    }
+        plot.add_shape(
+            Label::new("N/A", PlotPoint::new(25.0, y))
+                .size(10.0)
+                .fill(Color::from_rgb(0.5, 0.5, 0.5)),
+        );
 
-    fn add_shape_at(&mut self, point: PlotPoint) {
-        self.drawn_shapes.push(PlacedShape {
-            shape_type: self.config.selected_shape,
-            position: point,
-        });
-    }
-}
+        // 2. Plot Stroke
+        let zigzag = |cx: f64| {
+            vec![
+                PlotPoint::new(cx - 5.0, y),
+                PlotPoint::new(cx - 2.0, y + 5.0),
+                PlotPoint::new(cx + 2.0, y - 5.0),
+                PlotPoint::new(cx + 5.0, y),
+            ]
+        };
 
-impl<R: plot::Renderer> plot::Items<f64, R> for TestingEnvironment {
-    fn draw(&self, plot: &mut Plot<'_, f64, R>, _theme: &Theme) {
-        for item in &self.drawn_shapes {
-            let size = match self.config.shape_size_unit {
-                UnitType::Screen => Length::Screen(self.config.shape_size),
-                UnitType::Plot => Length::Plot(self.config.shape_size as f64),
-            };
+        // Note: Lines don't use .stroke() builder, they take it in constructor
+        plot.add_shape(Polyline::new(
+            zigzag(50.0),
+            Stroke::new(palette.primary, Length::Plot(1.0)),
+        ));
 
-            let stroke_width = match self.config.stroke_width_unit {
-                UnitType::Screen => Length::Screen(self.config.stroke_width),
-                UnitType::Plot => Length::Plot(self.config.stroke_width as f64),
-            };
+        plot.add_shape(
+            Label::new("N/A", PlotPoint::new(75.0, y))
+                .size(10.0)
+                .fill(Color::from_rgb(0.5, 0.5, 0.5)),
+        );
 
-            let stroke = Stroke::new(self.config.stroke_color, stroke_width);
+        // 4. Fixed Stroke
+        plot.add_shape(Polyline::new(
+            zigzag(100.0),
+            Stroke::new(palette.success, Length::Screen(3.0)),
+        ));
 
-            match item.shape_type {
-                ShapeType::Rectangle => {
-                    let mut rect = shape::Rectangle::new(item.position, size, size).stroke(stroke);
-                    if self.config.fill_enabled {
-                        rect = rect.fill(self.config.fill_color);
-                    }
-                    plot.add_shape(rect);
-                }
-                ShapeType::Circle => {
-                    let mut circ = shape::Circle::new(item.position, size).stroke(stroke);
-                    if self.config.fill_enabled {
-                        circ = circ.fill(self.config.fill_color);
-                    }
-                    plot.add_shape(circ);
-                }
-                ShapeType::Triangle => {
-                    let mut tri = shape::Triangle::equilateral(item.position, size).stroke(stroke);
-                    if self.config.fill_enabled {
-                        tri = tri.fill(self.config.fill_color);
-                    }
-                    plot.add_shape(tri);
-                }
-                ShapeType::Sector => {
-                    let mut sec = shape::Arc::new(
-                        item.position,
-                        size,
-                        self.config.sector_start,
-                        self.config.sector_end,
-                    )
-                    .stroke(stroke);
+        // =========================================================
+        //  ROW 7: LABELS (Y = 10)
+        // =========================================================
+        let y = 10.0;
+        draw_row_label(plot, y, "Label");
 
-                    if self.config.sector_inner > 0.0 {
-                        let percent = self.config.sector_inner as f64 / 100.0;
-                        let inner = match size {
-                            Length::Screen(px) => Length::Screen(px * percent as f32),
-                            Length::Plot(u) => Length::Plot(u * percent),
-                        };
-                        sec = sec.inner_radius(inner);
-                    }
+        // 1. Basic
+        plot.add_shape(
+            Label::new("Text", PlotPoint::new(25.0, y))
+                .fill(palette.primary)
+                .size(14.0),
+        );
 
-                    if self.config.fill_enabled {
-                        sec = sec.fill(self.config.fill_color);
-                    }
-                    plot.add_shape(sec);
-                }
-                ShapeType::Polygon => {
-                    // Generates a "Strange" Irregular Polygon anchored at the click point
-                    // Scale is derived from the "Shape Size" slider
-                    let scale = match self.config.shape_size_unit {
-                        UnitType::Plot => self.config.shape_size as f64,
-                        UnitType::Screen => self.config.shape_size as f64 * 0.1, // Heuristic scale
-                    };
+        // 2. Alignment Test
+        plot.add_shape(
+            Rectangle::new(
+                PlotPoint::new(50.0, y),
+                Length::Screen(4.0),
+                Length::Screen(4.0),
+            )
+            .fill(Color::BLACK),
+        );
+        plot.add_shape(
+            Label::new("Top Left", PlotPoint::new(50.0, y))
+                .fill(palette.primary)
+                .size(10.0)
+                .align(Horizontal::Left, Vertical::Top),
+        );
 
-                    // An irregular shape with a reflex angle (dent) to test offset logic
-                    let points = vec![
-                        PlotPoint::new(item.position.x, item.position.y), // Anchor
-                        PlotPoint::new(
-                            item.position.x + scale * 2.0,
-                            item.position.y + scale * 0.5,
-                        ),
-                        PlotPoint::new(
-                            item.position.x + scale * 1.0,
-                            item.position.y + scale * 3.0,
-                        ),
-                        PlotPoint::new(
-                            item.position.x - scale * 1.5,
-                            item.position.y + scale * 1.0,
-                        ),
-                        PlotPoint::new(
-                            item.position.x - scale * 0.5,
-                            item.position.y + scale * 0.5,
-                        ), // The Dent
-                    ];
-                    let mut poly = shape::Polygon::new(points).stroke(stroke);
-                    if self.config.fill_enabled {
-                        poly = poly.fill(self.config.fill_color);
-                    }
-                    plot.add_shape(poly);
-                }
-            }
-        }
+        // 3. Fixed Size (Large)
+        plot.add_shape(
+            Label::new("Big", PlotPoint::new(75.0, y))
+                .fill(palette.success)
+                .size(24.0),
+        );
+
+        // 4. Fixed Size (Small)
+        plot.add_shape(
+            Label::new("Tiny", PlotPoint::new(100.0, y))
+                .fill(palette.success)
+                .size(8.0),
+        );
     }
 }
