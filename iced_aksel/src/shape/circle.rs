@@ -11,11 +11,15 @@ use iced::{
 use lyon::geom::Arc;
 use lyon::math::{Angle, Point, Vector};
 
-/// A circle shape defined by a center and a radius.
+/// A circle shape defined by a center point and a radius.
 ///
-/// This shape uses a Hybrid Engine:
-/// - **Fill & Solid Stroke:** Uses manual, zero-allocation vertex generation (Triangle Fan/Strip).
-/// - **Dashed/Dotted:** Falls back to Lyon for complex path generation.
+/// # Rendering Strategy (Hybrid Engine)
+/// This shape utilizes a dual-path rendering strategy for maximum performance:
+/// * **Manual Tessellation (Fast Path):** For solid fills and solid strokes, vertices are
+///   generated directly on the CPU using trigonometric lookups (Triangle Fan/Strip). This avoids
+///   all memory allocations associated with path builders.
+/// * **Lyon Tessellation (Robust Path):** For dashed or dotted strokes, the shape falls back to
+///   Lyon's tessellator to handle the complex path events correctly. (significantly slower when rendering thousands)
 #[derive(Debug, Clone)]
 pub struct Circle<D> {
     pub center: PlotPoint<D>,
@@ -37,6 +41,11 @@ impl<D: Float> Circle<D> {
     //  Constructors
     // =========================================================================
 
+    /// Creates a new `Circle`.
+    ///
+    /// # Arguments
+    /// * `center` - The position of the center in Plot coordinates.
+    /// * `radius` - The radius, either in fixed Screen pixels or scalable Plot units.
     pub const fn new(center: PlotPoint<D>, radius: Length<D>) -> Self {
         Self {
             center,
@@ -50,12 +59,14 @@ impl<D: Float> Circle<D> {
     //  Builder Methods
     // =========================================================================
 
+    /// Sets the fill color.
     #[inline]
     pub const fn fill(mut self, color: Color) -> Self {
         self.fill = Some(color);
         self
     }
 
+    /// Sets the stroke style.
     #[inline]
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
@@ -63,7 +74,7 @@ impl<D: Float> Circle<D> {
     }
 
     // =========================================================================
-    //  Hybrid Tessellation Logic
+    //  Tessellation Logic
     // =========================================================================
 
     fn tessellate(
@@ -72,21 +83,30 @@ impl<D: Float> Circle<D> {
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
-        // 1. Resolve Geometry
+        // 1. Resolve Geometry to Screen Space
         let cx = transform.x_to_screen(&self.center.x);
         let cy = transform.y_to_screen(&self.center.y);
 
-        // Calculate Radius in Pixels
+        // Calculate Radius in Pixels.
+        // We use the MINIMUM of X and Y scales.
+        // This ensures the marker remains a perfect circle that fits within its
+        // data bounds, even if the aspect ratio is skewed.
         let r = match self.radius {
             Length::Screen(pixels) => pixels,
             Length::Plot(units) => {
-                let p0 = transform.x_to_screen(&D::zero());
-                let p1 = transform.x_to_screen(&units);
-                (p1 - p0).abs()
+                let x0 = transform.x_to_screen(&D::zero());
+                let x1 = transform.x_to_screen(&units);
+                let dx = (x1 - x0).abs();
+
+                let y0 = transform.y_to_screen(&D::zero());
+                let y1 = transform.y_to_screen(&units);
+                let dy = (y1 - y0).abs();
+
+                dx.min(dy)
             }
         };
 
-        // Cull tiny circles (sub-pixel)
+        // Cull sub-pixel circles to save GPU cycles
         if r < 0.5 {
             return;
         }
@@ -96,12 +116,18 @@ impl<D: Float> Circle<D> {
             let width = match stroke.thickness {
                 Length::Screen(w) => w,
                 Length::Plot(w) => {
-                    let p0 = transform.x_to_screen(&D::zero());
-                    let p1 = transform.x_to_screen(&w);
-                    (p1 - p0).abs()
+                    let x0 = transform.x_to_screen(&D::zero());
+                    let x1 = transform.x_to_screen(&w);
+                    let dx = (x1 - x0).abs();
+
+                    let y0 = transform.y_to_screen(&D::zero());
+                    let y1 = transform.y_to_screen(&w);
+                    let dy = (y1 - y0).abs();
+
+                    dx.min(dy)
                 }
             };
-            // Optimization: Ignore invisible strokes
+            // Optimization: Ignore effectively invisible strokes
             if width < 0.1 {
                 None
             } else {
@@ -112,13 +138,15 @@ impl<D: Float> Circle<D> {
         };
 
         // 3. Rule 2: Geometric Stability (Consumption Check)
+        // If the stroke is thicker than the radius, the inner hole vanishes.
+        // We must switch to a solid fill to prevent geometric inversion artifacts.
         let is_consumed = if let Some((width, _)) = maybe_stroke_data {
             width >= r
         } else {
             false
         };
 
-        // FAST PATH: Shape is fully consumed. Render one solid circle.
+        // FAST PATH: Shape is consumed. Render as a single solid circle.
         if is_consumed {
             if let Some((_, stroke)) = maybe_stroke_data {
                 self.add_solid_circle(buffer, cx, cy, r, stroke.fill);
@@ -128,8 +156,9 @@ impl<D: Float> Circle<D> {
 
         // 4. Render Fill (Manual Optimized)
         if let Some(color) = self.fill {
-            // Rule 3: Anti-Aliasing Polish (Bleed)
-            // Deflate slightly if a stroke exists.
+            // Rule 3: Anti-Aliasing Polish (Bleed Fix)
+            // If a stroke exists, we deflate the fill radius slightly (0.5px)
+            // to tuck it under the stroke, preventing background bleed-through.
             let fill_r = if maybe_stroke_data.is_some() {
                 (r - 0.5).max(0.0)
             } else {
@@ -146,15 +175,17 @@ impl<D: Float> Circle<D> {
             match stroke.style {
                 StrokeStyle::Solid => {
                     // MANUAL PATH (Ring)
-                    // Rule 1: Inner Stroke Alignment (Outer = r, Inner = r - width)
-                    // We know width < r because of the Consumption Check above.
+                    // Rule 1: Inner Stroke Alignment.
+                    // The stroke grows inward from the radius.
+                    // Outer Edge = r, Inner Edge = r - width.
                     let inner_r = r - width;
                     let outer_r = r;
                     self.add_solid_ring(buffer, cx, cy, inner_r, outer_r, stroke.fill);
                 }
                 StrokeStyle::Dashed | StrokeStyle::Dotted => {
                     // LYON PATH (Dashed)
-                    // Rule 1: Inner Stroke Alignment (Path is center of stroke)
+                    // Rule 1: Inner Stroke Alignment.
+                    // Lyon strokes are centered on the path. We offset the path inward by half-width.
                     let stroke_radius = r - (width / 2.0);
                     if stroke_radius > 0.1 {
                         let center = Point::new(cx, cy);
@@ -166,13 +197,12 @@ impl<D: Float> Circle<D> {
                             x_rotation: Angle::radians(0.0),
                         };
 
-                        // We use a coarser tolerance for dashes to keep performance reasonable
                         tess.stroke_polyline(
                             buffer,
-                            arc.flattened(0.2), // 0.2 tolerance is usually fine for dashes
+                            arc.flattened(0.2), // Coarse tolerance is fine for dashes
                             stroke,
                             width,
-                            true,
+                            true, // Closed path
                         );
                     }
                 }
@@ -182,17 +212,18 @@ impl<D: Float> Circle<D> {
 
     // --- Manual Tessellation Helpers ---
 
-    /// Generates a "Triangle Fan" for a solid circle.
+    /// Generates a **Triangle Fan** for a solid circle.
+    ///
+    /// This is highly optimized for memory, allocating zero intermediate buffers
+    /// and writing directly to the MeshBuffer.
     fn add_solid_circle(&self, buffer: &mut MeshBuffer, cx: f32, cy: f32, r: f32, color: Color) {
         let packed_color = pack(color);
 
-        // Level of Detail (Improved):
-        // Increased multiplier to 2.0 (from 0.7) and min/max limits.
-        // Example: Radius 25px -> 50 segments (was 17).
+        // Level of Detail (LOD):
+        // Scale segment count with radius to maintain smoothness without wasting triangles on dots.
+        // Range: 24 segments (small) to 128 segments (large).
         let segments = (r * 2.0).max(24.0).min(128.0) as usize;
 
-        // Center vertex
-        // We push the center first. It will be index 0 relative to this batch.
         let start_offset = buffer.vertices_count() as u32;
         let mut vertices = Vec::with_capacity(segments + 2); // Center + perimeter
         let mut indices = Vec::with_capacity(segments * 3);
@@ -203,26 +234,21 @@ impl<D: Float> Circle<D> {
             color: packed_color,
         });
 
-        // 2. Generate Perimeter Vertices
+        // 2. Generate Perimeter Vertices & Indices
         let step = std::f32::consts::TAU / segments as f32;
         for i in 0..=segments {
-            // Note: We go to <= segments to duplicate the first point at the end
-            // to close the loop easily, or we can use modulo logic.
-            // Modulo logic is cleaner for memory.
-
-            // Optimization: Compute angle only up to segments-1
+            // Only generate N unique vertices (last one wraps to first)
             if i < segments {
                 let theta = i as f32 * step;
                 let (sin, cos) = theta.sin_cos();
-
                 vertices.push(SolidVertex2D {
                     position: [cx + cos * r, cy + sin * r],
                     color: packed_color,
                 });
             }
 
-            // 3. Generate Indices (Fan)
-            // Triangle: Center (0), Current (i+1), Next (i+2 or wrap to 1)
+            // Generate Triangle Fan Indices
+            // Center(0) -> Current(i+1) -> Next(i+2 or wrap to 1)
             if i < segments {
                 let center_idx = 0;
                 let current_idx = (i + 1) as u32;
@@ -231,17 +257,17 @@ impl<D: Float> Circle<D> {
                 } else {
                     current_idx + 1
                 };
-
                 indices.push(center_idx);
                 indices.push(current_idx);
                 indices.push(next_idx);
             }
         }
-
         buffer.add(&indices, &vertices);
     }
 
-    /// Generates a "Triangle Strip" for a solid ring (annulus).
+    /// Generates a **Triangle Strip** for a solid ring (annulus).
+    ///
+    /// Used for drawing solid strokes efficiently.
     fn add_solid_ring(
         &self,
         buffer: &mut MeshBuffer,
@@ -252,38 +278,33 @@ impl<D: Float> Circle<D> {
         color: Color,
     ) {
         let packed_color = pack(color);
-
-        // Use outer radius for LOD calc (Improved)
         let segments = (r_outer * 2.0).max(24.0).min(128.0) as usize;
 
         let mut vertices = Vec::with_capacity(segments * 2);
         let mut indices = Vec::with_capacity(segments * 6); // 2 triangles per segment
-
         let step = std::f32::consts::TAU / segments as f32;
 
-        // 1. Generate Vertices (Inner and Outer pairs)
+        // 1. Generate Vertex Pairs (Inner + Outer)
         for i in 0..segments {
             let theta = i as f32 * step;
             let (sin, cos) = theta.sin_cos();
 
-            // Inner Vertex (Index 2*i)
             vertices.push(SolidVertex2D {
                 position: [cx + cos * r_inner, cy + sin * r_inner],
                 color: packed_color,
             });
-
-            // Outer Vertex (Index 2*i + 1)
             vertices.push(SolidVertex2D {
                 position: [cx + cos * r_outer, cy + sin * r_outer],
                 color: packed_color,
             });
         }
 
-        // 2. Generate Indices (Quads formed by 2 triangles)
+        // 2. Stitch Quads
         for i in 0..segments {
             let i = i as u32;
             let next_i = (i + 1) % segments as u32;
 
+            // Vertex Layout: [Inner0, Outer0, Inner1, Outer1...]
             let inner_current = i * 2;
             let outer_current = i * 2 + 1;
             let inner_next = next_i * 2;
@@ -299,7 +320,6 @@ impl<D: Float> Circle<D> {
             indices.push(outer_next);
             indices.push(inner_next);
         }
-
         buffer.add(&indices, &vertices);
     }
 }
