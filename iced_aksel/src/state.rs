@@ -8,7 +8,34 @@ use crate::Axis;
 
 #[derive(Default, Derivative)]
 #[derivative(Debug)]
-/// TODO: Document. Make big explanatory comments
+/// Manages the configuration and runtime state of chart axes.
+///
+/// `State` acts as the central registry for all active axes. It provides methods to
+/// register, access, and manipulate axes using unique identifiers. Additionally,
+/// it offers helper functions to facilitate coordinate transformations and interaction.
+///
+/// This struct is designed to be stored in your application's model (persisting across frames)
+/// and passed by reference to the `Chart` widget during the view/render phase.
+///
+/// # Example
+///
+/// ```rust
+/// use my_crate::{State, Axis, axis, Chart};
+///
+/// // 1. Initialize the state (store this in your app struct)
+/// let mut chart_state = State::new()
+///     .with_axis(
+///         "x_axis_id",
+///         Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
+///     )
+///     .with_axis(
+///         "y_axis_id",
+///         Axis::new(Linear::new(0.0, 100.0), axis::Position::Right),
+///     );
+///
+/// // 2. Pass the state to the Chart during rendering
+/// let chart = Chart::new(&chart_state);
+/// ```
 pub struct State<AxisId: Hash + Eq, Domain> {
     axes: IndexMap<AxisId, Axis<Domain>>,
 }
@@ -24,18 +51,18 @@ where
         }
     }
 
-    /// Get a read-only reference to the axes.
-    pub const fn get_axes(&self) -> &IndexMap<AxisId, Axis<D>> {
-        &self.axes
-    }
-
     /// Builder style: `State::new().with_axis(...)`
     pub fn with_axis(mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Self {
         self.axes.insert(id.into(), axis);
         self
     }
 
-    /// Takes in a Id and Axis. Replace the axis if it exists.
+    /// Get a read-only reference to the axes.
+    pub const fn get_axes(&self) -> &IndexMap<AxisId, Axis<D>> {
+        &self.axes
+    }
+
+    /// Takes in a Id and Axis. Replaces the axis if it exists.
     pub fn set_axis(&mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Option<Axis<D>> {
         self.axes.insert(id.into(), axis)
     }

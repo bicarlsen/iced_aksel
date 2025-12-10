@@ -32,7 +32,15 @@ enum Message {
 
 impl ExampleApp {
     fn init() -> (Self, Task<Message>) {
-        let mut chart_state = State::new();
+        let mut chart_state = State::new()
+            .with_axis(
+                "x_axis_id",
+                Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
+            )
+            .with_axis(
+                "y_axis_id",
+                Axis::new(Linear::new(0.0, 100.0), axis::Position::Right),
+            );
 
         // Initialize axes 0-100 on both axis
         chart_state.set_axis(
