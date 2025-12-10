@@ -58,21 +58,30 @@ impl Interactions {
         // Setup Axes
         state.set_axis(
             Self::AXIS_X,
-            Axis::new(Linear::new(0.0, 10.0), axis::Position::Bottom)
-                .with_tick_renderer(|ctx| Some(TickLine::simple(format!("{:.1}s", ctx.tick.value))))
-                .skip_overlapping_labels(8.0),
+            Axis::new(Linear::new(0.0, 10.0), axis::Position::Bottom).with_tick_renderer(|ctx| {
+                match ctx.tick.level {
+                    0 => Some(TickLine::simple(format!("{:.1}s", ctx.tick.value))),
+                    _ => None,
+                }
+            }),
         );
 
         state.set_axis(
             Self::AXIS_Y,
             Axis::new(Linear::new(-10.0, 10.0), axis::Position::Left)
-                .with_tick_renderer(|ctx| Some(TickLine::simple(format!("{:.1}V", ctx.tick.value))))
+                .with_tick_renderer(|ctx| match ctx.tick.level {
+                    0 => Some(TickLine::simple(format!("{:.1}V", ctx.tick.value))),
+                    _ => Some(TickLine {
+                        thickness: 0.5.into(),
+                        length: 2.5.into(),
+                        ..Default::default()
+                    }),
+                })
                 .with_grid_renderer(|_| {
                     Some(GridLine {
-                        thickness: 1.0.into(),
+                        thickness: 0.5.into(),
                     })
-                })
-                .skip_overlapping_labels(6.0),
+                }),
         );
 
         (
