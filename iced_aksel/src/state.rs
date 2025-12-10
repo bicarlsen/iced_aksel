@@ -1,8 +1,8 @@
 use std::hash::Hash;
 
-use aksel::{Float, PlotPoint, PlotRect};
+use aksel::Float;
 use derivative::Derivative;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, map::IterMut};
 
 use crate::Axis;
 
@@ -13,10 +13,10 @@ pub struct State<AxisId: Hash + Eq, Domain> {
     axes: IndexMap<AxisId, Axis<Domain>>,
 }
 
-impl<AxisId, Domain> State<AxisId, Domain>
+impl<AxisId, D> State<AxisId, D>
 where
     AxisId: Hash + Eq + Clone,
-    Domain: Float,
+    D: Float,
 {
     pub fn new() -> Self {
         Self {
@@ -24,23 +24,62 @@ where
         }
     }
 
-    pub fn get_axis(&self, id: &AxisId) -> Option<&Axis<Domain>> {
-        self.axes.get(id)
-    }
-
-    pub fn get_axis_mut(&mut self, id: &AxisId) -> Option<&mut Axis<Domain>> {
-        self.axes.get_mut(id)
-    }
-
-    pub fn set_axis(&mut self, id: impl Into<AxisId>, axis: Axis<Domain>) {
-        self.axes.insert(id.into(), axis);
-    }
-
-    pub const fn axes(&self) -> &IndexMap<AxisId, Axis<Domain>> {
+    /// Get a read-only reference to the axes.
+    pub const fn get_axes(&self) -> &IndexMap<AxisId, Axis<D>> {
         &self.axes
     }
 
-    pub const fn axes_mut(&mut self) -> &mut IndexMap<AxisId, Axis<Domain>> {
+    /// Builder style: `State::new().with_axis(...)`
+    pub fn with_axis(mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Self {
+        self.axes.insert(id.into(), axis);
+        self
+    }
+
+    /// Takes in a Id and Axis. Replace the axis if it exists.
+    pub fn set_axis(&mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Option<Axis<D>> {
+        self.axes.insert(id.into(), axis)
+    }
+
+    /// Removes an axis from the state.
+    pub fn remove_axis(&mut self, id: &AxisId) -> Option<Axis<D>> {
+        self.axes.swap_remove(id)
+    }
+
+    /// Checks if an axis exists.
+    pub fn has_axis(&self, id: &AxisId) -> bool {
+        self.axes.contains_key(id)
+    }
+
+    // -------------------------------------------------------------------------
+    // B. Data Access
+    // -------------------------------------------------------------------------
+
+    /// Get a read-only reference to an axis.
+    pub fn axis(&self, id: &AxisId) -> Option<&Axis<D>> {
+        self.axes.get(id)
+    }
+
+    /// Get a mutable reference to an axis.
+    pub fn axis_mut(&mut self, id: &AxisId) -> Option<&mut Axis<D>> {
+        self.axes.get_mut(id)
+    }
+
+    /// Iterates over all axes mutably.
+    /// If you need to modify multiple axes (e.g. X and Y), use this iterator.
+    pub fn axes_iter_mut(&mut self) -> IterMut<'_, AxisId, Axis<D>> {
+        self.axes.iter_mut()
+    }
+
+    // -------------------------------------------------------------------------
+    // C. Coordinated Logic Helpers (The "Controller")
+    // -------------------------------------------------------------------------
+
+    /// Get the current domain of a specific axis.
+    pub fn domain(&self, id: &AxisId) -> Option<(&D, &D)> {
+        self.axes.get(id).map(|a| a.domain())
+    }
+
+    pub const fn axes_mut(&mut self) -> &mut IndexMap<AxisId, Axis<D>> {
         &mut self.axes
     }
 
@@ -48,11 +87,11 @@ where
         self.axes.retain(|k, _| active_axes.contains(k));
     }
 
-    pub fn visible_axes(&self) -> impl Iterator<Item = (&AxisId, &Axis<Domain>)> {
+    pub fn visible_axes(&self) -> impl Iterator<Item = (&AxisId, &Axis<D>)> {
         self.axes.iter().filter(|(_, axis)| axis.is_visible())
     }
 
-    pub fn pan_scales(&mut self, x_scale: AxisId, y_scale: AxisId, dx: f32, dy: f32) {
+    pub fn pan_axes(&mut self, x_scale: AxisId, y_scale: AxisId, dx: f32, dy: f32) {
         if let Some(axis) = self.axes.get_mut(&x_scale) {
             axis.pan(dx);
         }
@@ -61,7 +100,7 @@ where
         }
     }
 
-    pub fn zoom_scales(
+    pub fn zoom_axes(
         &mut self,
         x_scale: AxisId,
         y_scale: AxisId,
@@ -77,22 +116,10 @@ where
         }
     }
 
-    #[deprecated = "Use State::axes() instead"]
-    pub const fn axis(&self) -> &IndexMap<AxisId, Axis<Domain>> {
-        &self.axes
-    }
-
-    pub fn get_scales_plotrectangle(
-        &self,
-        x_scale: AxisId,
-        y_scale: AxisId,
-    ) -> Option<PlotRect<Domain>> {
-        let horizontal_range = self.axes.get(&x_scale)?.domain();
-        let vertical_range = self.axes.get(&y_scale)?.domain();
-
-        let top_left = PlotPoint::new(*horizontal_range.0, *vertical_range.0);
-        let bot_right = PlotPoint::new(*horizontal_range.1, *vertical_range.1);
-
-        Some(PlotRect::from_points(top_left, bot_right))
+    /// Manually set the domain of an axis.
+    pub fn set_domain(&mut self, id: &AxisId, min: D, max: D) {
+        if let Some(axis) = self.axes.get_mut(id) {
+            axis.set_domain(min, max);
+        }
     }
 }

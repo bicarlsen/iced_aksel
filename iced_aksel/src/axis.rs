@@ -605,6 +605,10 @@ impl<D: Float> Axis<D> {
             return None;
         }
 
+        if candidate.normalized_position.is_sign_negative() {
+            return None;
+        }
+
         let (align_x, align_y, position) = match self.position {
             Position::Top => (
                 Alignment::Center,

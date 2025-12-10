@@ -339,7 +339,7 @@ where
             return;
         }
 
-        for (i, (id, axis)) in self.state.axes().iter().enumerate() {
+        for (i, (id, axis)) in self.state.get_axes().iter().enumerate() {
             let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
             let Some(position) = cursor.position() else {
@@ -422,7 +422,7 @@ where
             }
             Action::DraggingAxis { id, origin, .. } => {
                 // Find the axis and its layout
-                if let Some((i, id, axis)) = self.state.axes().get_full(id) {
+                if let Some((i, id, axis)) = self.state.get_axes().get_full(id) {
                     let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
                     // Translate origin to normalized value (0.0-1.0)
@@ -520,7 +520,7 @@ where
 
             if let Some((i, (id, axis))) = self
                 .state
-                .axes()
+                .get_axes()
                 .iter()
                 .enumerate()
                 .find(|(_, (axis_id, _))| *axis_id == dragging_id)
@@ -547,7 +547,7 @@ where
         }
         // Handle axis hover (only when idle and cursor is over an axis)
         else if matches!(action, Action::Idle) {
-            for (i, (id, axis)) in self.state.axes().iter().enumerate() {
+            for (i, (id, axis)) in self.state.get_axes().iter().enumerate() {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
                 if cursor.position_over(axis_bounds).is_none() {
@@ -594,7 +594,12 @@ where
 
     fn children(&self) -> Vec<Tree> {
         // One child per Axis + one for content.
-        let mut children: Vec<Tree> = self.state.axes().iter().map(|_| Tree::empty()).collect();
+        let mut children: Vec<Tree> = self
+            .state
+            .get_axes()
+            .iter()
+            .map(|_| Tree::empty())
+            .collect();
         children.push(Tree::empty()); // content
         children
     }
@@ -608,7 +613,7 @@ where
     fn layout(&mut self, _tree: &mut Tree, _renderer: &Renderer, limits: &Limits) -> Node {
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
 
-        let axis_count = self.state.axes().len();
+        let axis_count = self.state.get_axes().len();
 
         // ---------- 1) First pass: measure axis thicknesses ----------
 
@@ -617,7 +622,7 @@ where
         let mut left_total = self.padding.left;
         let mut right_total = self.padding.right;
 
-        for (_, axis) in self.state.axes() {
+        for (_, axis) in self.state.get_axes() {
             let thickness = axis.thickness().0;
             match axis.position() {
                 Position::Top => top_total += thickness,
@@ -644,7 +649,7 @@ where
         let mut left_x = self.padding.left;
         let mut right_x = left_total + chart_width;
 
-        for (_, axis) in self.state.axes() {
+        for (_, axis) in self.state.get_axes() {
             let thickness = axis.thickness().0;
             let node = match axis.position() {
                 Position::Top => {
@@ -743,7 +748,7 @@ where
                         }
                     } else {
                         // Check if scrolling over an axis
-                        for (i, (id, axis)) in self.state.axes().iter().enumerate() {
+                        for (i, (id, axis)) in self.state.get_axes().iter().enumerate() {
                             let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
                             if cursor.position_over(axis_bounds).is_some() {
@@ -807,7 +812,7 @@ where
         };
 
         // Render axes and grids
-        for (i, (_, axis)) in self.state.axes().iter().enumerate() {
+        for (i, (_, axis)) in self.state.get_axes().iter().enumerate() {
             let axis_layout = layout.children().nth(i).unwrap();
             axis.draw::<Renderer, Theme>(
                 renderer,
@@ -826,8 +831,8 @@ where
         // Render layers
         for layer in &self.layers {
             // This can never fail due to layer verification upon chart initialization
-            let x_axis = self.state.get_axis(&layer.horizontal_axis_id).unwrap();
-            let y_axis = self.state.get_axis(&layer.vertical_axis_id).unwrap();
+            let x_axis = self.state.axis(&layer.horizontal_axis_id).unwrap();
+            let y_axis = self.state.axis(&layer.vertical_axis_id).unwrap();
             let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
             let mut plot: Plot<Domain, Renderer> = Plot::new(
                 &mut tessellators,
@@ -902,11 +907,11 @@ fn verify_layer<'a, AxisId: Hash + Eq + Clone, Domain: Float, Renderer, Theme>(
         return false;
     }
 
-    let Some(x) = state.get_axis(x_id) else {
+    let Some(x) = state.axis(x_id) else {
         errors.push(Error::UnknownAxis { id: x_id.clone() });
         return false;
     };
-    let Some(y) = state.get_axis(y_id) else {
+    let Some(y) = state.axis(y_id) else {
         errors.push(Error::UnknownAxis { id: y_id.clone() });
         return false;
     };

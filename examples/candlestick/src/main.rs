@@ -236,7 +236,7 @@ impl ExampleApp {
         let x_domain = self
             .candlestick_chart
             .state
-            .get_axis(&X_AXIS_ID)
+            .axis(&X_AXIS_ID)
             .map(|axis| axis.domain())
             .unwrap_or((&0.0, &100.0));
 
@@ -480,11 +480,11 @@ impl CandlestickChart {
                 let factor = 1.1f32.powf(y);
 
                 self.state
-                    .get_axis_mut(&X_AXIS_ID)
+                    .axis_mut(&X_AXIS_ID)
                     .unwrap()
                     .zoom(factor, Some(cursor_pos.x));
                 self.state
-                    .get_axis_mut(&Y_AXIS_ID)
+                    .axis_mut(&Y_AXIS_ID)
                     .unwrap()
                     .zoom(factor, Some(cursor_pos.y));
             }
@@ -494,11 +494,11 @@ impl CandlestickChart {
                 let factor = 1.0 + y / 500.0;
 
                 self.state
-                    .get_axis_mut(&X_AXIS_ID)
+                    .axis_mut(&X_AXIS_ID)
                     .unwrap()
                     .zoom(factor, Some(cursor_pos.x));
                 self.state
-                    .get_axis_mut(&Y_AXIS_ID)
+                    .axis_mut(&Y_AXIS_ID)
                     .unwrap()
                     .zoom(factor, Some(cursor_pos.y));
             }
@@ -508,10 +508,7 @@ impl CandlestickChart {
     }
 
     fn clamp_x_axis(&mut self) {
-        let x_axis = self
-            .state
-            .get_axis_mut(&X_AXIS_ID)
-            .expect("X-axis must exist");
+        let x_axis = self.state.axis_mut(&X_AXIS_ID).expect("X-axis must exist");
 
         // Make sure we don't go outside the bounds of the candles
         let (&min, &max) = x_axis.domain();
@@ -522,7 +519,7 @@ impl CandlestickChart {
     fn handle_plot_drag(&mut self, delta: DragDelta) {
         // --- Pan X-Axis ---
         self.state
-            .get_axis_mut(&X_AXIS_ID)
+            .axis_mut(&X_AXIS_ID)
             .expect("X-axis must exist")
             .pan(delta.x);
         self.clamp_x_axis();
@@ -530,13 +527,13 @@ impl CandlestickChart {
         // --- Pan Y-Axes (Conditionally) ---
         if !self.settings.y_lock {
             self.state
-                .get_axis_mut(&Y_AXIS_ID)
+                .axis_mut(&Y_AXIS_ID)
                 .expect("Price Y-axis must exist")
                 .pan(delta.y);
         }
         if self.settings.show_volume {
             self.state
-                .get_axis_mut(&Y_VOL_AXIS_ID)
+                .axis_mut(&Y_VOL_AXIS_ID)
                 .expect("Volume Y-axis must exist")
                 .pan(delta.y);
         }
@@ -549,20 +546,20 @@ impl CandlestickChart {
             X_AXIS_ID => {
                 let anchor = Some(1.0);
                 self.state
-                    .get_axis_mut(&X_AXIS_ID)
+                    .axis_mut(&X_AXIS_ID)
                     .expect("X-axis must exist")
                     .zoom(factor, anchor);
             }
             Y_AXIS_ID => {
                 self.state
-                    .get_axis_mut(&Y_AXIS_ID)
+                    .axis_mut(&Y_AXIS_ID)
                     .expect("Price Y-axis must exist")
                     .zoom(factor, Some(0.5));
                 self.settings.y_lock = false;
             }
             Y_VOL_AXIS_ID => {
                 self.state
-                    .get_axis_mut(&Y_VOL_AXIS_ID)
+                    .axis_mut(&Y_VOL_AXIS_ID)
                     .expect("Volume Y-axis must exist")
                     .zoom(factor, Some(0.5));
             }
@@ -589,7 +586,7 @@ impl CandlestickChart {
 
         let x_domain = self
             .state
-            .get_axis(&X_AXIS_ID)
+            .axis(&X_AXIS_ID)
             .expect("X-axis must exist")
             .domain();
         let visible_x_range = (x_domain.0.floor() as i64 - 1)..=(x_domain.1.ceil() as i64);
@@ -660,7 +657,7 @@ impl CandlestickChart {
     fn update_y_lock_domain(&mut self) {
         let x_domain = self
             .state
-            .get_axis(&X_AXIS_ID)
+            .axis(&X_AXIS_ID)
             .expect("X-axis must exist")
             .domain();
 
@@ -672,7 +669,7 @@ impl CandlestickChart {
 
         if let Some((min, max)) = new_y_range {
             self.state
-                .get_axis_mut(&Y_AXIS_ID)
+                .axis_mut(&Y_AXIS_ID)
                 .expect("Price Y-axis must exist")
                 .set_domain(min, max);
         }
@@ -682,7 +679,7 @@ impl CandlestickChart {
     fn update_y_vol_domain(&mut self) {
         let x_domain = self
             .state
-            .get_axis(&X_AXIS_ID)
+            .axis(&X_AXIS_ID)
             .expect("X-axis must exist")
             .domain();
 
@@ -691,7 +688,7 @@ impl CandlestickChart {
 
         if let Some((min, max)) = new_y_vol_range {
             self.state
-                .get_axis_mut(&Y_VOL_AXIS_ID)
+                .axis_mut(&Y_VOL_AXIS_ID)
                 .expect("Volume Y-axis must exist")
                 .set_domain(min, max);
         }

@@ -102,7 +102,7 @@ impl State {
 
     /// Checks if a Y-axis exists for the new series. If not, creates it with a safe initial range.
     fn ensure_axis_capacity(&mut self, series: &Series, y_axis_id: &str) {
-        if self.chart_state.get_axis(&y_axis_id.to_string()).is_some() {
+        if self.chart_state.axis(&y_axis_id.to_string()).is_some() {
             return;
         }
 
@@ -154,7 +154,7 @@ impl State {
             (0.0, (max_len as f64 - 1.0).max(0.0))
         };
 
-        if let Some(axis) = self.chart_state.get_axis_mut(&Self::X_AXIS_ID.to_string()) {
+        if let Some(axis) = self.chart_state.axis_mut(&Self::X_AXIS_ID.to_string()) {
             axis.scale_mut().set_domain(min, max);
         }
     }
@@ -171,7 +171,7 @@ impl State {
 
         // Apply bounds
         for (axis_id, max_val) in y_max_map {
-            if let Some(axis) = self.chart_state.get_axis_mut(&axis_id) {
+            if let Some(axis) = self.chart_state.axis_mut(&axis_id) {
                 let limit = if max_val == 0.0 { 10.0 } else { max_val * 1.1 };
                 axis.scale_mut().set_domain(0.0, limit);
             }
@@ -183,7 +183,7 @@ impl State {
         let labels = labels.to_vec();
 
         // Preserve current scale
-        let (min, max) = if let Some(a) = self.chart_state.get_axis(&x_id) {
+        let (min, max) = if let Some(a) = self.chart_state.axis(&x_id) {
             let d = a.scale().domain();
             (*d.0, *d.1)
         } else {
