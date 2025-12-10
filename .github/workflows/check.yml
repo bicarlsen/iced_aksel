@@ -44,4 +44,4 @@ jobs:
         run: cargo build
 
       - name: Run tests
-        run: cargo nextest run --hide-progress-bar --failure-output final
+        run: cargo nextest run --hide-progress-bar --failure-output final --no-tests warn
