@@ -27,6 +27,7 @@ where
         }
     }
 
+    /// Get a read-only reference to the axes.
     pub fn get_axes(&self) -> &IndexMap<AxisId, Axis<D>> {
         &self.axes
     }
@@ -37,16 +38,17 @@ where
         self
     }
 
-    /// Runtime addition: `state.set_axis
-    /// (...)`
+    /// Takes in a Id and Axis. Replace the axis if it exists.
     pub fn set_axis(&mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Option<Axis<D>> {
         self.axes.insert(id.into(), axis)
     }
 
+    /// Removes an axis from the state.
     pub fn remove_axis(&mut self, id: &AxisId) -> Option<Axis<D>> {
         self.axes.remove(id)
     }
 
+    /// Checks if an axis exists.
     pub fn has_axis(&self, id: &AxisId) -> bool {
         self.axes.contains_key(id)
     }
@@ -66,7 +68,7 @@ where
     }
 
     /// Iterates over all axes mutably.
-    /// If you need to modify multiple axes (e.g. X and Y) safely, use this iterator.
+    /// If you need to modify multiple axes (e.g. X and Y), use this iterator.
     pub fn axes_iter_mut(&mut self) -> IterMut<'_, AxisId, Axis<D>> {
         self.axes.iter_mut()
     }
@@ -75,19 +77,19 @@ where
     // C. Coordinated Logic Helpers (The "Controller")
     // -------------------------------------------------------------------------
 
-    /// Helper: Get the current domain of a specific axis.
+    /// Get the current domain of a specific axis.
     pub fn domain(&self, id: &AxisId) -> Option<(&D, &D)> {
         self.axes.get(id).map(|a| a.scale().domain())
     }
 
-    /// Helper: Manually set the domain of an axis.
+    /// Manually set the domain of an axis.
     pub fn set_domain(&mut self, id: &AxisId, min: D, max: D) {
         if let Some(axis) = self.axes.get_mut(id) {
             axis.scale_mut().set_domain(min, max);
         }
     }
 
-    // /// Helper: Pan X and Y axes simultaneously using normalized deltas.
+    // /// Pan X and Y axes simultaneously using normalized deltas.
     // pub fn pan_axes(
     //     &mut self,
     //     x_id: &AxisId,
@@ -106,7 +108,7 @@ where
     //     }
     // }
 
-    // /// Helper: Zoom X and Y axes around a normalized anchor point.
+    // /// Zoom X and Y axes around a normalized anchor point.
     // pub fn zoom_axes(
     //     &mut self,
     //     x_id: &AxisId,
