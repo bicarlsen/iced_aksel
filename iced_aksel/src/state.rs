@@ -1,4 +1,4 @@
-use std::{collections::HashSet, hash::Hash};
+use std::hash::Hash;
 
 use aksel::{Float, PlotPoint, PlotRect};
 use derivative::Derivative;
@@ -52,12 +52,12 @@ where
         self.axes.iter().filter(|(_, axis)| axis.is_visible())
     }
 
-    pub fn pan_scales(&mut self, x_scale: AxisId, y_scale: AxisId, dx: Domain, dy: Domain) {
+    pub fn pan_scales(&mut self, x_scale: AxisId, y_scale: AxisId, dx: f32, dy: f32) {
         if let Some(axis) = self.axes.get_mut(&x_scale) {
-            axis.scale_mut().pan(dx);
+            axis.pan(dx);
         }
         if let Some(axis) = self.axes.get_mut(&y_scale) {
-            axis.scale_mut().pan(dy);
+            axis.pan(dy);
         }
     }
 
@@ -65,15 +65,15 @@ where
         &mut self,
         x_scale: AxisId,
         y_scale: AxisId,
-        x_norm: Domain,
-        y_norm: Domain,
-        factor: Domain,
+        x_anchor_norm: f32,
+        y_anchor_norm: f32,
+        factor: f32,
     ) {
         if let Some(axis) = self.axes.get_mut(&x_scale) {
-            axis.scale_mut().zoom(factor, Some(x_norm));
+            axis.zoom(factor, Some(x_anchor_norm));
         }
         if let Some(axis) = self.axes.get_mut(&y_scale) {
-            axis.scale_mut().zoom(factor, Some(y_norm));
+            axis.zoom(factor, Some(y_anchor_norm));
         }
     }
 

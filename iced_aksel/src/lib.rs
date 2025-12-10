@@ -1,4 +1,4 @@
-use std::{fmt::Debug, hash::Hash};
+use std::{fmt::Debug, hash::Hash, ops::Deref};
 
 use aksel::{Float, Scale, ScreenRect, Transform};
 use derive_more::{Display, Error};
@@ -827,7 +827,7 @@ where
             // This can never fail due to layer verification upon chart initialization
             let x_axis = self.state.get_axis(&layer.horizontal_axis_id).unwrap();
             let y_axis = self.state.get_axis(&layer.vertical_axis_id).unwrap();
-            let transform = Transform::new(&screen_rect, x_axis.scale(), y_axis.scale());
+            let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
             let mut plot: Plot<Domain, Renderer> = Plot::new(
                 &mut tessellators,
                 renderer,

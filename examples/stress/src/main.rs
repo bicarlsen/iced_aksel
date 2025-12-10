@@ -11,7 +11,7 @@
 
 use std::time::Instant;
 
-use aksel::{PlotPoint, Scale, scale::Linear};
+use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Alignment, Color, Element, Point, Subscription, Task, Theme,
     mouse::ScrollDelta,
@@ -19,9 +19,9 @@ use iced::{
 };
 use iced_aksel::{
     Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
-    axis::{self, Position},
+    axis::Position,
     plot,
-    shape::{self, Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
+    shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
 };
 use rand::Rng;
 
@@ -39,8 +39,8 @@ pub enum LengthMode {
 impl std::fmt::Display for LengthMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LengthMode::Screen => write!(f, "Screen (px)"),
-            LengthMode::Plot => write!(f, "Plot (units)"),
+            Self::Screen => write!(f, "Screen (px)"),
+            Self::Plot => write!(f, "Plot (units)"),
         }
     }
 }
@@ -441,7 +441,7 @@ impl StressTestApp {
             Axis::new(Linear::new(0.0, 1000.0), Position::Left).invisible(),
         );
 
-        let mut app = Self {
+        let app = Self {
             state,
             rectangles_layer: StressRectangles {
                 geometry: Vec::new(),
@@ -556,7 +556,7 @@ impl StressTestApp {
             .state
             .get_axis(&AXIS_ID_X)
             .map(|axis| {
-                let (min, max) = axis.scale().domain();
+                let (min, max) = axis.domain();
                 if min <= max {
                     (*min, *max)
                 } else {
@@ -569,7 +569,7 @@ impl StressTestApp {
             .state
             .get_axis(&AXIS_ID_Y)
             .map(|axis| {
-                let (min, max) = axis.scale().domain();
+                let (min, max) = axis.domain();
                 if min <= max {
                     (*min, *max)
                 } else {
@@ -689,8 +689,8 @@ impl StressTestApp {
             let len =
                 rng.random_range(self.min_size..self.max_size.max(self.min_size + 1.0)) as f64;
 
-            let x2 = x1 + angle.cos() * len;
-            let y2 = y1 + angle.sin() * len;
+            let x2 = angle.cos().mul_add(len, x1);
+            let y2 = angle.sin().mul_add(len, y1);
 
             self.lines_layer.geometry.push(Line::new(
                 PlotPoint::new(x1, y1),
@@ -724,8 +724,8 @@ impl StressTestApp {
 
             for _ in 1..self.poly_segments.max(2) {
                 let angle = rng.random_range(0.0..std::f64::consts::TAU);
-                let next_x = prev_x + angle.cos() * step_size;
-                let next_y = prev_y + angle.sin() * step_size;
+                let next_x = angle.cos().mul_add(step_size, prev_x);
+                let next_y = angle.sin().mul_add(step_size, prev_y);
                 points.push(PlotPoint::new(next_x, next_y));
                 prev_x = next_x;
                 prev_y = next_y;
@@ -810,8 +810,8 @@ impl StressTestApp {
                     radius_base
                 };
 
-                let px = cx + theta.cos() * r;
-                let py = cy + theta.sin() * r;
+                let px = theta.cos().mul_add(r, cx);
+                let py = theta.sin().mul_add(r, cy);
                 points.push(PlotPoint::new(px, py));
             }
 
@@ -862,7 +862,7 @@ impl StressTestApp {
                     let delta = now.duration_since(last).as_secs_f32();
                     if delta > 0.0 {
                         let instant_fps = 1.0 / delta;
-                        self.fps = 144f32.min(self.fps * 0.9 + instant_fps * 0.1);
+                        self.fps = 144f32.min(self.fps.mul_add(0.9, instant_fps * 0.1));
                         self.frame_times.push(delta * 1000.0);
                         if self.frame_times.len() > 60 {
                             self.frame_times.remove(0);
@@ -1052,21 +1052,15 @@ impl StressTestApp {
             }
             // Chart
             Message::ChartDragged(delta) => {
-                let x = delta.x as f64;
-                let y = delta.y as f64;
-                self.state.pan_scales(AXIS_ID_X, AXIS_ID_Y, x, y);
+                self.state
+                    .pan_scales(AXIS_ID_X, AXIS_ID_Y, delta.x, delta.y);
                 Task::none()
             }
             Message::ChartScrolled(point, delta) => {
                 if let ScrollDelta::Lines { x: _, y } = delta {
-                    let factor = 1.1f64.powf(y.into());
-                    self.state.zoom_scales(
-                        AXIS_ID_X,
-                        AXIS_ID_Y,
-                        point.x.into(),
-                        point.y.into(),
-                        factor,
-                    );
+                    let factor = 1.1f32.powf(y);
+                    self.state
+                        .zoom_scales(AXIS_ID_X, AXIS_ID_Y, point.x, point.y, factor);
                 };
                 Task::none()
             }
@@ -1378,7 +1372,7 @@ impl StressTestApp {
         iced::window::frames().map(Message::Tick)
     }
 
-    fn theme(&self) -> Theme {
+    const fn theme(&self) -> Theme {
         Theme::Dark
     }
 

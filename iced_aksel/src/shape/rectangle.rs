@@ -112,7 +112,7 @@ impl<D: Float> Rectangle<D> {
     // =========================================================================
 
     /// Calculates the screen-space boundaries (min_x, max_x, min_y, max_y).
-    fn resolve_bounds(&self, transform: &Transform<D, D, f32>) -> (f32, f32, f32, f32) {
+    fn resolve_bounds(&self, transform: &Transform<D, f32, f32>) -> (f32, f32, f32, f32) {
         let half_const = D::from(0.5).unwrap();
 
         // Resolve Width
@@ -150,7 +150,7 @@ impl<D: Float> Rectangle<D> {
 
     fn tessellate(
         self,
-        transform: &Transform<D, D, f32>,
+        transform: &Transform<D, f32, f32>,
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
@@ -161,7 +161,7 @@ impl<D: Float> Rectangle<D> {
         // 1. Resolve Stroke Thickness (if any)
         // We calculate precise X and Y thickness to support non-uniform scaling
         // in the Manual implementation.
-        let maybe_stroke_data = if let Some(stroke) = &self.stroke {
+        let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let (th_x, th_y) = match stroke.thickness {
                 Length::Screen(px) => (px, px),
                 Length::Plot(units) => (
@@ -176,9 +176,7 @@ impl<D: Float> Rectangle<D> {
             } else {
                 Some((th_x, th_y, stroke))
             }
-        } else {
-            None
-        };
+        });
 
         // 2. Rule 2: Geometric Stability (Consumption Check)
         // If the stroke consumes the shape, we render a single solid block.
@@ -301,6 +299,7 @@ impl<D: Float> Rectangle<D> {
 
     /// Adds a hollow rectangular frame (inner stroke) using 8 vertices.
     #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
     fn add_manual_stroke(
         &self,
         buffer: &mut MeshBuffer,

@@ -117,22 +117,18 @@ impl Interactions {
                 let zoom_y = self.modifiers.command() || self.modifiers.shift();
 
                 // 3. Apply Zoom
-                if zoom_x {
-                    if let Some(axis) = self.state.get_axis_mut(&Self::AXIS_X) {
-                        axis.scale_mut().zoom(factor, Some(cursor_norm.x as f64));
-                    }
+                if zoom_x && let Some(axis) = self.state.get_axis_mut(&Self::AXIS_X) {
+                    axis.zoom(factor, Some(cursor_norm.x));
                 }
-                if zoom_y {
-                    if let Some(axis) = self.state.get_axis_mut(&Self::AXIS_Y) {
-                        axis.scale_mut().zoom(factor, Some(cursor_norm.y as f64));
-                    }
+                if zoom_y && let Some(axis) = self.state.get_axis_mut(&Self::AXIS_Y) {
+                    axis.zoom(factor, Some(cursor_norm.y));
                 }
             }
             Message::Dragged(delta) => {
                 // Pan Logic:
                 // We invert both axes to match the "Camera/Viewport" control feel requested.
                 self.state
-                    .pan_scales(Self::AXIS_X, Self::AXIS_Y, delta.x as f64, delta.y as f64);
+                    .pan_scales(Self::AXIS_X, Self::AXIS_Y, delta.x, delta.y);
             }
             Message::Hovered(cursor_norm) => {
                 // Calculate real data values from normalized cursor position
@@ -140,9 +136,9 @@ impl Interactions {
                 let y_axis = self.state.get_axis(&Self::AXIS_Y);
 
                 if let (Some(x_ax), Some(y_ax)) = (x_axis, y_axis) {
-                    let x = x_ax.scale().denormalize_opt(cursor_norm.x as f64);
+                    let x = x_ax.denormalize_opt(cursor_norm.x);
                     // Invert Y for denormalization to match Cartesian coordinates
-                    let y = y_ax.scale().denormalize_opt(1.0 - cursor_norm.y as f64);
+                    let y = y_ax.denormalize_opt(1.0 - cursor_norm.y);
 
                     if let (Some(x), Some(y)) = (x, y) {
                         self.cursor_position = Some((x, y));
@@ -156,7 +152,7 @@ impl Interactions {
         iced::Task::none()
     }
 
-    pub fn view(&self) -> Element<Message> {
+    pub fn view(&self) -> iced::Element<'_, Message> {
         // 1. Header Readout
         let header_text = if let Some((x, y)) = self.cursor_position {
             format!("Time: {:.3}s  |  Amplitude: {:.3}V", x, y)
@@ -263,7 +259,9 @@ impl SignalData {
         let points = (0..=2000)
             .map(|i| {
                 let x = i as f64 / 100.0;
-                let y = (x * 3.0).sin() * 5.0 + (x * 12.0).sin() * 2.0 + (x * 50.0).sin() * 0.5;
+                let y = (x * 50.0)
+                    .sin()
+                    .mul_add(0.5, (x * 3.0).sin().mul_add(5.0, (x * 12.0).sin() * 2.0));
                 PlotPoint::new(x, y)
             })
             .collect();

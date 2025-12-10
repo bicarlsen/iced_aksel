@@ -706,8 +706,13 @@ fn apply_blackman_harris(block: &mut [f32]) {
 
     for (i, sample) in block.iter_mut().enumerate() {
         let k = i as f32 / n;
-        let window = 0.35875 - 0.48829 * (2.0 * PI * k).cos() + 0.14128 * (4.0 * PI * k).cos()
-            - 0.01168 * (6.0 * PI * k).cos();
+        let window = 0.01168f32.mul_add(
+            -(6.0 * PI * k).cos(),
+            0.14128f32.mul_add(
+                (4.0 * PI * k).cos(),
+                0.48829f32.mul_add(-(2.0 * PI * k).cos(), 0.35875),
+            ),
+        );
         *sample *= window;
     }
 }

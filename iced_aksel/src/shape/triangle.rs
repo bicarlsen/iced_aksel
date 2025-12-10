@@ -66,7 +66,7 @@ impl<D: Float> Triangle<D> {
     ///
     /// - If `radius` is [`Length::Screen`], the triangle will maintain constant pixel size.
     /// - If `radius` is [`Length::Plot`], the triangle will scale with the chart zoom.
-    pub fn equilateral(center: PlotPoint<D>, radius: Length<D>) -> Self {
+    pub const fn equilateral(center: PlotPoint<D>, radius: Length<D>) -> Self {
         Self {
             geometry: Geometry::Equilateral { center, radius },
             fill: None,
@@ -96,7 +96,7 @@ impl<D: Float> Triangle<D> {
 
     fn tessellate(
         self,
-        transform: &Transform<D, D, f32>,
+        transform: &Transform<D, f32, f32>,
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
@@ -158,9 +158,9 @@ impl<D: Float> Triangle<D> {
                 // To point Up, we negate the Y component or shift angles.
                 // Let's just generate them:
 
-                let p1 = Point::new(cx + a1.cos() * r_px, cy - a1.sin() * r_px); // Up
-                let p2 = Point::new(cx + a2.cos() * r_px, cy - a2.sin() * r_px); // Left Down
-                let p3 = Point::new(cx + a3.cos() * r_px, cy - a3.sin() * r_px); // Right Down
+                let p1 = Point::new(a1.cos().mul_add(r_px, cx), a1.sin().mul_add(-r_px, cy)); // Up
+                let p2 = Point::new(a2.cos().mul_add(r_px, cx), a2.sin().mul_add(-r_px, cy)); // Left Down
+                let p3 = Point::new(a3.cos().mul_add(r_px, cx), a3.sin().mul_add(-r_px, cy)); // Right Down
 
                 (p1, p2, p3)
             }
@@ -169,7 +169,7 @@ impl<D: Float> Triangle<D> {
         // 2. Normalize Winding Order (Calculate Area)
         // We want Counter-Clockwise (CCW).
         // Cross product (z-component): (p2-p1) x (p3-p1)
-        let cross_raw = (v2.x - v1.x) * (v3.y - v1.y) - (v2.y - v1.y) * (v3.x - v1.x);
+        let cross_raw = (v2.x - v1.x).mul_add(v3.y - v1.y, -((v2.y - v1.y) * (v3.x - v1.x)));
 
         // If cross < 0, it's CW. Swap vertices to make CCW.
         // We also keep the absolute area (2x Area) for the Inradius check later.
@@ -180,7 +180,7 @@ impl<D: Float> Triangle<D> {
         };
 
         // 3. Resolve Stroke
-        let maybe_stroke_data = if let Some(stroke) = &self.stroke {
+        let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let width = match stroke.thickness {
                 Length::Screen(w) => w,
                 Length::Plot(w) => {
@@ -194,34 +194,20 @@ impl<D: Float> Triangle<D> {
             } else {
                 Some((width, stroke))
             }
-        } else {
-            None
-        };
+        });
 
         // 4. Pre-calculate Inset Vertices (Geometric Consumption Check)
-        let (inner_p1, inner_p2, inner_p3, is_consumed) = if let Some((width, _)) =
-            maybe_stroke_data
-        {
-            // GEOMETRIC CHECK: Inradius
-            // The largest circle that fits inside a triangle has radius r = 2 * Area / Perimeter.
-            let d1 = (p2 - p1).length();
-            let d2 = (p3 - p2).length();
-            let d3 = (p1 - p3).length();
-            let perimeter = d1 + d2 + d3;
+        let (inner_p1, inner_p2, inner_p3, is_consumed) =
+            if let Some((width, _)) = maybe_stroke_data {
+                // GEOMETRIC CHECK: Inradius
+                // The largest circle that fits inside a triangle has radius r = 2 * Area / Perimeter.
+                let d1 = (p2 - p1).length();
+                let d2 = (p3 - p2).length();
+                let d3 = (p1 - p3).length();
+                let perimeter = d1 + d2 + d3;
 
-            // Degenerate triangle check
-            if perimeter < 1e-4 {
-                (
-                    Point::new(0.0, 0.0),
-                    Point::new(0.0, 0.0),
-                    Point::new(0.0, 0.0),
-                    true,
-                )
-            } else {
-                let inradius = double_area / perimeter;
-
-                if width >= inradius {
-                    // Consumed by stroke size
+                // Degenerate triangle check
+                if perimeter < 1e-4 {
                     (
                         Point::new(0.0, 0.0),
                         Point::new(0.0, 0.0),
@@ -229,21 +215,33 @@ impl<D: Float> Triangle<D> {
                         true,
                     )
                 } else {
-                    // Not consumed, safe to calculate geometry
-                    let i1 = self.compute_inset_vertex(p3, p1, p2, width);
-                    let i2 = self.compute_inset_vertex(p1, p2, p3, width);
-                    let i3 = self.compute_inset_vertex(p2, p3, p1, width);
+                    let inradius = double_area / perimeter;
 
-                    // Final Sanity Check
-                    let inner_cross = (i2.x - i1.x) * (i3.y - i1.y) - (i2.y - i1.y) * (i3.x - i1.x);
-                    let inverted = inner_cross <= 0.0;
+                    if width >= inradius {
+                        // Consumed by stroke size
+                        (
+                            Point::new(0.0, 0.0),
+                            Point::new(0.0, 0.0),
+                            Point::new(0.0, 0.0),
+                            true,
+                        )
+                    } else {
+                        // Not consumed, safe to calculate geometry
+                        let i1 = self.compute_inset_vertex(p3, p1, p2, width);
+                        let i2 = self.compute_inset_vertex(p1, p2, p3, width);
+                        let i3 = self.compute_inset_vertex(p2, p3, p1, width);
 
-                    (i1, i2, i3, inverted)
+                        // Final Sanity Check
+                        let inner_cross =
+                            (i2.x - i1.x).mul_add(i3.y - i1.y, -((i2.y - i1.y) * (i3.x - i1.x)));
+                        let inverted = inner_cross <= 0.0;
+
+                        (i1, i2, i3, inverted)
+                    }
                 }
-            }
-        } else {
-            (p1, p2, p3, false)
-        };
+            } else {
+                (p1, p2, p3, false)
+            };
 
         // FAST PATH: Consumed
         if is_consumed {

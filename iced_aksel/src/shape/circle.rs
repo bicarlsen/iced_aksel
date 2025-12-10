@@ -79,7 +79,7 @@ impl<D: Float> Circle<D> {
 
     fn tessellate(
         self,
-        transform: &Transform<D, D, f32>,
+        transform: &Transform<D, f32, f32>,
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
@@ -112,7 +112,7 @@ impl<D: Float> Circle<D> {
         }
 
         // 2. Resolve Stroke Thickness
-        let maybe_stroke_data = if let Some(stroke) = &self.stroke {
+        let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let width = match stroke.thickness {
                 Length::Screen(w) => w,
                 Length::Plot(w) => {
@@ -133,9 +133,7 @@ impl<D: Float> Circle<D> {
             } else {
                 Some((width, stroke))
             }
-        } else {
-            None
-        };
+        });
 
         // 3. Rule 2: Geometric Stability (Consumption Check)
         // If the stroke is thicker than the radius, the inner hole vanishes.
@@ -222,9 +220,8 @@ impl<D: Float> Circle<D> {
         // Level of Detail (LOD):
         // Scale segment count with radius to maintain smoothness without wasting triangles on dots.
         // Range: 24 segments (small) to 128 segments (large).
-        let segments = (r * 2.0).max(24.0).min(128.0) as usize;
+        let segments = (r * 2.0).clamp(24.0, 128.0) as usize;
 
-        let start_offset = buffer.vertices_count() as u32;
         let mut vertices = Vec::with_capacity(segments + 2); // Center + perimeter
         let mut indices = Vec::with_capacity(segments * 3);
 
@@ -242,7 +239,7 @@ impl<D: Float> Circle<D> {
                 let theta = i as f32 * step;
                 let (sin, cos) = theta.sin_cos();
                 vertices.push(SolidVertex2D {
-                    position: [cx + cos * r, cy + sin * r],
+                    position: [cos.mul_add(r, cx), sin.mul_add(r, cy)],
                     color: packed_color,
                 });
             }
@@ -278,7 +275,7 @@ impl<D: Float> Circle<D> {
         color: Color,
     ) {
         let packed_color = pack(color);
-        let segments = (r_outer * 2.0).max(24.0).min(128.0) as usize;
+        let segments = (r_outer * 2.0).clamp(24.0, 128.0) as usize;
 
         let mut vertices = Vec::with_capacity(segments * 2);
         let mut indices = Vec::with_capacity(segments * 6); // 2 triangles per segment
@@ -290,11 +287,11 @@ impl<D: Float> Circle<D> {
             let (sin, cos) = theta.sin_cos();
 
             vertices.push(SolidVertex2D {
-                position: [cx + cos * r_inner, cy + sin * r_inner],
+                position: [cos.mul_add(r_inner, cx), sin.mul_add(r_inner, cy)],
                 color: packed_color,
             });
             vertices.push(SolidVertex2D {
-                position: [cx + cos * r_outer, cy + sin * r_outer],
+                position: [cos.mul_add(r_outer, cx), sin.mul_add(r_outer, cy)],
                 color: packed_color,
             });
         }

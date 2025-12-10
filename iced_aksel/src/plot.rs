@@ -52,7 +52,7 @@ impl<Renderer: iced::advanced::text::Renderer<Font = iced::Font>> TextRenderer<'
 }
 
 pub struct Context<'a, D: Float, Renderer: self::Renderer> {
-    transform: &'a Transform<'a, D, D, f32>,
+    transform: &'a Transform<'a, D, f32, f32>,
     clip_bounds: &'a iced::Rectangle,
     renderer: &'a mut Renderer,
     tessellators: &'a mut Tessellators,
@@ -69,7 +69,7 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
 
     pub fn render_mesh<F>(&mut self, f: F)
     where
-        F: FnOnce(&Transform<'a, D, D, f32>, &mut MeshBuffer, &mut Tessellators),
+        F: FnOnce(&Transform<'a, D, f32, f32>, &mut MeshBuffer, &mut Tessellators),
     {
         if matches!(self.last_drawn, ShapeType::Text) {
             // Since meshes are always drawn under text, we have to start a new layer in order to
@@ -89,7 +89,7 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
 
     pub fn render_text<F>(&mut self, f: F)
     where
-        F: FnOnce(&Transform<'a, D, D, f32>, &mut TextRenderer<'_, Renderer>),
+        F: FnOnce(&Transform<'a, D, f32, f32>, &mut TextRenderer<'_, Renderer>),
     {
         if matches!(self.last_drawn, ShapeType::Mesh) {
             // Since text is always drawn over meshes, we don't **have** to start a new layer.
@@ -116,7 +116,7 @@ where
         renderer: &'a mut R,
         clip_bounds: &'a iced::Rectangle,
         mesh_buffer: &'a mut MeshBuffer,
-        transform: &'a Transform<'a, D, D>,
+        transform: &'a Transform<'a, D, f32, f32>,
     ) -> Self {
         renderer.start_layer(*clip_bounds);
         let context = Context {

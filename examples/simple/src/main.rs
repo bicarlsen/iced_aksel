@@ -1,6 +1,8 @@
+#![allow(unused)]
+
 use std::f64::consts::PI;
 
-use aksel::{PlotPoint, PlotRect, scale::Linear};
+use aksel::{PlotPoint, scale::Linear};
 use iced::{Color, Element, Task, Theme};
 use iced_aksel::{Axis, Chart, DragDelta, State, axis, plot::Items, shape::Polygon};
 use rand::Rng;

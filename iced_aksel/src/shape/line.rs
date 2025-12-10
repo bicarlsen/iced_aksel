@@ -110,7 +110,7 @@ impl<D: Float> Line<D> {
 
     fn tessellate(
         self,
-        transform: &Transform<D, D, f32>,
+        transform: &Transform<D, f32, f32>,
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
@@ -181,55 +181,52 @@ impl<D: Float> Line<D> {
             bounds.y + bounds.height + clip_margin,
         );
 
-        let should_clip = self.extend_start || self.extend_end || true; // Always clip for optimization
         let mut draw_start = line_start;
         let mut draw_end = line_end;
         let mut is_visible = true;
 
-        if should_clip {
-            // Note: We use raw_start/raw_end for the *direction* and *origin* of infinite lines
-            // but we use line_start/line_end for the *finite* bounds.
-            // Simplified: Just clip the segment we calculated.
-            // If it's infinite, we must manually extend BEFORE clipping?
-            // No, Liang-Barsky takes a line segment P1->P2.
-            // To handle infinity correctly with the 'shortened' logic:
+        // Note: We use raw_start/raw_end for the *direction* and *origin* of infinite lines
+        // but we use line_start/line_end for the *finite* bounds.
+        // Simplified: Just clip the segment we calculated.
+        // If it's infinite, we must manually extend BEFORE clipping?
+        // No, Liang-Barsky takes a line segment P1->P2.
+        // To handle infinity correctly with the 'shortened' logic:
 
-            // Revert to raw points for the Infinite side calculation
-            let p1 = if self.extend_start {
-                raw_start
+        // Revert to raw points for the Infinite side calculation
+        let p1 = if self.extend_start {
+            raw_start
+        } else {
+            line_start
+        };
+        let p2 = if self.extend_end { raw_end } else { line_end };
+
+        if let Some((t0, t1)) = clip_line(p1, p2, clip_rect) {
+            let delta = p2 - p1;
+
+            // t0/t1 are relative to the P1->P2 vector.
+            if self.extend_start {
+                draw_start = p1 + delta * t0;
             } else {
-                line_start
-            };
-            let p2 = if self.extend_end { raw_end } else { line_end };
-
-            if let Some((t0, t1)) = clip_line(p1, p2, clip_rect) {
-                let delta = p2 - p1;
-
-                // t0/t1 are relative to the P1->P2 vector.
-                if self.extend_start {
+                // For finite start, only clip if it was offscreen (t0 > 0)
+                if t0 > 0.0 {
                     draw_start = p1 + delta * t0;
                 } else {
-                    // For finite start, only clip if it was offscreen (t0 > 0)
-                    if t0 > 0.0 {
-                        draw_start = p1 + delta * t0;
-                    } else {
-                        draw_start = p1;
-                    }
+                    draw_start = p1;
                 }
+            }
 
-                if self.extend_end {
+            if self.extend_end {
+                draw_end = p1 + delta * t1;
+            } else {
+                // For finite end, only clip if it was offscreen (t1 < 1)
+                if t1 < 1.0 {
                     draw_end = p1 + delta * t1;
                 } else {
-                    // For finite end, only clip if it was offscreen (t1 < 1)
-                    if t1 < 1.0 {
-                        draw_end = p1 + delta * t1;
-                    } else {
-                        draw_end = p2;
-                    }
+                    draw_end = p2;
                 }
-            } else {
-                is_visible = false;
             }
+        } else {
+            is_visible = false;
         }
 
         // 5. Render Line (Hybrid Engine)

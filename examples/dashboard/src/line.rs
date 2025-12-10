@@ -1,11 +1,11 @@
-use aksel::{PlotPoint, Scale, scale::Linear};
+use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Theme,
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
     Axis, Chart, Length, State,
-    axis::{self, GridLine, TickLine},
+    axis::{self, TickLine},
     plot::{Items, Plot},
 };
 use std::collections::HashMap;
@@ -34,6 +34,7 @@ pub struct LineSeries {
     pub fill_color: Option<Color>,
 }
 
+#[allow(unused)]
 impl LineSeries {
     pub fn new(name: impl Into<String>, color: Color) -> Self {
         Self {
@@ -53,17 +54,17 @@ impl LineSeries {
         self
     }
 
-    pub fn width(mut self, width: f32) -> Self {
+    pub const fn width(mut self, width: f32) -> Self {
         self.width = width;
         self
     }
 
-    pub fn markers(mut self, show: bool) -> Self {
+    pub const fn markers(mut self, show: bool) -> Self {
         self.show_markers = show;
         self
     }
 
-    pub fn fill(mut self, color: Color) -> Self {
+    pub const fn fill(mut self, color: Color) -> Self {
         self.fill_color = Some(color);
         self
     }
@@ -134,6 +135,7 @@ pub struct LineChart {
     current_y_domains: HashMap<String, (f64, f64)>,
 }
 
+#[allow(unused)]
 impl LineChart {
     pub const X: &'static str = "X";
     pub const Y: &'static str = "Y";
@@ -172,24 +174,22 @@ impl LineChart {
 
     // --- Configuration ---
 
-    pub fn animated(mut self, speed: f64) -> Self {
+    pub const fn animated(mut self, speed: f64) -> Self {
         self.animation_speed = Some(speed.max(0.0).min(1.0));
         self
     }
 
-    pub fn legend(mut self, show: bool) -> Self {
+    pub const fn legend(mut self, show: bool) -> Self {
         self.show_legend = show;
         self
     }
 
     pub fn fill_alpha(mut self, alpha: f32) -> Self {
-        self.target_fill_alpha = alpha.max(0.0).min(1.0);
+        self.target_fill_alpha = alpha.clamp(0.0, 1.0);
         // If already enabled, we might need to update current immediately if not animating
-        if self.fill_enabled {
-            if self.animation_speed.is_none() {
-                self.current_fill_alpha = self.target_fill_alpha;
-                self.update_series_fill();
-            }
+        if self.fill_enabled && self.animation_speed.is_none() {
+            self.current_fill_alpha = self.target_fill_alpha;
+            self.update_series_fill();
         }
         self
     }
@@ -288,11 +288,9 @@ impl LineChart {
             return;
         };
 
-        let dt = if let Some(last) = self.last_tick {
-            (now - last).as_secs_f32() as f64
-        } else {
-            0.0
-        };
+        let dt = self
+            .last_tick
+            .map_or(0.0, |last| (now - last).as_secs_f32() as f64);
         self.last_tick = Some(now);
 
         let physics_speed = speed_normalized * 10.0;
@@ -302,13 +300,15 @@ impl LineChart {
         let (target_x, target_ys) = self.calculate_targets();
 
         // 2. Animate Axes
-        let next_x0 = self.current_x_domain.0 + (target_x.0 - self.current_x_domain.0) * alpha;
-        let next_x1 = self.current_x_domain.1 + (target_x.1 - self.current_x_domain.1) * alpha;
+        let next_x0 =
+            (target_x.0 - self.current_x_domain.0).mul_add(alpha, self.current_x_domain.0);
+        let next_x1 =
+            (target_x.1 - self.current_x_domain.1).mul_add(alpha, self.current_x_domain.1);
+
         self.current_x_domain = (next_x0, next_x1);
 
         if let Some(axis) = self.state.get_axis_mut(&Self::X.to_string()) {
-            axis.scale_mut()
-                .set_domain(self.current_x_domain.0, self.current_x_domain.1);
+            axis.set_domain(self.current_x_domain.0, self.current_x_domain.1);
         }
 
         for (id, target) in target_ys {
@@ -317,7 +317,7 @@ impl LineChart {
             current.1 += (target.1 - current.1) * alpha;
 
             if let Some(axis) = self.state.get_axis_mut(&id) {
-                axis.scale_mut().set_domain(current.0, current.1);
+                axis.set_domain(current.0, current.1);
             }
         }
 
@@ -356,11 +356,11 @@ impl LineChart {
         self.current_y_domains = tys;
 
         if let Some(axis) = self.state.get_axis_mut(&Self::X.to_string()) {
-            axis.scale_mut().set_domain(tx.0, tx.1);
+            axis.set_domain(tx.0, tx.1);
         }
         for (id, d) in &self.current_y_domains {
             if let Some(axis) = self.state.get_axis_mut(id) {
-                axis.scale_mut().set_domain(d.0, d.1);
+                axis.set_domain(d.0, d.1);
             }
         }
     }
@@ -393,7 +393,7 @@ impl LineChart {
         let factor = self.target_stack_factor;
 
         for s in &self.series {
-            let sums = stacked_sums.entry(s.y_key.clone()).or_insert_with(Vec::new);
+            let sums = stacked_sums.entry(s.y_key.clone()).or_default();
             if s.target_values.len() > sums.len() {
                 sums.resize(s.target_values.len(), 0.0);
             }
@@ -404,7 +404,7 @@ impl LineChart {
 
             for (i, &val) in s.target_values.iter().enumerate() {
                 let baseline = sums[i];
-                let effective_val = val + (baseline * factor);
+                let effective_val = baseline.mul_add(factor, val);
                 entry.0 = entry.0.min(effective_val);
                 entry.1 = entry.1.max(effective_val);
                 sums[i] += val;
@@ -489,7 +489,7 @@ impl LineChart {
         self.push_value(value);
     }
 
-    pub fn series_count(&self) -> usize {
+    pub const fn series_count(&self) -> usize {
         self.series.len()
     }
 
@@ -499,12 +499,10 @@ impl LineChart {
         let labels = self.labels.clone();
         let x_key = Self::X.to_string();
 
-        let (min, max) = if let Some(a) = self.state.get_axis(&x_key) {
-            let d = a.scale().domain();
+        let (min, max) = self.state.get_axis(&x_key).map_or((0.0, 1.0), |a| {
+            let d = a.domain();
             (*d.0, *d.1)
-        } else {
-            (0.0, 1.0)
-        };
+        });
 
         let axis = Axis::new(Linear::new(min, max), axis::Position::Bottom).with_tick_renderer(
             move |ctx| {
@@ -549,7 +547,7 @@ impl LineChart {
             .series
             .first()
             .map(|s| s.y_key.clone())
-            .unwrap_or(Self::Y.to_string());
+            .unwrap_or_else(|| Self::Y.to_string());
         chart = chart.layer(self, Self::X.to_string(), first_y);
         chart
     }
@@ -558,11 +556,10 @@ impl LineChart {
 // Unified Renderer
 impl Items<f64> for LineChart {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
-        let chart_floor = if let Some(axis) = self.state.get_axis(&Self::Y.to_string()) {
-            *axis.scale().domain().0
-        } else {
-            0.0
-        };
+        let chart_floor = self
+            .state
+            .get_axis(&Self::Y.to_string())
+            .map_or(0.0, |axis| *axis.domain().0);
 
         let mut baseline: Vec<f64> = Vec::new();
 
@@ -617,7 +614,7 @@ impl Items<f64> for LineChart {
 
             if s.show_markers {
                 for point in &points {
-                    let marker_size = Length::Screen(s.width * 2.0 + 2.0);
+                    let marker_size = Length::Screen(s.width.mul_add(2.0, 2.0));
                     plot.add_shape(Rectangle::new(*point, marker_size, marker_size).fill(s.color));
                 }
             }
@@ -633,15 +630,15 @@ impl Items<f64> for LineChart {
                 self.state.get_axis(&Self::X.to_string()),
                 self.state.get_axis(&Self::Y.to_string()),
             ) {
-                let (x_min, x_max) = x_axis.scale().domain();
-                let (y_min, y_max) = y_axis.scale().domain();
+                let (x_min, x_max) = x_axis.domain();
+                let (y_min, y_max) = y_axis.domain();
 
-                let start_x = *x_min + (x_max - x_min) * 0.02;
-                let start_y = *y_max - (y_max - y_min) * 0.05;
+                let start_x = (x_max - x_min).mul_add(0.02, *x_min);
+                let start_y = (y_max - y_min).mul_add(-0.05, *y_max);
                 let step_y = (y_max - y_min) * 0.06;
 
                 for (i, series) in self.series.iter().enumerate() {
-                    let y_pos = start_y - (i as f64 * step_y);
+                    let y_pos = (i as f64).mul_add(-step_y, start_y);
                     plot.add_shape(
                         Rectangle::new(
                             PlotPoint::new(start_x, y_pos),

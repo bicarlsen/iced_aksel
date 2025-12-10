@@ -1,8 +1,5 @@
 use aksel::{PlotPoint, Scale, Tick, TickIter, scale::Linear};
-use iced::{
-    Element, Theme,
-    widget::{pick_list, text_input},
-};
+use iced::Theme;
 use iced_aksel::{
     Axis, Chart, Length, State,
     axis::{self, TickLine},
@@ -73,12 +70,12 @@ impl BarChart {
         chart
     }
 
-    pub fn animated(mut self, speed: f64) -> Self {
+    pub const fn animated(mut self, speed: f64) -> Self {
         self.animation_speed = Some(speed.max(0.0).min(1.0));
         self
     }
 
-    pub fn get_data(&self) -> &Vec<BarData> {
+    pub const fn get_data(&self) -> &Vec<BarData> {
         &self.data
     }
 
@@ -112,11 +109,9 @@ impl BarChart {
             return;
         };
 
-        let dt = if let Some(last) = self.last_tick {
-            (now - last).as_secs_f32() as f64
-        } else {
-            0.0
-        };
+        let dt = self
+            .last_tick
+            .map_or(0.0, |last| (now - last).as_secs_f32() as f64);
         self.last_tick = Some(now);
 
         // Standard Exponential Smoothing factor
@@ -185,7 +180,7 @@ impl BarChart {
 
         // Update Bar Axis
         if let Some(bar_axis) = self.state.get_axis_mut(&Self::BAR_AXIS) {
-            bar_axis.scale_mut().set_domain(0.0, domain_max);
+            bar_axis.set_domain(0.0, domain_max);
         }
 
         // Update Value Axis
@@ -198,7 +193,7 @@ impl BarChart {
                 .max(10.0)
                 * 1.05;
 
-            value_axis.scale_mut().set_domain(0.0, max_value);
+            value_axis.set_domain(0.0, max_value);
         }
     }
 

@@ -63,7 +63,7 @@ impl<D: Float> Arc<D> {
     // =========================================================================
 
     /// Sets the inner radius to create a Ring/Donut sector.
-    pub fn inner_radius(mut self, radius: Length<D>) -> Self {
+    pub const fn inner_radius(mut self, radius: Length<D>) -> Self {
         self.inner_radius = radius;
         self
     }
@@ -86,7 +86,7 @@ impl<D: Float> Arc<D> {
 
     fn tessellate(
         self,
-        transform: &Transform<D, D, f32>,
+        transform: &Transform<D, f32, f32>,
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
@@ -102,16 +102,14 @@ impl<D: Float> Arc<D> {
         }
 
         // 2. Resolve Stroke Thickness
-        let maybe_stroke_data = if let Some(stroke) = &self.stroke {
+        let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let width = self.resolve_length(transform, stroke.thickness);
             if width < 0.1 {
                 None
             } else {
                 Some((width, stroke))
             }
-        } else {
-            None
-        };
+        });
 
         // 3. Rule 2: Geometric Stability (Consumption Check)
         let radial_thickness = outer_r - inner_r;
@@ -226,6 +224,7 @@ impl<D: Float> Arc<D> {
                 // Fix 2: Check for Pie Center (Artifact Fix)
                 let is_pie_center = inner_r < 0.5;
 
+                #[allow(clippy::branches_sharing_code)]
                 if is_pie_center {
                     // Path: Center -> OuterStart -> Arc -> Center -> Close
 
@@ -290,7 +289,7 @@ impl<D: Float> Arc<D> {
 
     // --- Helpers ---
 
-    fn resolve_length(&self, transform: &Transform<D, D, f32>, len: Length<D>) -> f32 {
+    fn resolve_length(&self, transform: &Transform<D, f32, f32>, len: Length<D>) -> f32 {
         match len {
             Length::Screen(px) => px,
             Length::Plot(units) => {
@@ -313,6 +312,7 @@ impl<D: Float> Arc<D> {
     }
 
     /// Generates a Triangle Strip to fill the arc sector.
+    #[allow(clippy::too_many_arguments)]
     fn add_solid_arc_strip(
         &self,
         buffer: &mut MeshBuffer,
@@ -328,7 +328,7 @@ impl<D: Float> Arc<D> {
         let sweep = (end_angle - start_angle).abs();
 
         let arc_len = sweep * r_outer;
-        let segments = (arc_len / 5.0).max(4.0).min(128.0) as usize;
+        let segments = (arc_len / 5.0).clamp(4.0, 128.0) as usize;
 
         let step = sweep / segments as f32;
         let dir = if end_angle > start_angle { 1.0 } else { -1.0 };
@@ -337,16 +337,16 @@ impl<D: Float> Arc<D> {
         let mut indices = Vec::with_capacity(segments * 6);
 
         for i in 0..=segments {
-            let theta = start_angle + (i as f32 * step * dir);
+            let theta = (i as f32 * step).mul_add(dir, start_angle);
             let (sin, cos) = theta.sin_cos();
 
             vertices.push(SolidVertex2D {
-                position: [cx + cos * r_inner, cy + sin * r_inner],
+                position: [cos.mul_add(r_inner, cx), sin.mul_add(r_inner, cy)],
                 color: packed_color,
             });
 
             vertices.push(SolidVertex2D {
-                position: [cx + cos * r_outer, cy + sin * r_outer],
+                position: [cos.mul_add(r_outer, cx), sin.mul_add(r_outer, cy)],
                 color: packed_color,
             });
         }

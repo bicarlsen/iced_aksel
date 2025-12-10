@@ -1,11 +1,11 @@
 use crate::{
-    Length, Shape, Stroke, StrokeStyle,
+    Length, Shape, Stroke,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
 use aksel::{Float, PlotPoint, Transform};
 use iced::{
-    Color, Rectangle,
+    Color,
     advanced::graphics::{color::pack, mesh::SolidVertex2D},
 };
 use lyon::math::{Point, Vector};
@@ -39,7 +39,7 @@ impl<D: Float> Polyline<D> {
     // =========================================================================
 
     /// Creates a new Polyline from a list of points.
-    pub fn new(points: Vec<PlotPoint<D>>, stroke: Stroke<D>) -> Self {
+    pub const fn new(points: Vec<PlotPoint<D>>, stroke: Stroke<D>) -> Self {
         Self {
             points,
             stroke,
@@ -55,27 +55,27 @@ impl<D: Float> Polyline<D> {
     //  Builder Methods
     // =========================================================================
 
-    pub fn extend_start(mut self, enable: bool) -> Self {
+    pub const fn extend_start(mut self, enable: bool) -> Self {
         self.extend_start = enable;
         self
     }
 
-    pub fn extend_end(mut self, enable: bool) -> Self {
+    pub const fn extend_end(mut self, enable: bool) -> Self {
         self.extend_end = enable;
         self
     }
 
-    pub fn arrow_start(mut self, enable: bool) -> Self {
+    pub const fn arrow_start(mut self, enable: bool) -> Self {
         self.arrow_start = enable;
         self
     }
 
-    pub fn arrow_end(mut self, enable: bool) -> Self {
+    pub const fn arrow_end(mut self, enable: bool) -> Self {
         self.arrow_end = enable;
         self
     }
 
-    pub fn arrow_size(mut self, size: f32) -> Self {
+    pub const fn arrow_size(mut self, size: f32) -> Self {
         self.arrow_size = size;
         self
     }
@@ -86,7 +86,7 @@ impl<D: Float> Polyline<D> {
 
     fn tessellate(
         self,
-        transform: &Transform<D, D, f32>,
+        transform: &Transform<D, f32, f32>,
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
@@ -135,7 +135,7 @@ impl<D: Float> Polyline<D> {
         let last_idx = screen_points.len() - 1;
 
         // --- Start Segment Logic ---
-        let mut p0 = screen_points[first_idx];
+        let p0 = screen_points[first_idx];
         let p1 = screen_points[first_idx + 1];
         let start_dir = (p1 - p0).normalize();
 
@@ -158,7 +158,7 @@ impl<D: Float> Polyline<D> {
         }
 
         // --- End Segment Logic ---
-        let mut pn = screen_points[last_idx];
+        let pn = screen_points[last_idx];
         let pn_minus_1 = screen_points[last_idx - 1];
         let end_dir = (pn - pn_minus_1).normalize();
 

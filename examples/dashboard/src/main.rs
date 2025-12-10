@@ -1,4 +1,4 @@
-use std::{fmt::Display, time::Instant};
+use std::time::Instant;
 
 use iced::{
     Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme, font,
@@ -13,7 +13,6 @@ mod line;
 use bar::BarChart;
 use gauge::Gauge;
 use line::LineChart;
-use rand::seq::IndexedRandom;
 
 use crate::line::LineSeries;
 
@@ -202,7 +201,7 @@ impl ExampleApp {
 
     fn run() -> iced::Result {
         iced::application(Self::init, Self::update, Self::view)
-            .theme(|app: &ExampleApp| app.theme.clone())
+            .theme(|app: &Self| app.theme.clone())
             .subscription(Self::subscription)
             .antialiasing(true)
             .run()

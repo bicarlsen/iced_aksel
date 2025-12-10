@@ -1,4 +1,4 @@
-use aksel::{PlotPoint, Scale, scale::Linear};
+use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Theme,
     alignment::{Horizontal, Vertical},
@@ -20,6 +20,7 @@ const GAUGE_RADIUS: f64 = 1.08;
 
 // --- Helper Types ---
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Zone {
     Primary(f64),
@@ -30,27 +31,28 @@ pub enum Zone {
 }
 
 impl Zone {
-    pub fn threshold(&self) -> f64 {
+    pub const fn threshold(&self) -> f64 {
         match self {
-            Zone::Primary(t) => *t,
-            Zone::Success(t) => *t,
-            Zone::Warning(t) => *t,
-            Zone::Danger(t) => *t,
-            Zone::Custom(t, _) => *t,
+            Self::Primary(t) => *t,
+            Self::Success(t) => *t,
+            Self::Warning(t) => *t,
+            Self::Danger(t) => *t,
+            Self::Custom(t, _) => *t,
         }
     }
 
-    pub fn resolve_color(&self, palette: &iced::theme::Palette) -> Color {
+    pub const fn resolve_color(&self, palette: &iced::theme::Palette) -> Color {
         match self {
-            Zone::Primary(_) => palette.primary,
-            Zone::Success(_) => palette.success,
-            Zone::Warning(_) => palette.warning,
-            Zone::Danger(_) => palette.danger,
-            Zone::Custom(_, color) => *color,
+            Self::Primary(_) => palette.primary,
+            Self::Success(_) => palette.success,
+            Self::Warning(_) => palette.warning,
+            Self::Danger(_) => palette.danger,
+            Self::Custom(_, color) => *color,
         }
     }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Placement {
     Top,
@@ -98,6 +100,7 @@ pub struct Gauge {
     debug_mode: bool,
 }
 
+#[allow(unused)]
 impl Gauge {
     const X_AXIS: &str = "X";
     const Y_AXIS: &str = "Y";
@@ -159,11 +162,9 @@ impl Gauge {
             return;
         };
 
-        let dt = if let Some(last) = self.last_tick {
-            (now - last).as_secs_f32() as f64
-        } else {
-            0.0
-        };
+        let dt = self
+            .last_tick
+            .map_or(0.0, |last| (now - last).as_secs_f32() as f64);
         self.last_tick = Some(now);
 
         // Standard smoothing
@@ -242,34 +243,34 @@ impl Gauge {
         self.update_axes();
     }
 
-    pub fn set_range(&mut self, min: f64, max: f64) {
+    pub const fn set_range(&mut self, min: f64, max: f64) {
         self.min = min;
         self.max = max;
     }
 
     pub fn set_animation_speed(&mut self, speed: Option<f64>) {
-        self.animation_speed = speed.map(|s| s.max(0.0).min(1.0));
+        self.animation_speed = speed.map(|s| s.clamp(0.0, 1.0));
     }
 
     pub fn set_unit(&mut self, unit: impl Into<String>) {
         self.unit = unit.into();
     }
 
-    pub fn set_thickness(&mut self, factor: f64) {
+    pub const fn set_thickness(&mut self, factor: f64) {
         self.inner_radius_factor = factor.max(0.1).min(0.99);
     }
 
     pub fn set_span(&mut self, degrees: f64) {
         let half_span_rad = (degrees.to_radians() / 2.0) as f32;
-        self.start_angle = (1.5 * PI) - half_span_rad;
-        self.end_angle = (1.5 * PI) + half_span_rad;
+        self.start_angle = 1.5f32.mul_add(PI, -half_span_rad);
+        self.end_angle = 1.5f32.mul_add(PI, half_span_rad);
     }
 
-    pub fn set_ticks(&mut self, count: usize) {
+    pub const fn set_ticks(&mut self, count: usize) {
         self.tick_count = count;
     }
 
-    pub fn set_decimals(&mut self, decimals: usize) {
+    pub const fn set_decimals(&mut self, decimals: usize) {
         self.decimals = decimals;
     }
 
@@ -287,15 +288,15 @@ impl Gauge {
         self.zone_factors.clear();
     }
 
-    pub fn set_zone_opacity(&mut self, opacity: f32) {
+    pub const fn set_zone_opacity(&mut self, opacity: f32) {
         self.zone_opacity = opacity.max(0.0).min(1.0);
     }
 
-    pub fn set_title_pos(&mut self, placement: Placement) {
+    pub const fn set_title_pos(&mut self, placement: Placement) {
         self.title_placement = placement;
     }
 
-    pub fn set_value_pos(&mut self, placement: Placement) {
+    pub const fn set_value_pos(&mut self, placement: Placement) {
         self.value_placement = placement;
     }
 
@@ -308,7 +309,7 @@ impl Gauge {
         self
     }
 
-    pub fn debug(mut self) -> Self {
+    pub const fn debug(mut self) -> Self {
         self.debug_mode = true;
         self
     }
@@ -323,7 +324,7 @@ impl Gauge {
         self
     }
 
-    pub fn thickness(mut self, factor: f64) -> Self {
+    pub const fn thickness(mut self, factor: f64) -> Self {
         self.set_thickness(factor);
         self
     }
@@ -333,12 +334,12 @@ impl Gauge {
         self
     }
 
-    pub fn ticks(mut self, count: usize) -> Self {
+    pub const fn ticks(mut self, count: usize) -> Self {
         self.set_ticks(count);
         self
     }
 
-    pub fn decimals(mut self, count: usize) -> Self {
+    pub const fn decimals(mut self, count: usize) -> Self {
         self.set_decimals(count);
         self
     }
@@ -348,22 +349,22 @@ impl Gauge {
         self
     }
 
-    pub fn zone_opacity(mut self, opacity: f32) -> Self {
+    pub const fn zone_opacity(mut self, opacity: f32) -> Self {
         self.set_zone_opacity(opacity);
         self
     }
 
-    pub fn base_color(mut self, color: Color) -> Self {
+    pub const fn base_color(mut self, color: Color) -> Self {
         self.base_color = Some(color);
         self
     }
 
-    pub fn title_pos(mut self, placement: Placement) -> Self {
+    pub const fn title_pos(mut self, placement: Placement) -> Self {
         self.set_title_pos(placement);
         self
     }
 
-    pub fn value_pos(mut self, placement: Placement) -> Self {
+    pub const fn value_pos(mut self, placement: Placement) -> Self {
         self.set_value_pos(placement);
         self
     }
@@ -385,16 +386,16 @@ impl Gauge {
     }
 
     // --- Getters ---
-    pub fn get_value(&self) -> f64 {
+    pub const fn get_value(&self) -> f64 {
         self.target_value
     }
-    pub fn get_visual_value(&self) -> f64 {
+    pub const fn get_visual_value(&self) -> f64 {
         self.value
     }
-    pub fn get_range(&self) -> (f64, f64) {
+    pub const fn get_range(&self) -> (f64, f64) {
         (self.min, self.max)
     }
-    pub fn get_padding(&self) -> f64 {
+    pub const fn get_padding(&self) -> f64 {
         self.padding
     }
 }
@@ -445,10 +446,8 @@ impl Items<f64> for Gauge {
         } else {
             self.max - self.min
         };
-        let value_ratio = ((self.value - self.min) / safe_denominator)
-            .max(0.0)
-            .min(1.0);
-        let value_angle = self.start_angle + (value_ratio as f32 * total_sweep);
+        let value_ratio = ((self.value - self.min) / safe_denominator).clamp(0.0, 1.0);
+        let value_angle = (value_ratio as f32).mul_add(total_sweep, self.start_angle);
 
         // 3. Draw Zones (Animated)
         if !self.zones.is_empty() {
@@ -458,17 +457,15 @@ impl Items<f64> for Gauge {
                 let threshold = zone.threshold();
                 let zone_raw_color = zone.resolve_color(&palette);
 
-                let zone_ratio = ((threshold - self.min) / safe_denominator)
-                    .max(0.0)
-                    .min(1.0);
-                let zone_end_angle = self.start_angle + (zone_ratio as f32 * total_sweep);
+                let zone_ratio = ((threshold - self.min) / safe_denominator).clamp(0.0, 1.0);
+                let zone_end_angle = (zone_ratio as f32).mul_add(total_sweep, self.start_angle);
 
                 // Get animation factor for this zone (0.0 = inactive, 1.0 = active)
                 let factor = self.zone_factors.get(i).copied().unwrap_or(0.0);
 
                 // Animation Logic:
                 // 1. Opacity: Interpolate between base (dull) and 1.0 (bright)
-                let alpha = self.zone_opacity + (1.0 - self.zone_opacity) * factor as f32;
+                let alpha = (1.0 - self.zone_opacity).mul_add(factor as f32, self.zone_opacity);
                 let zone_color = Color {
                     a: alpha,
                     ..zone_raw_color
@@ -522,7 +519,7 @@ impl Items<f64> for Gauge {
             };
 
             for i in 0..self.tick_count {
-                let angle = self.start_angle + (i as f32 * step);
+                let angle = (i as f32).mul_add(step, self.start_angle);
                 let half_deg = 0.5f32.to_radians();
                 plot.add_shape(
                     Arc::new(center, tick_pos, angle - half_deg, angle + half_deg)
@@ -544,11 +541,10 @@ impl Items<f64> for Gauge {
         };
 
         if let Some((pos, vert)) = resolve_pos(self.value_placement) {
-            let text = if let Some(fmt) = &self.custom_formatter {
-                fmt(self.value)
-            } else {
-                format!("{:.p$}{}", self.value, self.unit, p = self.decimals)
-            };
+            let text = self.custom_formatter.as_ref().map_or_else(
+                || format!("{:.p$}{}", self.value, self.unit, p = self.decimals),
+                |fmt| fmt(self.value),
+            );
             plot.add_shape(
                 Label::new(text, pos)
                     .fill(active_color)

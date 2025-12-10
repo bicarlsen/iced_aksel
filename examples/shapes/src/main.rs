@@ -55,7 +55,7 @@ impl ShapeGallery {
         iced::Task::none()
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<'_, Message> {
         Chart::new(&self.state).layer(self, Self::X, Self::Y).into()
     }
 }

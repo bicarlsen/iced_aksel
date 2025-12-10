@@ -6,10 +6,7 @@
 //! - Toggleable Bollinger Bands (BBands) indicator.
 //! - An interactive settings bar with checkboxes and text inputs.
 
-use std::{
-    collections::{BTreeMap, HashSet},
-    ops::RangeInclusive,
-};
+use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use aksel::{PlotPoint, scale::Linear};
 use chrono::{Datelike, TimeZone, Timelike};
@@ -240,7 +237,7 @@ impl ExampleApp {
             .candlestick_chart
             .state
             .get_axis(&X_AXIS_ID)
-            .map(|axis| axis.scale().domain())
+            .map(|axis| axis.domain())
             .unwrap_or((&0.0, &100.0));
 
         let domain_display = text(format!(
@@ -485,13 +482,11 @@ impl CandlestickChart {
                 self.state
                     .get_axis_mut(&X_AXIS_ID)
                     .unwrap()
-                    .scale_mut()
-                    .zoom(factor as f64, Some(cursor_pos.x as f64));
+                    .zoom(factor, Some(cursor_pos.x));
                 self.state
                     .get_axis_mut(&Y_AXIS_ID)
                     .unwrap()
-                    .scale_mut()
-                    .zoom(factor as f64, Some(cursor_pos.y as f64));
+                    .zoom(factor, Some(cursor_pos.y));
             }
             ScrollDelta::Pixels { x: _, y } => {
                 // For pixel-based scrolling (touchpad)
@@ -501,13 +496,11 @@ impl CandlestickChart {
                 self.state
                     .get_axis_mut(&X_AXIS_ID)
                     .unwrap()
-                    .scale_mut()
-                    .zoom(factor as f64, Some(cursor_pos.x as f64));
+                    .zoom(factor, Some(cursor_pos.x));
                 self.state
                     .get_axis_mut(&Y_AXIS_ID)
                     .unwrap()
-                    .scale_mut()
-                    .zoom(factor as f64, Some(cursor_pos.y as f64));
+                    .zoom(factor, Some(cursor_pos.y));
             }
         }
 
@@ -521,10 +514,8 @@ impl CandlestickChart {
             .expect("X-axis must exist");
 
         // Make sure we don't go outside the bounds of the candles
-        let (&min, &max) = x_axis.scale().domain();
-        x_axis
-            .scale_mut()
-            .set_domain(min.max(0.0), max.min(CANDLES_AMOUNT as f64));
+        let (&min, &max) = x_axis.domain();
+        x_axis.set_domain(min.max(0.0), max.min(CANDLES_AMOUNT as f64));
     }
 
     /// Logic for panning the chart.
@@ -533,8 +524,7 @@ impl CandlestickChart {
         self.state
             .get_axis_mut(&X_AXIS_ID)
             .expect("X-axis must exist")
-            .scale_mut()
-            .pan(delta.x as f64);
+            .pan(delta.x);
         self.clamp_x_axis();
 
         // --- Pan Y-Axes (Conditionally) ---
@@ -542,15 +532,13 @@ impl CandlestickChart {
             self.state
                 .get_axis_mut(&Y_AXIS_ID)
                 .expect("Price Y-axis must exist")
-                .scale_mut()
-                .pan(delta.y as f64);
+                .pan(delta.y);
         }
         if self.settings.show_volume {
             self.state
                 .get_axis_mut(&Y_VOL_AXIS_ID)
                 .expect("Volume Y-axis must exist")
-                .scale_mut()
-                .pan(delta.y as f64);
+                .pan(delta.y);
         }
     }
 
@@ -563,23 +551,20 @@ impl CandlestickChart {
                 self.state
                     .get_axis_mut(&X_AXIS_ID)
                     .expect("X-axis must exist")
-                    .scale_mut()
-                    .zoom(factor as f64, anchor);
+                    .zoom(factor, anchor);
             }
             Y_AXIS_ID => {
                 self.state
                     .get_axis_mut(&Y_AXIS_ID)
                     .expect("Price Y-axis must exist")
-                    .scale_mut()
-                    .zoom(factor as f64, Some(0.5));
+                    .zoom(factor, Some(0.5));
                 self.settings.y_lock = false;
             }
             Y_VOL_AXIS_ID => {
                 self.state
                     .get_axis_mut(&Y_VOL_AXIS_ID)
                     .expect("Volume Y-axis must exist")
-                    .scale_mut()
-                    .zoom(factor as f64, Some(0.5));
+                    .zoom(factor, Some(0.5));
             }
             _ => {}
         }
@@ -606,7 +591,6 @@ impl CandlestickChart {
             .state
             .get_axis(&X_AXIS_ID)
             .expect("X-axis must exist")
-            .scale()
             .domain();
         let visible_x_range = (x_domain.0.floor() as i64 - 1)..=(x_domain.1.ceil() as i64);
 
@@ -678,7 +662,6 @@ impl CandlestickChart {
             .state
             .get_axis(&X_AXIS_ID)
             .expect("X-axis must exist")
-            .scale()
             .domain();
 
         let new_y_range = get_y_range_with_margin(
@@ -691,7 +674,6 @@ impl CandlestickChart {
             self.state
                 .get_axis_mut(&Y_AXIS_ID)
                 .expect("Price Y-axis must exist")
-                .scale_mut()
                 .set_domain(min, max);
         }
     }
@@ -702,7 +684,6 @@ impl CandlestickChart {
             .state
             .get_axis(&X_AXIS_ID)
             .expect("X-axis must exist")
-            .scale()
             .domain();
 
         let new_y_vol_range =
@@ -712,7 +693,6 @@ impl CandlestickChart {
             self.state
                 .get_axis_mut(&Y_VOL_AXIS_ID)
                 .expect("Volume Y-axis must exist")
-                .scale_mut()
                 .set_domain(min, max);
         }
     }

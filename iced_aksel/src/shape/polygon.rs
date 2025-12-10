@@ -31,7 +31,7 @@ impl<D: Float> Polygon<D> {
     //  Constructors
     // =========================================================================
 
-    pub fn new(points: Vec<PlotPoint<D>>) -> Self {
+    pub const fn new(points: Vec<PlotPoint<D>>) -> Self {
         Self {
             points,
             fill: None,
@@ -61,7 +61,7 @@ impl<D: Float> Polygon<D> {
 
     fn tessellate(
         self,
-        transform: &Transform<D, D, f32>,
+        transform: &Transform<D, f32, f32>,
         buffer: &mut MeshBuffer,
         tess: &mut Tessellators,
     ) {
@@ -71,14 +71,14 @@ impl<D: Float> Polygon<D> {
 
         // 1. Resolve to Screen Coordinates
         // Pre-allocate to avoid resizing during iteration
-        let mut screen_points: Vec<Point> = self
+        let screen_points: Vec<Point> = self
             .points
             .iter()
             .map(|p| Point::new(transform.x_to_screen(&p.x), transform.y_to_screen(&p.y)))
             .collect();
 
         // 2. Resolve Stroke Thickness
-        let maybe_stroke_data = if let Some(stroke) = &self.stroke {
+        let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let width = match stroke.thickness {
                 Length::Screen(w) => w,
                 Length::Plot(w) => {
@@ -92,9 +92,7 @@ impl<D: Float> Polygon<D> {
             } else {
                 Some((width, stroke))
             }
-        } else {
-            None
-        };
+        });
 
         // 3. Determine Geometry Type (Convex vs Concave)
         // We perform a winding check. If the cross product sign changes, it's concave.
@@ -105,7 +103,7 @@ impl<D: Float> Polygon<D> {
             if is_convex {
                 // FAST PATH: Manual Triangle Fan
                 // We can also apply the "Bleed Fix" (inset) easily for convex shapes.
-                if let Some((width, _)) = maybe_stroke_data {
+                if maybe_stroke_data.is_some() {
                     // Inset for bleed
                     let inset_points = self.compute_inset_polygon(&screen_points, 0.5);
                     self.add_triangle_fan(buffer, &inset_points, color);
@@ -174,7 +172,7 @@ impl<D: Float> Polygon<D> {
             let v2 = p3 - p2;
 
             // 2D Cross Product
-            let cross = v1.x * v2.y - v1.y * v2.x;
+            let cross = v1.x.mul_add(v2.y, -(v1.y * v2.x));
 
             // Ignore collinear points
             if cross.abs() < 1e-5 {
@@ -267,9 +265,7 @@ impl<D: Float> Polygon<D> {
         }
 
         let c = pack(color);
-        let center = points[0]; // Fan origin
 
-        let start_offset = buffer.vertices_count() as u32;
         let mut vertices = Vec::with_capacity(points.len());
         let mut indices = Vec::with_capacity((points.len() - 2) * 3);
 

@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 use aksel::{Float, Tick};
 use derivative::Derivative;
@@ -250,7 +254,7 @@ pub struct Axis<D> {
     label_spacing: Pixels,
 
     #[derivative(Debug = "ignore")]
-    scale: Box<dyn Scale<Domain = D, Normalized = D>>,
+    scale: Box<dyn Scale<Domain = D, Normalized = f32>>,
     #[derivative(Debug = "ignore")]
     pub(crate) grid_renderer: Option<GridRendererFn<D>>,
     #[derivative(Debug = "ignore")]
@@ -261,9 +265,23 @@ pub struct Axis<D> {
     label_policy: LabelPolicy<D>,
 }
 
+impl<D: Float> Deref for Axis<D> {
+    type Target = dyn Scale<Domain = D, Normalized = f32>;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.scale
+    }
+}
+
+impl<D: Float> DerefMut for Axis<D> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.scale
+    }
+}
+
 impl<D: Float> Axis<D> {
     pub fn new(
-        scale: impl Scale<Domain = D, Normalized = D> + 'static,
+        scale: impl Scale<Domain = D, Normalized = f32> + 'static,
         position: Position,
     ) -> Self {
         // Default grid renderer - only render major ticks (level 0)
@@ -382,18 +400,6 @@ impl<D: Float> Axis<D> {
         !self.invisible
     }
 
-    pub fn domain(&self) -> (&D, &D) {
-        self.scale.domain()
-    }
-
-    pub fn scale(&self) -> &dyn Scale<Domain = D, Normalized = D> {
-        &*self.scale
-    }
-
-    pub fn scale_mut(&mut self) -> &mut dyn Scale<Domain = D, Normalized = D> {
-        &mut *self.scale
-    }
-
     pub const fn position(&self) -> &Position {
         &self.position
     }
@@ -429,7 +435,7 @@ impl<D: Float> Axis<D> {
         }
     }
 
-    pub fn denormalize(&self, normalized: D) -> D {
+    pub fn denormalize(&self, normalized: f32) -> D {
         self.scale.denormalize(normalized)
     }
 
@@ -492,8 +498,8 @@ impl<D: Float> Axis<D> {
         // Render tick-related stuff (Axis ticks and grid)
         let (&d_min, &d_max) = self.scale.domain();
 
-        for tick in self.scale().ticks().into_iter() {
-            let pos_norm = self.scale().normalize(&tick.value).to_f32().unwrap();
+        for tick in self.ticks().into_iter() {
+            let pos_norm = self.normalize(&tick.value);
 
             if self.is_visible() {
                 let tick_line = self.tick_renderer.as_ref().and_then(|renderer| {
@@ -572,8 +578,8 @@ impl<D: Float> Axis<D> {
                             1.0 - ((cursor_pos.y - plot_bounds.y) / plot_bounds.height)
                         }
                     };
-                    D::from(position_to_format)
-                        .and_then(|normalized| self.scale().denormalize_opt(normalized))
+
+                    self.denormalize_opt(position_to_format)
                         .and_then(cursor_formatter)
                 }
             {

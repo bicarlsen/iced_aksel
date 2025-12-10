@@ -3,7 +3,7 @@ use aksel::{
     scale::{Linear, Logarithmic},
 };
 use iced::{
-    Color, Element, Length, Theme,
+    Color, Length, Theme,
     alignment::Horizontal,
     widget::{column, container, row, text},
 };
@@ -148,7 +148,7 @@ impl ScalesExample {
         iced::Task::none()
     }
 
-    pub fn view(&self) -> iced::Element<Message> {
+    pub fn view(&self) -> iced::Element<'_, Message> {
         column![
             // Row of Charts
             row![
@@ -172,7 +172,7 @@ impl ScalesExample {
         .into()
     }
 
-    fn view_linear_chart(&self) -> Element<Message> {
+    fn view_linear_chart(&self) -> iced::Element<'_, Message> {
         let chart = Chart::new(&self.linear_view).layer(&self.data, Self::AXIS_X, Self::AXIS_Y);
 
         column![
@@ -191,7 +191,7 @@ impl ScalesExample {
         .into()
     }
 
-    fn view_log_chart(&self) -> Element<Message> {
+    fn view_log_chart(&self) -> iced::Element<'_, Message> {
         let chart = Chart::new(&self.log_view).layer(&self.data, Self::AXIS_X, Self::AXIS_Y);
 
         column![

@@ -1,5 +1,5 @@
 use crate::{Shape, plot};
-use aksel::{Float, PlotPoint, Transform};
+use aksel::{Float, PlotPoint};
 use iced::{
     Color, Font, Pixels, Point, Rectangle, Size,
     advanced::text::{LineHeight, Shaping, Text, Wrapping},
@@ -78,19 +78,19 @@ impl<D: Float> Label<D> {
     // =========================================================================
 
     /// Sets the text color.
-    pub fn fill(mut self, color: Color) -> Self {
+    pub const fn fill(mut self, color: Color) -> Self {
         self.fill = color;
         self
     }
 
     /// Sets the font size in logical pixels.
-    pub fn size(mut self, size: f32) -> Self {
+    pub const fn size(mut self, size: f32) -> Self {
         self.font_size = size;
         self
     }
 
     /// Sets the font.
-    pub fn font(mut self, font: Font) -> Self {
+    pub const fn font(mut self, font: Font) -> Self {
         self.font = font;
         self
     }
@@ -102,7 +102,7 @@ impl<D: Float> Label<D> {
     /// - `Horizontal::Right`: The text ends at `position.x`.
     ///
     /// (Similarly for Vertical alignment)
-    pub fn align(mut self, horizontal: Horizontal, vertical: Vertical) -> Self {
+    pub const fn align(mut self, horizontal: Horizontal, vertical: Vertical) -> Self {
         self.horizontal_alignment = horizontal;
         self.vertical_alignment = vertical;
         self
