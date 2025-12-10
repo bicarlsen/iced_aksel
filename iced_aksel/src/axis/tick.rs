@@ -5,10 +5,67 @@ use crate::axis::tick::label::{Label, LabelBounds};
 
 pub mod label;
 
+/// Defines the visual styling and content of a single tick mark on an Axis.
+///
+/// # The Tick Rendering Pipeline
+///
+/// Understanding `TickLine` requires understanding how `aksel` processes axes.
+/// The relationship flows as follows:
+///
+/// 1.  **Generation (`Scale`):** The [`Scale`] (e.g., `Linear`, `Log`) calculates logical positions
+///     and importance levels for potential ticks, creating [`Tick`] objects.
+/// 2.  **Contextualization (`Axis`):** The Axis wraps each logical [`Tick`] into a [`TickLabelContext`].
+///     This provides context like the axis bounds, domain, and orientation.
+/// 3.  **Styling (User Logic):** The user provides a closure via [`Axis::with_tick_renderer`].
+///     This closure receives the context and decides **if** and **how** that tick should be drawn
+///     by returning an `Option<TickLine>`.
+///
+/// This separation allows you to have completely dynamic styling—for example, making every
+/// major tick thick and red, while making minor ticks thin and grey, or hiding specific ticks entirely.
+///
+/// [Image of chart axis anatomy showing major and minor ticks]
+///
+/// # Example
+///
+/// This example demonstrates how to configure an axis to render major ticks with labels
+/// and thick lines, while rendering minor ticks as smaller lines without labels.
+///
+/// ```rust
+/// use aksel::{Axis, TickLine, Label, Pixels};
+///
+/// // Assume we have an axis and a scale setup
+/// let axis = axis.with_tick_renderer(|ctx| {
+///     match ctx.tick.level {
+///         // Major Tick (Level 0): Thicker, longer, and has a text label
+///         0 => Some(TickLine {
+///             thickness: Pixels(2.0),
+///             length: Pixels(10.0),
+///             // We use the context's value to format the text
+///             label: Some(Label::new(format!("{:.1}", ctx.tick.value))),
+///         }),
+///         // Minor Tick (Level 1): Thinner, shorter, no label
+///         1 => Some(TickLine {
+///             thickness: Pixels(1.0),
+///             length: Pixels(5.0),
+///             label: None,
+///         }),
+///         // Any other importance level: Do not draw (return None)
+///         _ => None,
+///     }
+/// });
+/// ```
 #[derive(Debug, Clone)]
 pub struct TickLine {
+    /// The visual thickness (stroke width) of the tick line.
     pub thickness: Pixels,
+
+    /// The length of the tick line perpendicular to the axis.
     pub length: Pixels,
+
+    /// The optional text label associated with this tick.
+    ///
+    /// If `None`, the tick will be drawn as a simple line with no text.
+    /// If provided, the text is usually rendered at the end of the tick line.
     pub label: Option<Label>,
 }
 
