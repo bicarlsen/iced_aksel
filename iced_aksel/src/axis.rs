@@ -17,21 +17,101 @@ use iced::{
 };
 
 mod grid;
-mod position;
+pub mod position;
 mod tick;
 
 use crate::{
     Catalog,
+    axis::{
+        grid::GridLine,
+        position::{Orientation, Position},
+        tick::{
+            LabelCandidate, LabelDecision, PlacedLabelInfo, ResolvedLabelCandidate, TickLine,
+            label::{Label, LabelBounds},
+        },
+    },
     render::MeshBuffer,
     style::{AxisStyle, Style},
 };
 
 use super::Scale;
 
+type LabelPolicyFn<D> = dyn for<'a> Fn(LabelDecisionContext<'a, D>) -> LabelDecision + 'static;
 // TODO: Can we, somehow, refactor out Rc<RefCell<T>>? Or is it okay as it is?
 type TickRendererFn<D> = Rc<RefCell<dyn FnMut(TickLabelContext<D>) -> Option<TickLine>>>;
 type LabelFormatter<D> = Box<dyn Fn(D) -> Option<Label>>;
 type GridRendererFn<D> = Box<dyn Fn(Tick<D>) -> Option<GridLine>>;
+
+#[derive(Debug)]
+pub struct LabelDecisionContext<'a, D> {
+    pub tick: Tick<D>,
+    pub normalized_position: f32,
+    pub bounds: LabelBounds,
+    pub orientation: Orientation,
+    pub accepted: &'a [PlacedLabelInfo<D>],
+}
+
+#[derive(Derivative, Default)]
+#[derivative(Debug)]
+pub enum LabelPolicy<D> {
+    #[default]
+    All,
+    SkipOverlapping {
+        min_gap: f32,
+    },
+    Custom(#[derivative(Debug = "ignore")] Box<LabelPolicyFn<D>>),
+}
+
+impl<D> LabelPolicy<D> {
+    pub const fn all() -> Self {
+        Self::All
+    }
+
+    pub const fn skip_overlapping(min_gap: f32) -> Self {
+        Self::SkipOverlapping { min_gap }
+    }
+
+    pub fn custom<F>(policy: F) -> Self
+    where
+        F: for<'a> Fn(LabelDecisionContext<'a, D>) -> LabelDecision + 'static,
+    {
+        Self::Custom(Box::new(policy))
+    }
+
+    fn should_render(&self, context: LabelDecisionContext<'_, D>) -> bool {
+        match self {
+            Self::All => true,
+            Self::SkipOverlapping { min_gap } => context
+                .accepted
+                .iter()
+                .all(|placed| !context.bounds.overlaps_with_gap(&placed.bounds, *min_gap)),
+            Self::Custom(policy) => matches!(policy(context), LabelDecision::Render),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TickLabelContext<D> {
+    pub tick: Tick<D>,
+    pub normalized_position: f32,
+    pub axis_bounds: Rectangle,
+    pub scale_domain: (D, D),
+    pub orientation: Orientation,
+}
+
+impl<D: Float> TickLabelContext<D> {
+    pub const fn axis_span(&self) -> f32 {
+        match self.orientation {
+            Orientation::Horizontal => self.axis_bounds.width,
+            Orientation::Vertical => self.axis_bounds.height,
+        }
+    }
+
+    pub fn scale_span(&self) -> D {
+        let (min, max) = self.scale_domain;
+        min.abs_sub(max)
+    }
+}
 
 #[derive(Derivative)]
 #[derivative(Debug)]
