@@ -51,9 +51,11 @@ pub struct LabelDecisionContext<'a, D> {
     pub accepted: &'a [PlacedLabelInfo<D>],
 }
 
+// Making this inaccessible to user for simplicity.
+// TODO: Make better implementation later
 #[derive(Derivative, Default)]
 #[derivative(Debug)]
-pub enum LabelPolicy<D> {
+pub(crate) enum LabelPolicy<D> {
     #[default]
     All,
     SkipOverlapping {
@@ -90,6 +92,7 @@ impl<D> LabelPolicy<D> {
     }
 }
 
+/// This is all the information you would need to define a `TickLine` properly.
 #[derive(Debug, Clone, Copy)]
 pub struct TickLabelContext<D> {
     pub tick: Tick<D>,
@@ -253,6 +256,8 @@ impl<D: Float> Axis<D> {
 
     /// Changes the tick renderer for the axis. This defines which ticks should have lines and
     /// are allowed to have labels & grid lines.
+    ///
+    /// OBS:
     pub fn set_tick_renderer<F>(&mut self, renderer: F)
     where
         F: Fn(TickLabelContext<D>) -> Option<TickLine> + 'static,
