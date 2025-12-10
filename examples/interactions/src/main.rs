@@ -103,11 +103,13 @@ impl Interactions {
                 self.modifiers = modifiers;
             }
             Message::Scrolled(cursor_norm, delta) => {
-                // 1. Calculate Factor
+                // 1. Extract direction for scroll
                 let delta_y = match delta {
                     iced::mouse::ScrollDelta::Lines { y, .. }
                     | iced::mouse::ScrollDelta::Pixels { y, .. } => y,
                 };
+
+                // 1.a Determine factor for scrolling (10% of view)
                 // Positive Delta (Scroll Up) -> Zoom In (> 1.0)
                 // Negative Delta (Scroll Down) -> Zoom Out (< 1.0)
                 let factor = if delta_y > 0.0 { 1.10 } else { 0.90 };
@@ -118,26 +120,25 @@ impl Interactions {
 
                 // 3. Apply Zoom
                 if zoom_x {
-                    if let Some(axis) = self.state.get_axis_mut(&Self::AXIS_X) {
+                    if let Some(axis) = self.state.axis_mut(&Self::AXIS_X) {
                         axis.scale_mut().zoom(factor, Some(cursor_norm.x as f64));
                     }
                 }
                 if zoom_y {
-                    if let Some(axis) = self.state.get_axis_mut(&Self::AXIS_Y) {
+                    if let Some(axis) = self.state.axis_mut(&Self::AXIS_Y) {
                         axis.scale_mut().zoom(factor, Some(cursor_norm.y as f64));
                     }
                 }
             }
             Message::Dragged(delta) => {
-                // Pan Logic:
-                // We invert both axes to match the "Camera/Viewport" control feel requested.
-                self.state
-                    .pan_scales(Self::AXIS_X, Self::AXIS_Y, delta.x as f64, delta.y as f64);
+                // TODO: Waiting for pan to be implemented again
+                // self.state
+                //     .pan_axes(Self::AXIS_X, Self::AXIS_Y, delta.x as f64, delta.y as f64);
             }
             Message::Hovered(cursor_norm) => {
                 // Calculate real data values from normalized cursor position
-                let x_axis = self.state.get_axis(&Self::AXIS_X);
-                let y_axis = self.state.get_axis(&Self::AXIS_Y);
+                let x_axis = self.state.axis(&Self::AXIS_X);
+                let y_axis = self.state.axis(&Self::AXIS_Y);
 
                 if let (Some(x_ax), Some(y_ax)) = (x_axis, y_axis) {
                     let x = x_ax.scale().denormalize_opt(cursor_norm.x as f64);

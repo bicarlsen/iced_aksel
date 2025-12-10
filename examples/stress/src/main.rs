@@ -554,7 +554,7 @@ impl StressTestApp {
     fn get_view_bounds(&self) -> ((f64, f64), (f64, f64)) {
         let (x_min, x_max) = self
             .state
-            .get_axis(&AXIS_ID_X)
+            .axis(&AXIS_ID_X)
             .map(|axis| {
                 let (min, max) = axis.scale().domain();
                 if min <= max {
@@ -567,7 +567,7 @@ impl StressTestApp {
 
         let (y_min, y_max) = self
             .state
-            .get_axis(&AXIS_ID_Y)
+            .axis(&AXIS_ID_Y)
             .map(|axis| {
                 let (min, max) = axis.scale().domain();
                 if min <= max {
@@ -1054,19 +1054,19 @@ impl StressTestApp {
             Message::ChartDragged(delta) => {
                 let x = delta.x as f64;
                 let y = delta.y as f64;
-                self.state.pan_scales(AXIS_ID_X, AXIS_ID_Y, x, y);
+                // self.state.pan_axes(AXIS_ID_X, AXIS_ID_Y, x, y);
                 Task::none()
             }
             Message::ChartScrolled(point, delta) => {
                 if let ScrollDelta::Lines { x: _, y } = delta {
                     let factor = 1.1f64.powf(y.into());
-                    self.state.zoom_scales(
-                        AXIS_ID_X,
-                        AXIS_ID_Y,
-                        point.x.into(),
-                        point.y.into(),
-                        factor,
-                    );
+                    // self.state.zoom_scales(
+                    //     AXIS_ID_X,
+                    //     AXIS_ID_Y,
+                    //     point.x.into(),
+                    //     point.y.into(),
+                    //     factor,
+                    // );
                 };
                 Task::none()
             }

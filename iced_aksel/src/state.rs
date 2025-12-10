@@ -2,7 +2,10 @@ use std::{collections::HashSet, hash::Hash};
 
 use aksel::{Float, PlotPoint, PlotRect};
 use derivative::Derivative;
-use indexmap::IndexMap;
+use indexmap::{
+    IndexMap,
+    map::{Iter, IterMut},
+};
 
 use crate::Axis;
 
@@ -13,10 +16,10 @@ pub struct State<AxisId: Hash + Eq, Domain> {
     axes: IndexMap<AxisId, Axis<Domain>>,
 }
 
-impl<AxisId, Domain> State<AxisId, Domain>
+impl<AxisId, D> State<AxisId, D>
 where
     AxisId: Hash + Eq + Clone,
-    Domain: Float,
+    D: Float,
 {
     pub fn new() -> Self {
         Self {
@@ -24,75 +27,107 @@ where
         }
     }
 
-    pub fn get_axis(&self, id: &AxisId) -> Option<&Axis<Domain>> {
+    pub fn get_axes(&self) -> &IndexMap<AxisId, Axis<D>> {
+        &self.axes
+    }
+
+    /// Builder style: `State::new().with_axis(...)`
+    pub fn with_axis(mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Self {
+        self.axes.insert(id.into(), axis);
+        self
+    }
+
+    /// Runtime addition: `state.set_axis
+    /// (...)`
+    pub fn set_axis(&mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Option<Axis<D>> {
+        self.axes.insert(id.into(), axis)
+    }
+
+    pub fn remove_axis(&mut self, id: &AxisId) -> Option<Axis<D>> {
+        self.axes.remove(id)
+    }
+
+    pub fn has_axis(&self, id: &AxisId) -> bool {
+        self.axes.contains_key(id)
+    }
+
+    // -------------------------------------------------------------------------
+    // B. Data Access
+    // -------------------------------------------------------------------------
+
+    /// Get a read-only reference to an axis.
+    pub fn axis(&self, id: &AxisId) -> Option<&Axis<D>> {
         self.axes.get(id)
     }
 
-    pub fn get_axis_mut(&mut self, id: &AxisId) -> Option<&mut Axis<Domain>> {
+    /// Get a mutable reference to an axis.
+    pub fn axis_mut(&mut self, id: &AxisId) -> Option<&mut Axis<D>> {
         self.axes.get_mut(id)
     }
 
-    pub fn set_axis(&mut self, id: impl Into<AxisId>, axis: Axis<Domain>) {
-        self.axes.insert(id.into(), axis);
+    /// Iterates over all axes mutably.
+    /// If you need to modify multiple axes (e.g. X and Y) safely, use this iterator.
+    pub fn axes_iter_mut(&mut self) -> IterMut<'_, AxisId, Axis<D>> {
+        self.axes.iter_mut()
     }
 
-    pub const fn axes(&self) -> &IndexMap<AxisId, Axis<Domain>> {
-        &self.axes
+    // -------------------------------------------------------------------------
+    // C. Coordinated Logic Helpers (The "Controller")
+    // -------------------------------------------------------------------------
+
+    /// Helper: Get the current domain of a specific axis.
+    pub fn domain(&self, id: &AxisId) -> Option<(&D, &D)> {
+        self.axes.get(id).map(|a| a.scale().domain())
     }
 
-    pub const fn axes_mut(&mut self) -> &mut IndexMap<AxisId, Axis<Domain>> {
-        &mut self.axes
-    }
-
-    pub fn retain_axes(&mut self, active_axes: &[AxisId]) {
-        self.axes.retain(|k, _| active_axes.contains(k));
-    }
-
-    pub fn visible_axes(&self) -> impl Iterator<Item = (&AxisId, &Axis<Domain>)> {
-        self.axes.iter().filter(|(_, axis)| axis.is_visible())
-    }
-
-    pub fn pan_scales(&mut self, x_scale: AxisId, y_scale: AxisId, dx: Domain, dy: Domain) {
-        if let Some(axis) = self.axes.get_mut(&x_scale) {
-            axis.scale_mut().pan(dx);
-        }
-        if let Some(axis) = self.axes.get_mut(&y_scale) {
-            axis.scale_mut().pan(dy);
+    /// Helper: Manually set the domain of an axis.
+    pub fn set_domain(&mut self, id: &AxisId, min: D, max: D) {
+        if let Some(axis) = self.axes.get_mut(id) {
+            axis.scale_mut().set_domain(min, max);
         }
     }
 
-    pub fn zoom_scales(
-        &mut self,
-        x_scale: AxisId,
-        y_scale: AxisId,
-        x_norm: Domain,
-        y_norm: Domain,
-        factor: Domain,
-    ) {
-        if let Some(axis) = self.axes.get_mut(&x_scale) {
-            axis.scale_mut().zoom(factor, Some(x_norm));
-        }
-        if let Some(axis) = self.axes.get_mut(&y_scale) {
-            axis.scale_mut().zoom(factor, Some(y_norm));
-        }
-    }
+    // /// Helper: Pan X and Y axes simultaneously using normalized deltas.
+    // pub fn pan_axes(
+    //     &mut self,
+    //     x_id: &AxisId,
+    //     y_id: &AxisId,
+    //     delta_x: Normalized<D>,
+    //     delta_y: Normalized<D>,
+    // ) {
+    //     for (id, axis) in self.axes.iter_mut() {
+    //         if id == x_id {
+    //             axis.scale_mut().pan(delta_x);
+    //         } else if id == y_id {
+    //             // simple 'else if' allows generic handling even if x_id == y_id
+    //             // (though usually they are different)
+    //             axis.scale_mut().pan(delta_y);
+    //         }
+    //     }
+    // }
 
-    #[deprecated = "Use State::axes() instead"]
-    pub const fn axis(&self) -> &IndexMap<AxisId, Axis<Domain>> {
-        &self.axes
-    }
+    // /// Helper: Zoom X and Y axes around a normalized anchor point.
+    // pub fn zoom_axes(
+    //     &mut self,
+    //     x_id: &AxisId,
+    //     y_id: &AxisId,
+    //     factor: D,
+    //     anchor_x: Option<Normalized<D>>,
+    //     anchor_y: Option<Normalized<D>>,
+    // ) {
+    //     // Validation
+    //     let norm_factor = if let Some(nf) = Normalized::new(factor) {
+    //         nf
+    //     } else {
+    //         return;
+    //     };
 
-    pub fn get_scales_plotrectangle(
-        &self,
-        x_scale: AxisId,
-        y_scale: AxisId,
-    ) -> Option<PlotRect<Domain>> {
-        let horizontal_range = self.axes.get(&x_scale)?.domain();
-        let vertical_range = self.axes.get(&y_scale)?.domain();
-
-        let top_left = PlotPoint::new(*horizontal_range.0, *vertical_range.0);
-        let bot_right = PlotPoint::new(*horizontal_range.1, *vertical_range.1);
-
-        Some(PlotRect::from_points(top_left, bot_right))
-    }
+    //     for (id, axis) in self.axes.iter_mut() {
+    //         if id == x_id {
+    //             axis.scale_mut().zoom(norm_factor, anchor_x);
+    //         } else if id == y_id {
+    //             axis.scale_mut().zoom(norm_factor, anchor_y);
+    //         }
+    //     }
+    // }
 }

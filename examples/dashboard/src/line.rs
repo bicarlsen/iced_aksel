@@ -306,7 +306,7 @@ impl LineChart {
         let next_x1 = self.current_x_domain.1 + (target_x.1 - self.current_x_domain.1) * alpha;
         self.current_x_domain = (next_x0, next_x1);
 
-        if let Some(axis) = self.state.get_axis_mut(&Self::X.to_string()) {
+        if let Some(axis) = self.state.axis_mut(&Self::X.to_string()) {
             axis.scale_mut()
                 .set_domain(self.current_x_domain.0, self.current_x_domain.1);
         }
@@ -316,7 +316,7 @@ impl LineChart {
             current.0 += (target.0 - current.0) * alpha;
             current.1 += (target.1 - current.1) * alpha;
 
-            if let Some(axis) = self.state.get_axis_mut(&id) {
+            if let Some(axis) = self.state.axis_mut(&id) {
                 axis.scale_mut().set_domain(current.0, current.1);
             }
         }
@@ -355,11 +355,11 @@ impl LineChart {
         self.current_x_domain = tx;
         self.current_y_domains = tys;
 
-        if let Some(axis) = self.state.get_axis_mut(&Self::X.to_string()) {
+        if let Some(axis) = self.state.axis_mut(&Self::X.to_string()) {
             axis.scale_mut().set_domain(tx.0, tx.1);
         }
         for (id, d) in &self.current_y_domains {
-            if let Some(axis) = self.state.get_axis_mut(id) {
+            if let Some(axis) = self.state.axis_mut(id) {
                 axis.scale_mut().set_domain(d.0, d.1);
             }
         }
@@ -499,7 +499,7 @@ impl LineChart {
         let labels = self.labels.clone();
         let x_key = Self::X.to_string();
 
-        let (min, max) = if let Some(a) = self.state.get_axis(&x_key) {
+        let (min, max) = if let Some(a) = self.state.axis(&x_key) {
             let d = a.scale().domain();
             (*d.0, *d.1)
         } else {
@@ -558,7 +558,7 @@ impl LineChart {
 // Unified Renderer
 impl Items<f64> for LineChart {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
-        let chart_floor = if let Some(axis) = self.state.get_axis(&Self::Y.to_string()) {
+        let chart_floor = if let Some(axis) = self.state.axis(&Self::Y.to_string()) {
             *axis.scale().domain().0
         } else {
             0.0
@@ -630,8 +630,8 @@ impl Items<f64> for LineChart {
         if self.show_legend {
             let palette = theme.palette();
             if let (Some(x_axis), Some(y_axis)) = (
-                self.state.get_axis(&Self::X.to_string()),
-                self.state.get_axis(&Self::Y.to_string()),
+                self.state.axis(&Self::X.to_string()),
+                self.state.axis(&Self::Y.to_string()),
             ) {
                 let (x_min, x_max) = x_axis.scale().domain();
                 let (y_min, y_max) = y_axis.scale().domain();

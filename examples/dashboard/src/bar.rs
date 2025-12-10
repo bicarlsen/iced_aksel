@@ -184,12 +184,12 @@ impl BarChart {
         let domain_max = self.current_x_max;
 
         // Update Bar Axis
-        if let Some(bar_axis) = self.state.get_axis_mut(&Self::BAR_AXIS) {
+        if let Some(bar_axis) = self.state.axis_mut(&Self::BAR_AXIS) {
             bar_axis.scale_mut().set_domain(0.0, domain_max);
         }
 
         // Update Value Axis
-        if let Some(value_axis) = self.state.get_axis_mut(&Self::VALUE_AXIS) {
+        if let Some(value_axis) = self.state.axis_mut(&Self::VALUE_AXIS) {
             let max_value = self
                 .data
                 .iter()
@@ -237,7 +237,7 @@ impl BarChart {
     fn update_labels(&mut self) {
         let labels: Vec<_> = self.data.iter().map(|data| data.label.clone()).collect();
         self.state
-            .get_axis_mut(&Self::BAR_AXIS)
+            .axis_mut(&Self::BAR_AXIS)
             .unwrap()
             .set_tick_renderer(move |ctx| {
                 let idx = ctx.tick.value;
