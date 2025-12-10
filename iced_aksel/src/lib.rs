@@ -28,7 +28,7 @@ pub mod plot;
 pub mod shape;
 
 pub use axis::Axis;
-pub use layer::Layer;
+use layer::Layer;
 pub use length::Length;
 pub use plot::Plot;
 pub use shape::Shape;
@@ -171,19 +171,6 @@ where
         let layer = Layer::new(items, x_axis_id, y_axis_id);
         if verify_layer(&layer, self.state, &mut self.errors) {
             self.layers.push(layer);
-        }
-
-        self
-    }
-
-    pub fn layers(
-        mut self,
-        layers: impl IntoIterator<Item = Layer<'a, AxisId, Domain, Renderer, Theme>>,
-    ) -> Self {
-        for layer in layers {
-            if verify_layer(&layer, self.state, &mut self.errors) {
-                self.layers.push(layer);
-            }
         }
 
         self
