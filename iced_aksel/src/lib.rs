@@ -37,7 +37,8 @@ pub use stroke::{Stroke, StrokeStyle};
 pub use style::Catalog;
 
 use action::Action;
-use axis::{Orientation, Position};
+
+use crate::axis::{Orientation, Position};
 
 // Default value for how many pixels till a drag actually counts as a drag
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;

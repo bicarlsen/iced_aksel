@@ -20,6 +20,19 @@ use iced::{
     widget::text::{Alignment, Shaping},
 };
 
+mod grid;
+mod position;
+mod tick;
+
+pub use grid::GridLine;
+pub use position::{Orientation, Position};
+pub use tick::{
+    LabelDecision, TickLine,
+    label::{Label, LabelBounds},
+};
+
+use tick::{LabelCandidate, PlacedLabelInfo, ResolvedLabelCandidate};
+
 use crate::{
     Catalog,
     render::MeshBuffer,
@@ -28,149 +41,11 @@ use crate::{
 
 use super::Scale;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Position {
-    Top,
-    Bottom,
-    Left,
-    Right,
-}
-
-impl From<Position> for Orientation {
-    fn from(value: Position) -> Self {
-        match value {
-            Position::Top | Position::Bottom => Self::Horizontal,
-            Position::Left | Position::Right => Self::Vertical,
-        }
-    }
-}
-
-impl<'a> From<&'a Position> for Orientation {
-    fn from(value: &'a Position) -> Self {
-        match value {
-            Position::Top | Position::Bottom => Self::Horizontal,
-            Position::Left | Position::Right => Self::Vertical,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Orientation {
-    Horizontal,
-    Vertical,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct GridLine {
-    pub thickness: Pixels,
-}
-
-impl Default for GridLine {
-    fn default() -> Self {
-        Self {
-            thickness: Pixels(1.0),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TickLine {
-    pub thickness: Pixels,
-    pub length: Pixels,
-    pub label: Option<Label>,
-}
-
-impl Default for TickLine {
-    #[inline(always)]
-    fn default() -> Self {
-        Self {
-            thickness: Pixels(1.0),
-            length: Pixels(5.0),
-            label: None,
-        }
-    }
-}
-
-impl TickLine {
-    #[inline(always)]
-    pub fn simple(content: String) -> Self {
-        Self {
-            label: Some(Label {
-                content,
-                ..Default::default()
-            }),
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Label {
-    pub size: Pixels,
-    pub content: String,
-}
-
-impl Default for Label {
-    #[inline(always)]
-    fn default() -> Self {
-        Self {
-            size: Pixels(12.0),
-            content: String::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct LabelBounds {
-    pub start: f32,
-    pub end: f32,
-}
-
-impl LabelBounds {
-    pub const fn new(start: f32, end: f32) -> Self {
-        Self { start, end }
-    }
-
-    pub fn overlaps_with_gap(&self, other: &Self, min_gap: f32) -> bool {
-        (self.start < other.end + min_gap) && (other.start < self.end + min_gap)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PlacedLabelInfo<D> {
-    pub tick: Tick<D>,
-    pub normalized_position: f32,
-    pub bounds: LabelBounds,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct TickLabelContext<D> {
-    pub tick: Tick<D>,
-    pub normalized_position: f32,
-    pub axis_bounds: Rectangle,
-    pub scale_domain: (D, D),
-    pub orientation: Orientation,
-}
-
-impl<D: Float> TickLabelContext<D> {
-    pub const fn axis_span(&self) -> f32 {
-        match self.orientation {
-            Orientation::Horizontal => self.axis_bounds.width,
-            Orientation::Vertical => self.axis_bounds.height,
-        }
-    }
-
-    pub fn scale_span(&self) -> D {
-        let (min, max) = self.scale_domain;
-        min.abs_sub(max)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LabelDecision {
-    Render,
-    Skip,
-}
+type LabelPolicyFn<D> = dyn for<'a> Fn(LabelDecisionContext<'a, D>) -> LabelDecision + 'static;
+// TODO: Can we, somehow, refactor out Rc<RefCell<T>>? Or is it okay as it is?
+type TickRendererFn<D> = Rc<RefCell<dyn FnMut(TickLabelContext<D>) -> Option<TickLine>>>;
+type LabelFormatter<D> = Box<dyn Fn(D) -> Option<Label>>;
+type GridRendererFn<D> = Box<dyn Fn(Tick<D>) -> Option<GridLine>>;
 
 #[derive(Debug)]
 pub struct LabelDecisionContext<'a, D> {
@@ -181,8 +56,8 @@ pub struct LabelDecisionContext<'a, D> {
     pub accepted: &'a [PlacedLabelInfo<D>],
 }
 
-type LabelPolicyFn<D> = dyn for<'a> Fn(LabelDecisionContext<'a, D>) -> LabelDecision + 'static;
-
+// Making this inaccessible to user for simplicity.
+// TODO: Make better implementation later
 #[derive(Derivative, Default)]
 #[derivative(Debug)]
 pub enum LabelPolicy<D> {
@@ -222,26 +97,28 @@ impl<D> LabelPolicy<D> {
     }
 }
 
-// TODO: Can we, somehow, refactor out Rc<RefCell<T>>? Or is it okay as it is?
-type TickRendererFn<D> = Rc<RefCell<dyn FnMut(TickLabelContext<D>) -> Option<TickLine>>>;
-type LabelFormatter<D> = Box<dyn Fn(D) -> Option<Label>>;
-type GridRendererFn<D> = Box<dyn Fn(Tick<D>) -> Option<GridLine>>;
-
-struct LabelCandidate<D> {
-    tick: Tick<D>,
-    normalized_position: f32,
-    label: Label,
+/// This is all the information you would need to define a `TickLine` properly.
+#[derive(Debug, Clone, Copy)]
+pub struct TickLabelContext<D> {
+    pub tick: Tick<D>,
+    pub normalized_position: f32,
+    pub axis_bounds: Rectangle,
+    pub scale_domain: (D, D),
+    pub orientation: Orientation,
 }
 
-struct ResolvedLabelCandidate<Renderer, D>
-where
-    Renderer: iced::advanced::text::Renderer,
-{
-    tick: Tick<D>,
-    normalized_position: f32,
-    bounds: LabelBounds,
-    paragraph: Plain<Renderer::Paragraph>,
-    position: Point,
+impl<D: Float> TickLabelContext<D> {
+    pub const fn axis_span(&self) -> f32 {
+        match self.orientation {
+            Orientation::Horizontal => self.axis_bounds.width,
+            Orientation::Vertical => self.axis_bounds.height,
+        }
+    }
+
+    pub fn scale_span(&self) -> D {
+        let (min, max) = self.scale_domain;
+        min.abs_sub(max)
+    }
 }
 
 #[derive(Derivative)]
@@ -321,6 +198,10 @@ impl<D: Float> Axis<D> {
         }
     }
 
+    // =====================================
+    // BUILDERS
+    // =====================================
+
     /// Sets the spacing between labels and tick-lines
     pub fn with_label_spacing<P: Into<Pixels>>(mut self, spacing: P) -> Self {
         self.label_spacing = spacing.into();
@@ -333,6 +214,7 @@ impl<D: Float> Axis<D> {
         self
     }
 
+    /// Sets the grid renderer for the axis
     pub fn with_grid_renderer<F>(mut self, renderer: F) -> Self
     where
         F: Fn(Tick<D>) -> Option<GridLine> + 'static,
@@ -341,11 +223,14 @@ impl<D: Float> Axis<D> {
         self
     }
 
+    /// Removes the grid from the axis
     pub fn without_grid(mut self) -> Self {
         self.grid_renderer = None;
         self
     }
 
+    /// Sets the tick renderer for the axis. This defines which ticks should have lines and
+    /// are allowed to have labels & grid lines.
     pub fn with_tick_renderer<F>(mut self, renderer: F) -> Self
     where
         F: FnMut(TickLabelContext<D>) -> Option<TickLine> + 'static,
@@ -354,23 +239,13 @@ impl<D: Float> Axis<D> {
         self
     }
 
-    pub fn set_tick_renderer<F>(&mut self, renderer: F)
-    where
-        F: Fn(TickLabelContext<D>) -> Option<TickLine> + 'static,
-    {
-        self.tick_renderer = Some(Rc::new(RefCell::new(renderer)));
-    }
-
-    pub fn label_policy(mut self, policy: LabelPolicy<D>) -> Self {
-        self.label_policy = policy;
-        self
-    }
-
+    /// Determines a minimum gap that should be maintained between labels. It will make the chart skip labels that are too close to each other.
     pub fn skip_overlapping_labels(mut self, min_gap_px: f32) -> Self {
         self.label_policy = LabelPolicy::skip_overlapping(min_gap_px);
         self
     }
 
+    // TODO: Is this implemented yet?
     pub fn with_custom_label_policy<F>(mut self, policy: F) -> Self
     where
         F: for<'a> Fn(LabelDecisionContext<'a, D>) -> LabelDecision + 'static,
@@ -379,6 +254,7 @@ impl<D: Float> Axis<D> {
         self
     }
 
+    // TODO: Is this implemented yet?
     pub fn with_cursor_formatter<F>(mut self, renderer: F) -> Self
     where
         F: Fn(D) -> Option<Label> + 'static,
@@ -387,32 +263,33 @@ impl<D: Float> Axis<D> {
         self
     }
 
+    /// Sets the axis as invisible.
     pub const fn invisible(mut self) -> Self {
         self.invisible = true;
         self
     }
 
-    pub const fn set_visible(&mut self, visible: bool) {
+    // =====================================
+    // RUNTIME SETTERS
+    // =====================================
+
+    /// Changes the tick renderer for the axis. This defines which ticks should have lines and
+    /// are allowed to have labels & grid lines.
+    ///
+    /// OBS:
+    pub fn set_tick_renderer<F>(&mut self, renderer: F)
+    where
+        F: Fn(TickLabelContext<D>) -> Option<TickLine> + 'static,
+    {
+        self.tick_renderer = Some(Rc::new(RefCell::new(renderer)));
+    }
+
+    /// Sets the axis as visible.
+    pub const fn set_visibility(&mut self, visible: bool) {
         self.invisible = !visible;
     }
 
-    pub const fn is_visible(&self) -> bool {
-        !self.invisible
-    }
-
-    pub const fn position(&self) -> &Position {
-        &self.position
-    }
-
-    pub fn orientation(&self) -> Orientation {
-        Orientation::from(&self.position)
-    }
-
-    pub fn set_thickness<P: Into<Pixels>>(&mut self, thickness: P) {
-        self.thickness = thickness.into();
-    }
-
-    /// How thick this axis wants to be in the direction
+    /// Sets the thickness of the axis. This is the thickness of the axis in the direction
     /// perpendicular to the chart.
     ///
     /// Top/Bottom -> height
@@ -420,6 +297,39 @@ impl<D: Float> Axis<D> {
     ///
     /// For now it's a placeholder; customize this later using
     /// `tick_renderer`, fonts, padding, etc.
+    pub fn set_thickness<P: Into<Pixels>>(&mut self, thickness: P) {
+        self.thickness = thickness.into();
+    }
+
+    // =====================================
+    // GETTERS
+    // =====================================
+
+    /// Checks if the axis is visible.
+    pub const fn is_visible(&self) -> bool {
+        !self.invisible
+    }
+
+    /// Gets the domain of the axis.
+    pub fn domain(&self) -> (&D, &D) {
+        self.scale.domain()
+    }
+
+    /// Gets the position of the axis. Which side is the axis wanting to be placed at for the chart?
+    pub const fn position(&self) -> &Position {
+        &self.position
+    }
+
+    /// Gets the orientation of the axis.
+    pub fn orientation(&self) -> Orientation {
+        Orientation::from(&self.position)
+    }
+
+    /// How thick this axis wants to be in the direction
+    /// perpendicular to the chart.
+    ///
+    /// Top/Bottom -> height
+    /// Left/Right -> width
     pub const fn thickness(&self) -> Pixels {
         if self.invisible {
             return Pixels(0.0);
@@ -427,16 +337,16 @@ impl<D: Float> Axis<D> {
         self.thickness
     }
 
+    // =====================================
+    // CRATE / INTERNAL
+    // =====================================
+
     /// Convert a screen position to a normalized value (0.0-1.0) along this axis
     pub(crate) fn screen_to_normalized(&self, screen_pos: f32, bounds: &Rectangle) -> f32 {
         match self.orientation() {
             Orientation::Horizontal => (screen_pos - bounds.x) / bounds.width,
             Orientation::Vertical => 1.0 - ((screen_pos - bounds.y) / bounds.height),
         }
-    }
-
-    pub fn denormalize(&self, normalized: f32) -> D {
-        self.scale.denormalize(normalized)
     }
 
     /// Handle drag event on this axis - returns normalized delta
@@ -447,7 +357,7 @@ impl<D: Float> Axis<D> {
         }
     }
 
-    pub fn layout(&self, limits: &Limits) -> Node {
+    pub(crate) fn layout(&self, limits: &Limits) -> Node {
         let min = limits.min();
         let max = limits.max();
 
