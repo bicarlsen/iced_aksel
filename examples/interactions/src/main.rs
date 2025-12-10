@@ -53,36 +53,37 @@ impl Interactions {
     const AXIS_Y: &'static str = "amplitude";
 
     pub fn new() -> (Self, iced::Task<Message>) {
+        // 0. Initialize chartstate
         let mut state = State::new();
 
-        // Setup Axes
-        state.set_axis(
-            Self::AXIS_X,
-            Axis::new(Linear::new(0.0, 10.0), axis::Position::Bottom).with_tick_renderer(|ctx| {
+        // 1. Create the scales for the axes
+        let linear_x = Linear::new(0.0, 10.0);
+        let linear_y = Linear::new(-10.0, 10.0);
+
+        // 2. Create the axes themselves with formatting
+        let axis_x =
+            Axis::new(linear_x, axis::Position::Bottom).with_tick_renderer(|ctx| {
                 match ctx.tick.level {
                     0 => Some(TickLine::simple(format!("{:.1}s", ctx.tick.value))),
                     _ => None,
                 }
-            }),
-        );
+            });
 
-        state.set_axis(
-            Self::AXIS_Y,
-            Axis::new(Linear::new(-10.0, 10.0), axis::Position::Left)
-                .with_tick_renderer(|ctx| match ctx.tick.level {
-                    0 => Some(TickLine::simple(format!("{:.1}V", ctx.tick.value))),
-                    _ => Some(TickLine {
-                        thickness: 0.5.into(),
-                        length: 2.5.into(),
-                        ..Default::default()
-                    }),
-                })
-                .with_grid_renderer(|_| {
-                    Some(GridLine {
-                        thickness: 0.5.into(),
-                    })
-                }),
-        );
+        let axis_y = Axis::new(linear_y, axis::Position::Left).with_tick_renderer(|ctx| match ctx
+            .tick
+            .level
+        {
+            0 => Some(TickLine::simple(format!("{:.1}V", ctx.tick.value))),
+            _ => Some(TickLine {
+                thickness: 0.5.into(),
+                length: 2.5.into(),
+                ..Default::default()
+            }),
+        });
+
+        // 3. Add the axes
+        state.set_axis(Self::AXIS_X, axis_x);
+        state.set_axis(Self::AXIS_Y, axis_y);
 
         (
             Self {
