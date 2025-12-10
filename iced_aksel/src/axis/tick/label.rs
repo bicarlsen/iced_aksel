@@ -3,7 +3,7 @@ use derivative::Derivative;
 use iced::{Pixels, Point, advanced::text::paragraph::Plain};
 
 #[derive(Debug, Clone)]
-pub struct Label {
+pub(crate) struct Label {
     pub size: Pixels,
     pub content: String,
 }
@@ -19,7 +19,7 @@ impl Default for Label {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct LabelBounds {
+pub(crate) struct LabelBounds {
     pub start: f32,
     pub end: f32,
 }
