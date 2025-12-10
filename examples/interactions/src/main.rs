@@ -7,7 +7,7 @@ use iced::{
 };
 use iced_aksel::{
     Axis, Chart, State, Stroke,
-    axis::{self, GridLine, TickLine},
+    axis::{self, TickLine},
     plot::{Items, Plot},
     shape::Polyline,
 };
