@@ -8,7 +8,6 @@
 
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
-use aksel::{PlotPoint, scale::Linear};
 use chrono::{Datelike, TimeZone, Timelike};
 use iced::{
     Color, Element, Subscription, Task, Theme,
@@ -19,9 +18,12 @@ use iced::{
     window,
 };
 use iced_aksel::{
-    Axis, Chart, DragDelta, Measure, Plot, State, Stroke, StrokeStyle,
+    Axis, Chart, DragDelta, Measure, Plot, PlotPoint, State, Stroke,
     axis::{self, Position, TickLabelContext, TickLine},
-    plot, shape,
+    plot,
+    scale::Linear,
+    shape,
+    stroke::StrokeStyle,
 };
 
 // --- Constants ---

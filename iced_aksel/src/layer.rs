@@ -7,7 +7,7 @@ use super::plot;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub(crate) struct Layer<'a, AxisId, Domain, Renderer, Theme> {
+pub struct Layer<'a, AxisId, Domain, Renderer, Theme> {
     pub(crate) horizontal_axis_id: AxisId,
     pub(crate) vertical_axis_id: AxisId,
 

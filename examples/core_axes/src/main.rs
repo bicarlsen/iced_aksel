@@ -1,12 +1,12 @@
-use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Element, Length, Theme,
     widget::{checkbox, column, container, pick_list, row, slider, text},
 };
 use iced_aksel::{
-    Axis, Chart, Measure, State, Stroke,
+    Axis, Chart, Measure, PlotPoint, State, Stroke,
     axis::{self, GridLine, LabelDecision, TickLine},
     plot::{Plot, PlotData},
+    scale::Linear,
     shape::Polyline,
 };
 
@@ -44,8 +44,8 @@ pub enum TickStyle {
 impl std::fmt::Display for TickStyle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TickStyle::Simple => write!(f, "Simple"),
-            TickStyle::OnlyMajor => write!(f, "Only Major"),
+            Self::Simple => write!(f, "Simple"),
+            Self::OnlyMajor => write!(f, "Only Major"),
         }
     }
 }

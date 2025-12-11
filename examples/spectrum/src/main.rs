@@ -10,7 +10,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use aksel::{PlotPoint, scale};
 use cpal::{
     Sample,
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -23,9 +22,9 @@ use iced::{
     window,
 };
 use iced_aksel::{
-    Axis, Chart, Measure, Plot, State, Stroke,
+    Axis, Chart, Measure, Plot, PlotPoint, State, Stroke,
     axis::{GridLine, Label, Position, TickLabelContext, TickLine},
-    plot, shape,
+    plot, scale, shape,
 };
 use realfft::RealFftPlanner;
 

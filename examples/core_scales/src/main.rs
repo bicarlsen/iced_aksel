@@ -1,7 +1,3 @@
-use aksel::{
-    PlotPoint,
-    scale::{Linear, Logarithmic},
-};
 use iced::{
     Color, Length, Theme,
     alignment::Horizontal,
@@ -10,9 +6,10 @@ use iced::{
 use iced_aksel::Stroke;
 use iced_aksel::shape::{Circle, Polyline};
 use iced_aksel::{
-    Axis, Chart, State,
+    Axis, Chart, PlotPoint, State,
     axis::{self, GridLine, TickLine},
     plot::{Plot, PlotData},
+    scale::{Linear, Logarithmic},
 };
 
 // -----------------------------------------------------------------------------

@@ -1,12 +1,11 @@
-use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Theme,
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
-    Axis, Chart, State, Stroke,
-    axis::{self},
+    Axis, Chart, PlotPoint, State, Stroke, axis,
     plot::{Plot, PlotData},
+    scale::Linear,
 };
 
 // Import all available shapes

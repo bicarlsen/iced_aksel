@@ -1,12 +1,12 @@
-use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Element, Length, Theme,
     widget::{column, container},
 };
 use iced_aksel::{
-    Axis, Chart, Measure, State,
+    Axis, Chart, Measure, PlotPoint, State,
     axis::{self},
     plot::{Plot, PlotData},
+    scale::Linear,
     shape::Rectangle,
 };
 use rand::Rng;

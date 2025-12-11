@@ -1,12 +1,12 @@
-use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Theme,
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
-    Axis, Chart, Measure, State,
+    Axis, Chart, Measure, PlotPoint, State,
     axis::{self, TickLine},
     plot::{Plot, PlotData},
+    scale::Linear,
 };
 use std::collections::HashMap;
 use std::time::Instant;

@@ -1,6 +1,5 @@
 use std::{fmt::Debug, hash::Hash, ops::Deref};
 
-use aksel::{Float, Scale, ScreenRect, Transform};
 use derive_more::{Display, Error};
 use iced::{
     Color, Element, Event, Padding, Point, Rectangle, Size,
@@ -15,30 +14,32 @@ use iced::{
     touch,
 };
 
+// Re-export aksel
+pub use aksel::*;
+
 mod action;
 mod layer;
 mod measure;
 mod render;
 mod state;
-mod stroke;
 mod style;
 
 pub mod axis;
 pub mod plot;
 pub mod shape;
+pub mod stroke;
 
 pub use axis::Axis;
-use layer::Layer;
 pub use measure::Measure;
 pub use plot::Plot;
 pub use shape::Shape;
 pub use state::State;
-pub use stroke::{Stroke, StrokeStyle};
+pub use stroke::Stroke;
 pub use style::Catalog;
 
 use action::Action;
-
-use crate::axis::{Orientation, Position};
+use axis::{Orientation, Position};
+use layer::Layer;
 
 // Default value for how many pixels till a drag actually counts as a drag
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;

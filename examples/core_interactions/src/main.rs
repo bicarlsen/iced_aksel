@@ -1,4 +1,3 @@
-use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Element, Length, Subscription, Theme,
     alignment::{Horizontal, Vertical},
@@ -6,9 +5,10 @@ use iced::{
     widget::{column, container, row, text},
 };
 use iced_aksel::{
-    Axis, Chart, State, Stroke,
+    Axis, Chart, PlotPoint, State, Stroke,
     axis::{self, TickLine},
     plot::{Plot, PlotData},
+    scale::Linear,
     shape::Polyline,
 };
 

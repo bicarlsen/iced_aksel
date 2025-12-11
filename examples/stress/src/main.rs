@@ -11,17 +11,18 @@
 
 use std::time::Instant;
 
-use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Alignment, Color, Element, Point, Subscription, Task, Theme,
     mouse::ScrollDelta,
     widget::{Slider, button, checkbox, column, radio, row, text},
 };
 use iced_aksel::{
-    Axis, Chart, DragDelta, Measure, Plot, State, Stroke, StrokeStyle,
+    Axis, Chart, DragDelta, Measure, Plot, PlotPoint, State, Stroke,
     axis::Position,
     plot,
+    scale::Linear,
     shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
+    stroke::StrokeStyle,
 };
 use rand::Rng;
 

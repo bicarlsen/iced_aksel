@@ -1,9 +1,9 @@
-use aksel::{PlotPoint, Scale, Tick, TickIter, scale::Linear};
 use iced::Theme;
 use iced_aksel::{
-    Axis, Chart, Measure, State,
+    Axis, Chart, Measure, PlotPoint, Scale, State, Tick, TickIter,
     axis::{self, TickLine},
     plot::{Plot, PlotData},
+    scale::Linear,
     shape::Rectangle,
 };
 use std::time::Instant;

@@ -1,9 +1,9 @@
 use crate::{
-    Measure, Shape, Stroke, StrokeStyle,
+    Float, Measure, PlotPoint, Shape, Stroke, Transform,
     plot::{self},
     render::{MeshBuffer, Tessellators},
+    stroke::StrokeStyle,
 };
-use aksel::{Float, PlotPoint, Transform};
 use iced::{
     Color,
     advanced::graphics::{color::pack, mesh::SolidVertex2D},

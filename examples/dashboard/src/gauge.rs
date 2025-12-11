@@ -1,12 +1,12 @@
-use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Theme,
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
-    Axis, Chart, Measure, State as ChartState,
+    Axis, Chart, Measure, PlotPoint, State as ChartState,
     axis::{self},
     plot::{Plot, PlotData},
+    scale::Linear,
 };
 use std::f32::consts::PI;
 use std::time::Instant;

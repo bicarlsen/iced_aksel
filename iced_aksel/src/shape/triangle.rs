@@ -1,7 +1,8 @@
 use crate::{
-    Measure, Shape, Stroke, StrokeStyle,
+    Measure, Shape, Stroke,
     plot::{self},
     render::{MeshBuffer, Tessellators},
+    stroke::StrokeStyle,
 };
 use aksel::{Float, PlotPoint, Transform};
 use iced::{
