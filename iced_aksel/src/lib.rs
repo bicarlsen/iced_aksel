@@ -186,6 +186,8 @@ where
         self
     }
 
+    // TODO: Consider removing this. If we can make the chart show itself perfectly centered, this could
+    // be handled by the user using wrapper elements in UI
     pub const fn padding(mut self, padding: Padding) -> Self {
         self.padding = padding;
         self
