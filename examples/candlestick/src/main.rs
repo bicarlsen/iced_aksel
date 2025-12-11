@@ -18,7 +18,7 @@ use iced::{
     window,
 };
 use iced_aksel::{
-    Axis, Chart, DragDelta, Measure, Plot, PlotPoint, State, Stroke,
+    Axis, Chart, Measure, Plot, PlotPoint, State, Stroke,
     axis::{self, Position, TickLabelContext, TickLine},
     plot,
     scale::Linear,

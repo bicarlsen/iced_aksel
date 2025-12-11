@@ -1,5 +1,6 @@
 use std::{fmt::Debug, hash::Hash, ops::Deref};
 
+use aksel::ScreenRect;
 use derive_more::{Display, Error};
 use iced::{
     Color, Element, Event, Padding, Point, Rectangle, Size,
@@ -15,7 +16,7 @@ use iced::{
 };
 
 // Re-export aksel
-pub use aksel::*;
+pub use aksel::{Float, Transform, scale, scale::Scale, transform, transform::PlotPoint};
 
 mod action;
 mod layer;
@@ -40,6 +41,7 @@ pub use style::Catalog;
 use action::Action;
 use axis::{Orientation, Position};
 use layer::Layer;
+use plot::DragDelta;
 
 // Default value for how many pixels till a drag actually counts as a drag
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
@@ -59,16 +61,6 @@ pub enum Error<AxisId> {
     },
     #[display("Unknown axis id: '{id:?}'")]
     UnknownAxis { id: AxisId },
-}
-
-/// Delta for dragging the plot.
-///
-/// The x and y values are normalized (between 0.0-1.0) to be used with scales to translate values
-/// into actual values on the plot relative to a set of scales
-#[derive(Debug, Clone, Copy)]
-pub struct DragDelta {
-    pub x: f32,
-    pub y: f32,
 }
 
 // Plot/Chart handlers

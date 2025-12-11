@@ -7,6 +7,16 @@ use crate::{
 
 use iced::{Color, Point, advanced::Text};
 
+/// Delta for dragging the plot.
+///
+/// The x and y values are normalized (between 0.0-1.0) to be used with scales to translate values
+/// into actual values on the plot relative to a set of scales
+#[derive(Debug, Clone, Copy)]
+pub struct DragDelta {
+    pub x: f32,
+    pub y: f32,
+}
+
 pub trait Renderer:
     iced::advanced::Renderer
     + iced::advanced::graphics::mesh::Renderer
