@@ -285,7 +285,7 @@ impl PlotData<f64, iced::Renderer, Theme> for SignalData {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         plot.add_shape(Polyline::new(
             self.points.clone(),
-            Stroke::new(theme.palette().primary, iced_aksel::Length::Screen(1.5)),
+            Stroke::new(theme.palette().primary, iced_aksel::Measure::Screen(1.5)),
         ));
     }
 }

@@ -4,7 +4,7 @@ use iced::{
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
-    Axis, Chart, Length, State, Stroke,
+    Axis, Chart, State, Stroke,
     axis::{self},
     plot::{Plot, PlotData},
 };
@@ -56,7 +56,9 @@ impl ShapeGallery {
     }
 
     pub fn view(&self) -> iced::Element<'_, Message> {
-        Chart::new(&self.state).layer(self, Self::X, Self::Y).into()
+        Chart::new(&self.state)
+            .plot_data(self, Self::X, Self::Y)
+            .into()
     }
 }
 
@@ -99,8 +101,8 @@ impl PlotData<f64> for ShapeGallery {
         plot.add_shape(
             Rectangle::new(
                 PlotPoint::new(25.0, y),
-                Length::Plot(12.0),
-                Length::Plot(12.0),
+                iced_aksel::Measure::Plot(12.0),
+                iced_aksel::Measure::Plot(12.0),
             )
             .fill(palette.primary),
         );
@@ -108,17 +110,20 @@ impl PlotData<f64> for ShapeGallery {
         plot.add_shape(
             Rectangle::new(
                 PlotPoint::new(50.0, y),
-                Length::Plot(12.0),
-                Length::Plot(12.0),
+                iced_aksel::Measure::Plot(12.0),
+                iced_aksel::Measure::Plot(12.0),
             )
-            .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+            .stroke(Stroke::new(
+                palette.primary,
+                iced_aksel::Measure::Screen(2.0),
+            )),
         );
 
         plot.add_shape(
             Rectangle::new(
                 PlotPoint::new(75.0, y),
-                Length::Screen(25.0),
-                Length::Screen(25.0),
+                iced_aksel::Measure::Screen(25.0),
+                iced_aksel::Measure::Screen(25.0),
             )
             .fill(palette.success),
         );
@@ -126,10 +131,13 @@ impl PlotData<f64> for ShapeGallery {
         plot.add_shape(
             Rectangle::new(
                 PlotPoint::new(100.0, y),
-                Length::Screen(25.0),
-                Length::Screen(25.0),
+                iced_aksel::Measure::Screen(25.0),
+                iced_aksel::Measure::Screen(25.0),
             )
-            .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+            .stroke(Stroke::new(
+                palette.success,
+                iced_aksel::Measure::Screen(2.0),
+            )),
         );
 
         // =========================================================
@@ -139,21 +147,25 @@ impl PlotData<f64> for ShapeGallery {
         draw_row_label(plot, y, "Circle");
 
         plot.add_shape(
-            Circle::new(PlotPoint::new(25.0, y), Length::Plot(6.0)).fill(palette.primary),
+            Circle::new(PlotPoint::new(25.0, y), iced_aksel::Measure::Plot(6.0))
+                .fill(palette.primary),
         );
 
         plot.add_shape(
-            Circle::new(PlotPoint::new(50.0, y), Length::Plot(6.0))
-                .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+            Circle::new(PlotPoint::new(50.0, y), iced_aksel::Measure::Plot(6.0)).stroke(
+                Stroke::new(palette.primary, iced_aksel::Measure::Screen(2.0)),
+            ),
         );
 
         plot.add_shape(
-            Circle::new(PlotPoint::new(75.0, y), Length::Screen(12.0)).fill(palette.success),
+            Circle::new(PlotPoint::new(75.0, y), iced_aksel::Measure::Screen(12.0))
+                .fill(palette.success),
         );
 
         plot.add_shape(
-            Circle::new(PlotPoint::new(100.0, y), Length::Screen(12.0))
-                .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+            Circle::new(PlotPoint::new(100.0, y), iced_aksel::Measure::Screen(12.0)).stroke(
+                Stroke::new(palette.success, iced_aksel::Measure::Screen(2.0)),
+            ),
         );
 
         // =========================================================
@@ -164,27 +176,53 @@ impl PlotData<f64> for ShapeGallery {
         draw_row_label(plot, y, "Arc");
 
         plot.add_shape(
-            Arc::new(PlotPoint::new(25.0, y), Length::Plot(7.0), 0.0, 4.0)
-                .inner_radius(Length::Plot(3.0)) // Inner radius in Plot units
-                .fill(palette.primary),
+            Arc::new(
+                PlotPoint::new(25.0, y),
+                iced_aksel::Measure::Plot(7.0),
+                0.0,
+                4.0,
+            )
+            .inner_radius(iced_aksel::Measure::Plot(3.0)) // Inner radius in Plot units
+            .fill(palette.primary),
         );
 
         plot.add_shape(
-            Arc::new(PlotPoint::new(50.0, y), Length::Plot(7.0), 0.0, 4.0)
-                .inner_radius(Length::Plot(3.0))
-                .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+            Arc::new(
+                PlotPoint::new(50.0, y),
+                iced_aksel::Measure::Plot(7.0),
+                0.0,
+                4.0,
+            )
+            .inner_radius(iced_aksel::Measure::Plot(3.0))
+            .stroke(Stroke::new(
+                palette.primary,
+                iced_aksel::Measure::Screen(2.0),
+            )),
         );
 
         plot.add_shape(
-            Arc::new(PlotPoint::new(75.0, y), Length::Screen(14.0), 0.0, 4.0)
-                .inner_radius(Length::Screen(6.0)) // Inner radius in Screen pixels
-                .fill(palette.success),
+            Arc::new(
+                PlotPoint::new(75.0, y),
+                iced_aksel::Measure::Screen(14.0),
+                0.0,
+                4.0,
+            )
+            .inner_radius(iced_aksel::Measure::Screen(6.0)) // Inner radius in Screen pixels
+            .fill(palette.success),
         );
 
         plot.add_shape(
-            Arc::new(PlotPoint::new(100.0, y), Length::Screen(14.0), 0.0, 4.0)
-                .inner_radius(Length::Screen(6.0))
-                .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+            Arc::new(
+                PlotPoint::new(100.0, y),
+                iced_aksel::Measure::Screen(14.0),
+                0.0,
+                4.0,
+            )
+            .inner_radius(iced_aksel::Measure::Screen(6.0))
+            .stroke(Stroke::new(
+                palette.success,
+                iced_aksel::Measure::Screen(2.0),
+            )),
         );
 
         // =========================================================
@@ -208,17 +246,23 @@ impl PlotData<f64> for ShapeGallery {
                 PlotPoint::new(55.0, y - 5.0),
                 PlotPoint::new(50.0, y + 5.0),
             )
-            .stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
+            .stroke(Stroke::new(
+                palette.primary,
+                iced_aksel::Measure::Screen(2.0),
+            )),
         );
 
         plot.add_shape(
-            Triangle::equilateral(PlotPoint::new(75.0, y), Length::Screen(14.0))
+            Triangle::equilateral(PlotPoint::new(75.0, y), iced_aksel::Measure::Screen(14.0))
                 .fill(palette.success),
         );
 
         plot.add_shape(
-            Triangle::equilateral(PlotPoint::new(100.0, y), Length::Screen(14.0))
-                .stroke(Stroke::new(palette.success, Length::Screen(2.0))),
+            Triangle::equilateral(PlotPoint::new(100.0, y), iced_aksel::Measure::Screen(14.0))
+                .stroke(Stroke::new(
+                    palette.success,
+                    iced_aksel::Measure::Screen(2.0),
+                )),
         );
 
         // =========================================================
@@ -239,9 +283,10 @@ impl PlotData<f64> for ShapeGallery {
 
         plot.add_shape(Polygon::new(poly_pts(25.0)).fill(palette.primary));
 
-        plot.add_shape(
-            Polygon::new(poly_pts(50.0)).stroke(Stroke::new(palette.primary, Length::Screen(2.0))),
-        );
+        plot.add_shape(Polygon::new(poly_pts(50.0)).stroke(Stroke::new(
+            palette.primary,
+            iced_aksel::Measure::Screen(2.0),
+        )));
 
         plot.add_shape(
             Label::new("N/A", PlotPoint::new(75.0, y))
@@ -263,13 +308,13 @@ impl PlotData<f64> for ShapeGallery {
         plot.add_shape(Line::new(
             PlotPoint::new(20.0, y - 5.0),
             PlotPoint::new(30.0, y + 5.0),
-            Stroke::new(palette.primary, Length::Screen(2.0)),
+            Stroke::new(palette.primary, iced_aksel::Measure::Screen(2.0)),
         ));
 
         plot.add_shape(Line::new(
             PlotPoint::new(45.0, y + 5.0),
             PlotPoint::new(55.0, y - 5.0),
-            Stroke::new(palette.primary, Length::Screen(2.0)),
+            Stroke::new(palette.primary, iced_aksel::Measure::Screen(2.0)),
         ));
 
         plot.add_shape(
@@ -300,23 +345,23 @@ impl PlotData<f64> for ShapeGallery {
 
         plot.add_shape(Polyline::new(
             zigzag(25.0),
-            Stroke::new(palette.primary, Length::Plot(1.0)),
+            Stroke::new(palette.primary, iced_aksel::Measure::Plot(1.0)),
         ));
 
         plot.add_shape(Polyline::new(
             zigzag(50.0),
-            Stroke::new(palette.primary, Length::Screen(2.0)),
+            Stroke::new(palette.primary, iced_aksel::Measure::Screen(2.0)),
         ));
 
         // Fixed Px variants
         plot.add_shape(Polyline::new(
             zigzag(75.0),
-            Stroke::new(palette.success, Length::Plot(1.0)),
+            Stroke::new(palette.success, iced_aksel::Measure::Plot(1.0)),
         ));
 
         plot.add_shape(Polyline::new(
             zigzag(100.0),
-            Stroke::new(palette.success, Length::Screen(3.0)),
+            Stroke::new(palette.success, iced_aksel::Measure::Screen(3.0)),
         ));
 
         // =========================================================
@@ -329,7 +374,10 @@ impl PlotData<f64> for ShapeGallery {
         plot.add_shape(Line::new(
             PlotPoint::new(-10.0, sep_y),
             PlotPoint::new(130.0, sep_y),
-            Stroke::new(Color::from_rgb(0.5, 0.5, 0.5), Length::Screen(1.0)),
+            Stroke::new(
+                Color::from_rgb(0.5, 0.5, 0.5),
+                iced_aksel::Measure::Screen(1.0),
+            ),
         ));
 
         plot.add_shape(
@@ -405,8 +453,12 @@ impl PlotData<f64> for ShapeGallery {
         // Helper to draw an anchor point
         let draw_anchor = |plot: &mut Plot<f64, iced::Renderer>, pt: PlotPoint| {
             plot.add_shape(
-                Rectangle::new(pt, Length::Screen(4.0), Length::Screen(4.0))
-                    .fill(Color::from_rgb(1.0, 0.2, 0.2)), // Red anchor
+                Rectangle::new(
+                    pt,
+                    iced_aksel::Measure::Screen(4.0),
+                    iced_aksel::Measure::Screen(4.0),
+                )
+                .fill(Color::from_rgb(1.0, 0.2, 0.2)), // Red anchor
             );
         };
 

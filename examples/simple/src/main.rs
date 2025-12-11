@@ -66,7 +66,7 @@ impl ExampleApp {
 
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.chart_state)
-            .layer(&self.star_system, X_ID, Y_ID)
+            .plot_data(&self.star_system, X_ID, Y_ID)
             .on_drag(Message::ChartDragged);
         chart.into()
     }

@@ -23,7 +23,7 @@ use iced::{
     window,
 };
 use iced_aksel::{
-    Axis, Chart, Length, Plot, State, Stroke,
+    Axis, Chart, Measure, Plot, State, Stroke,
     axis::{GridLine, Label, Position, TickLabelContext, TickLine},
     plot, shape,
 };
@@ -131,10 +131,10 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for SpectrumLayer {
             palette.primary.weak.color
         };
 
-        let glow_stroke = Stroke::new(glow_color, Length::Screen(6.0));
+        let glow_stroke = Stroke::new(glow_color, Measure::Screen(6.0));
         plot.add_shape(shape::Polyline::new(self.curve.clone(), glow_stroke));
 
-        let line_stroke = Stroke::new(palette.background.base.text, Length::Screen(2.2));
+        let line_stroke = Stroke::new(palette.background.base.text, Measure::Screen(2.2));
         plot.add_shape(shape::Polyline::new(self.curve.clone(), line_stroke));
     }
 }
@@ -259,7 +259,8 @@ impl AnalyzerApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let chart = Chart::new(&self.state).layer(&self.spectrum_layer, FREQ_AXIS_ID, DB_AXIS_ID);
+        let chart =
+            Chart::new(&self.state).plot_data(&self.spectrum_layer, FREQ_AXIS_ID, DB_AXIS_ID);
 
         let pick_row = row![
             text("Audio Input: "),

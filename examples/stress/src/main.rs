@@ -7,7 +7,7 @@
 //! - Pre-calculated geometry to isolate rendering performance
 //! - Advanced styling controls (Size, Opacity, Stroke Style)
 //! - **View-Aware Generation**: Shapes generate within the current pan/zoom bounds.
-//! - **Length Modes**: Switch between Screen (px) and Plot (data) units for sizes and strokes.
+//! - **Measure Modes**: Switch between Screen (px) and Plot (data) units for sizes and strokes.
 
 use std::time::Instant;
 
@@ -18,7 +18,7 @@ use iced::{
     widget::{Slider, button, checkbox, column, radio, row, text},
 };
 use iced_aksel::{
-    Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
+    Axis, Chart, DragDelta, Measure, Plot, State, Stroke, StrokeStyle,
     axis::Position,
     plot,
     shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
@@ -118,8 +118,8 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for StressRectangles {
 
             if self.show_stroke {
                 let thickness = match self.stroke_width_mode {
-                    LengthMode::Screen => Length::Screen(self.stroke_width),
-                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                    LengthMode::Screen => Measure::Screen(self.stroke_width),
+                    LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
                 };
                 rect = rect.stroke(Stroke::with_style(
                     Color::WHITE,
@@ -156,8 +156,8 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for StressCircles {
 
             if self.show_stroke {
                 let thickness = match self.stroke_width_mode {
-                    LengthMode::Screen => Length::Screen(self.stroke_width),
-                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                    LengthMode::Screen => Measure::Screen(self.stroke_width),
+                    LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
                 };
                 circle = circle.stroke(Stroke::with_style(
                     Color::WHITE,
@@ -194,8 +194,8 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for StressTriangles {
 
             if self.show_stroke {
                 let thickness = match self.stroke_width_mode {
-                    LengthMode::Screen => Length::Screen(self.stroke_width),
-                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                    LengthMode::Screen => Measure::Screen(self.stroke_width),
+                    LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
                 };
                 tri = tri.stroke(Stroke::with_style(
                     Color::WHITE,
@@ -235,8 +235,8 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for StressLines {
             let mut line = base_line.clone();
 
             let thickness = match self.stroke_width_mode {
-                LengthMode::Screen => Length::Screen(self.stroke_width),
-                LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                LengthMode::Screen => Measure::Screen(self.stroke_width),
+                LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
             };
 
             line.stroke = Stroke::with_style(color, thickness, self.stroke_style);
@@ -274,8 +274,8 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for StressPolylines {
             let mut poly = base_poly.clone();
 
             let thickness = match self.stroke_width_mode {
-                LengthMode::Screen => Length::Screen(self.stroke_width),
-                LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                LengthMode::Screen => Measure::Screen(self.stroke_width),
+                LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
             };
 
             poly.stroke = Stroke::with_style(color, thickness, self.stroke_style);
@@ -310,8 +310,8 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for StressArcs {
 
             if self.show_stroke {
                 let thickness = match self.stroke_width_mode {
-                    LengthMode::Screen => Length::Screen(self.stroke_width),
-                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                    LengthMode::Screen => Measure::Screen(self.stroke_width),
+                    LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
                 };
                 arc = arc.stroke(Stroke::with_style(
                     Color::WHITE,
@@ -348,8 +348,8 @@ impl<R: plot::Renderer> plot::PlotData<f64, R> for StressPolygons {
 
             if self.show_stroke {
                 let thickness = match self.stroke_width_mode {
-                    LengthMode::Screen => Length::Screen(self.stroke_width),
-                    LengthMode::Plot => Length::Plot(self.stroke_width as f64),
+                    LengthMode::Screen => Measure::Screen(self.stroke_width),
+                    LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
                 };
                 poly = poly.stroke(Stroke::with_style(
                     Color::WHITE,
@@ -600,8 +600,10 @@ impl StressTestApp {
 
             let center = PlotPoint::new(x, y);
             let (width, height) = match self.size_mode {
-                LengthMode::Screen => (Length::Screen(w_val as f32), Length::Screen(h_val as f32)),
-                LengthMode::Plot => (Length::Plot(w_val), Length::Plot(h_val)),
+                LengthMode::Screen => {
+                    (Measure::Screen(w_val as f32), Measure::Screen(h_val as f32))
+                }
+                LengthMode::Plot => (Measure::Plot(w_val), Measure::Plot(h_val)),
             };
 
             self.rectangles_layer
@@ -630,8 +632,8 @@ impl StressTestApp {
             ) as f64;
 
             let radius = match self.size_mode {
-                LengthMode::Screen => Length::Screen(r_val as f32),
-                LengthMode::Plot => Length::Plot(r_val),
+                LengthMode::Screen => Measure::Screen(r_val as f32),
+                LengthMode::Plot => Measure::Plot(r_val),
             };
 
             self.circles_layer
@@ -660,8 +662,8 @@ impl StressTestApp {
             ) as f64;
 
             let radius = match self.size_mode {
-                LengthMode::Screen => Length::Screen(r_val as f32),
-                LengthMode::Plot => Length::Plot(r_val),
+                LengthMode::Screen => Measure::Screen(r_val as f32),
+                LengthMode::Plot => Measure::Plot(r_val),
             };
 
             self.triangles_layer
@@ -695,7 +697,7 @@ impl StressTestApp {
             self.lines_layer.geometry.push(Line::new(
                 PlotPoint::new(x1, y1),
                 PlotPoint::new(x2, y2),
-                Stroke::new(Color::BLACK, Length::Screen(1.0)),
+                Stroke::new(Color::BLACK, Measure::Screen(1.0)),
             ));
             self.lines_layer
                 .colors
@@ -733,7 +735,7 @@ impl StressTestApp {
 
             self.polylines_layer.geometry.push(Polyline::new(
                 points,
-                Stroke::new(Color::BLACK, Length::Screen(1.0)),
+                Stroke::new(Color::BLACK, Measure::Screen(1.0)),
             ));
             self.polylines_layer
                 .colors
@@ -763,12 +765,12 @@ impl StressTestApp {
 
             let (radius, inner_radius) = match self.size_mode {
                 LengthMode::Screen => (
-                    Length::Screen(r_val as f32),
-                    Length::Screen(r_val as f32 * self.arc_inner_radius),
+                    Measure::Screen(r_val as f32),
+                    Measure::Screen(r_val as f32 * self.arc_inner_radius),
                 ),
                 LengthMode::Plot => (
-                    Length::Plot(r_val),
-                    Length::Plot(r_val * self.arc_inner_radius as f64),
+                    Measure::Plot(r_val),
+                    Measure::Plot(r_val * self.arc_inner_radius as f64),
                 ),
             };
 
@@ -1068,14 +1070,14 @@ impl StressTestApp {
 
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.state)
-            .layer(&self.rectangles_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.circles_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.triangles_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.lines_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.polylines_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.arcs_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.polygons_layer, AXIS_ID_X, AXIS_ID_Y)
-            .layer(&self.labels_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.rectangles_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.circles_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.triangles_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.lines_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.polylines_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.arcs_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.polygons_layer, AXIS_ID_X, AXIS_ID_Y)
+            .plot_data(&self.labels_layer, AXIS_ID_X, AXIS_ID_Y)
             .on_drag(Message::ChartDragged)
             .on_scroll(Message::ChartScrolled);
 

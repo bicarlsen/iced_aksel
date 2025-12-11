@@ -255,13 +255,13 @@ impl PlotData<f64, iced::Renderer, Theme> for ExponentialData {
         // Draw the line
         plot.add_shape(Polyline::new(
             self.line.clone(),
-            Stroke::new(theme.palette().primary, iced_aksel::Length::Screen(2.5)),
+            Stroke::new(theme.palette().primary, iced_aksel::Measure::Screen(2.5)),
         ));
 
         // Draw dots at 1, 10, 100, 1000...
         for point in &self.markers {
             plot.add_shape(
-                Circle::new(*point, iced_aksel::Length::Screen(5.0)).fill(theme.palette().danger),
+                Circle::new(*point, iced_aksel::Measure::Screen(5.0)).fill(theme.palette().danger),
             );
         }
     }
