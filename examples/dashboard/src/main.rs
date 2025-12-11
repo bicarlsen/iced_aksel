@@ -58,13 +58,9 @@ impl ExampleApp {
 
                 bar_chart: BarChart::new(bar::Orientation::Vertical).animated(0.3),
 
-                // Fix: Pass empty string for title to "hide" it inside the chart
-                // since we are rendering our own custom header outside.
                 gauge_chart: Gauge::new("", 0., 100.)
                     .animated(0.5)
                     .value_pos(gauge::Placement::Center)
-                    // Removed .title_pos(Placement::None) as it doesn't exist.
-                    // Empty string above handles the "No Title" look.
                     .zone(gauge::Zone::Success(65.))
                     .zone(gauge::Zone::Warning(75.))
                     .zone(gauge::Zone::Danger(100.))
