@@ -16,6 +16,32 @@ use lyon::path::Path;
 /// - **Fill:** Uses a high-performance manual triangle strip generator.
 /// - **Stroke:** Uses Lyon to handle complex line joins between straight and curved edges.
 /// - **Coordinate System:** Math standard (0 is East, positive angles are Counter-Clockwise).
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, Measure, shape::Arc};
+/// use iced::Color;
+/// use std::f32::consts::PI;
+///
+/// // Filled pie slice (quarter circle)
+/// let pie = Arc::new(
+///     PlotPoint::new(50.0, 50.0),
+///     Measure::Plot(10.0),
+///     0.0,           // start angle
+///     PI / 2.0       // end angle (90 degrees)
+/// ).fill(Color::from_rgb(1.0, 0.5, 0.0));
+///
+/// // Donut sector with inner radius
+/// let donut = Arc::new(
+///     PlotPoint::new(30.0, 30.0),
+///     Measure::Screen(40.0),
+///     0.0,
+///     PI
+/// )
+/// .inner_radius(Measure::Screen(20.0))
+/// .fill(Color::from_rgb(0.0, 0.5, 1.0));
+/// ```
 #[derive(Debug, Clone)]
 pub struct Arc<D> {
     pub center: PlotPoint<D>,

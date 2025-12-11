@@ -31,6 +31,26 @@ enum Geometry<D> {
 /// It utilizes a Hybrid Engine:
 /// - **Fill & Solid Stroke:** Uses manual vertex generation with miter-adjusted insets. (very fast)
 /// - **Dashed/Dotted:** Falls back to Lyon (a lot slower at rendering tens of thousands).
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, Measure, shape::Triangle, Stroke};
+/// use iced::Color;
+///
+/// // Custom triangle from three points
+/// let tri = Triangle::new(
+///     PlotPoint::new(0.0, 0.0),
+///     PlotPoint::new(10.0, 0.0),
+///     PlotPoint::new(5.0, 10.0)
+/// ).fill(Color::from_rgb(1.0, 0.0, 0.0));
+///
+/// // Equilateral triangle (constant size marker)
+/// let marker = Triangle::equilateral(
+///     PlotPoint::new(25.0, 25.0),
+///     Measure::Screen(8.0)
+/// ).fill(Color::from_rgb(0.0, 1.0, 0.0));
+/// ```
 #[derive(Debug, Clone)]
 pub struct Triangle<D> {
     geometry: Geometry<D>,

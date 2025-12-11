@@ -10,6 +10,24 @@ use iced::{
 ///
 /// Unlike geometric shapes, labels are rendered using the backend's native text engine
 /// via [`plot::Renderer::fill_text`], ensuring crisp, hinted typography.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, shape::Label};
+/// use iced::Color;
+/// use iced::alignment::{Horizontal, Vertical};
+///
+/// // Simple centered label
+/// let label = Label::new("Hello", PlotPoint::new(10.0, 20.0))
+///     .fill(Color::from_rgb(1.0, 0.0, 0.0))
+///     .size(16.0);
+///
+/// // Left-aligned label at a data point
+/// let marker_label = Label::new("Max", PlotPoint::new(50.0, 100.0))
+///     .align(Horizontal::Left, Vertical::Center)
+///     .size(14.0);
+/// ```
 #[derive(Debug, Clone)]
 pub struct Label<D> {
     pub content: String,

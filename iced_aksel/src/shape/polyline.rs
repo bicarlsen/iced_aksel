@@ -14,6 +14,34 @@ use lyon::math::{Point, Vector};
 ///
 /// Supports infinite extension on the first/last segments, optional arrowheads,
 /// and proper miter joins via Lyon tessellation.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, Measure, shape::Polyline, Stroke};
+/// use iced::Color;
+///
+/// // Simple path connecting points
+/// let path = Polyline::new(
+///     vec![
+///         PlotPoint::new(0.0, 0.0),
+///         PlotPoint::new(10.0, 15.0),
+///         PlotPoint::new(20.0, 10.0),
+///         PlotPoint::new(30.0, 20.0),
+///     ],
+///     Stroke::new(Color::from_rgb(0.0, 0.0, 1.0), Measure::Screen(3.0))
+/// );
+///
+/// // Polyline with arrow at the end
+/// let arrow_path = Polyline::new(
+///     vec![
+///         PlotPoint::new(5.0, 5.0),
+///         PlotPoint::new(15.0, 10.0),
+///         PlotPoint::new(25.0, 8.0),
+///     ],
+///     Stroke::new(Color::from_rgb(1.0, 0.0, 0.0), Measure::Screen(2.0))
+/// ).arrow_end(true);
+/// ```
 #[derive(Debug, Clone)]
 pub struct Polyline<D> {
     pub points: Vec<PlotPoint<D>>,

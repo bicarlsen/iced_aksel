@@ -104,9 +104,30 @@ pub struct PlacedLabelInfo<D> {
     pub bounds: LabelBounds,
 }
 
+/// Decision on whether to render or skip a tick label.
+///
+/// Used by custom label policies provided to [`Axis::with_custom_label_policy`](crate::Axis::with_custom_label_policy).
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{Axis, axis::LabelDecision, scale::Linear};
+///
+/// // Only show labels for even values
+/// let axis = Axis::new(Linear::new(0.0, 100.0), iced_aksel::axis::Position::Bottom)
+///     .with_custom_label_policy(|ctx| {
+///         if ctx.tick.value as i32 % 2 == 0 {
+///             LabelDecision::Render
+///         } else {
+///             LabelDecision::Skip
+///         }
+///     });
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LabelDecision {
+    /// Render this label at its position.
     Render,
+    /// Skip rendering this label (e.g., due to overlap or custom filtering).
     Skip,
 }
 

@@ -12,6 +12,27 @@ use iced::{
 use lyon::math::{Point, Vector};
 
 /// A polygon defined by an arbitrary list of vertices.
+///
+/// Supports both convex and concave polygons. Convex polygons use optimized
+/// manual tessellation, while concave polygons fall back to Lyon for correctness.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, Measure, shape::Polygon, Stroke};
+/// use iced::Color;
+///
+/// // Pentagon
+/// let pentagon = Polygon::new(vec![
+///     PlotPoint::new(50.0, 60.0),
+///     PlotPoint::new(55.0, 52.0),
+///     PlotPoint::new(52.0, 45.0),
+///     PlotPoint::new(48.0, 45.0),
+///     PlotPoint::new(45.0, 52.0),
+/// ])
+/// .fill(Color::from_rgb(0.8, 0.2, 0.8))
+/// .stroke(Stroke::new(Color::from_rgb(1.0, 1.0, 1.0), Measure::Screen(2.0)));
+/// ```
 #[derive(Debug, Clone)]
 pub struct Polygon<D> {
     points: Vec<PlotPoint<D>>,
