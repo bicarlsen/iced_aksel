@@ -1,7 +1,7 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use iced::{
-    Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme, font,
+    Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme, font, keyboard,
     widget::{Space, button, column, container, pick_list, row, text},
 };
 
@@ -35,13 +35,14 @@ struct ExampleApp {
     gauge_chart: Gauge,
     line_chart: LineChart,
     color_index: usize,
-    last_theme_change: Instant,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
     AnimationTick(Instant),
     SwitchTheme(Theme),
+    NextTheme,
+    PrevTheme,
     AddLineDataPoint,
     AddLineSeries,
     ToggleStacked,
@@ -56,7 +57,6 @@ impl ExampleApp {
             Self {
                 theme: Theme::Dark,
                 color_index: 0,
-                last_theme_change: Instant::now(),
 
                 bar_chart: BarChart::new(bar::Orientation::Vertical).animated(0.3),
 
@@ -81,22 +81,24 @@ impl ExampleApp {
                 self.gauge_chart.tick(now);
                 self.line_chart.tick(now);
                 self.bar_chart.tick(now);
-
-                // Auto-switch theme every 3 seconds
-                if now.duration_since(self.last_theme_change) >= Duration::from_secs(3) {
-                    let all = Theme::ALL;
-                    if let Some(index) = all.iter().position(|x| x == &self.theme) {
-                        self.theme = all[(index + 1) % all.len()].clone();
-                    }
-                    self.last_theme_change = now;
-                }
-
                 Task::none()
             }
             Message::SwitchTheme(theme) => {
                 self.theme = theme;
-                // Reset timer so we don't switch immediately after a manual switch
-                self.last_theme_change = Instant::now();
+                Task::none()
+            }
+            Message::NextTheme => {
+                let all = Theme::ALL;
+                if let Some(index) = all.iter().position(|x| x == &self.theme) {
+                    self.theme = all[(index + 1) % all.len()].clone();
+                }
+                Task::none()
+            }
+            Message::PrevTheme => {
+                let all = Theme::ALL;
+                if let Some(index) = all.iter().position(|x| x == &self.theme) {
+                    self.theme = all[if index == 0 { all.len() - 1 } else { index - 1 }].clone();
+                }
                 Task::none()
             }
             Message::AddBarDataPoint => {
@@ -203,7 +205,7 @@ impl ExampleApp {
         let theme_picker =
             pick_list(Theme::ALL, Some(&self.theme), Message::SwitchTheme).width(Length::Fill);
 
-        let help_text = text("Themes cycle automatically every 3 seconds.")
+        let help_text = text("Tip: Use Left/Right Arrow keys to cycle themes")
             .size(12)
             .color(self.theme.palette().text.scale_alpha(0.5));
 
@@ -222,7 +224,24 @@ impl ExampleApp {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        iced::window::frames().map(Message::AnimationTick)
+        Subscription::batch(vec![
+            iced::window::frames().map(Message::AnimationTick),
+            iced::event::listen_with(|event, _status, _window_id| {
+                if let iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) = event {
+                    match key {
+                        keyboard::Key::Named(keyboard::key::Named::ArrowLeft) => {
+                            Some(Message::PrevTheme)
+                        }
+                        keyboard::Key::Named(keyboard::key::Named::ArrowRight) => {
+                            Some(Message::NextTheme)
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }),
+        ])
     }
 }
 
