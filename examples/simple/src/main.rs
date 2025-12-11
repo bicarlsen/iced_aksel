@@ -1,7 +1,7 @@
 use aksel::{PlotPoint, scale::Linear};
 use iced::{
     Color, Element, Length, Theme,
-    widget::{column, container, text},
+    widget::{column, container},
 };
 use iced_aksel::{
     Axis, Chart, Measure, State,
@@ -32,30 +32,26 @@ pub fn main() -> iced::Result {
 
 struct SimpleExample {
     chart_state: State<&'static str, f64>,
-    solar_system: SolarSystem,
+    stars: StarField,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
     Scrolled(iced::Point, iced::mouse::ScrollDelta),
-    Dragged(iced_aksel::DragDelta),
 }
 
 impl SimpleExample {
     const X_ID: &'static str = "x";
     const Y_ID: &'static str = "y";
 
-    // Initial world bounds (-100 to 100)
     const WORLD_SIZE: f64 = 100.0;
-
-    // Limit how far out the user can zoom (World Span > 500)
-    const MAX_ZOOM_OUT_SPAN: f64 = 500.0;
+    // Maximum allowable span (World Diameter: -100 to 100 = 200)
+    const MAX_SPAN: f64 = 200.0;
 
     fn new() -> (Self, iced::Task<Message>) {
         let mut chart_state = State::new();
 
-        // 1. Setup Axes
-        // We set them to invisible as this is a "Space" view
+        // 1. Setup Axes (Invisible)
         chart_state.set_axis(
             Self::X_ID,
             Axis::new(
@@ -74,17 +70,10 @@ impl SimpleExample {
             .invisible(),
         );
 
-        // 2. Generate Data
-        // 500 Stars/Planets
-        let solar_system = SolarSystem::generate(500);
+        // 2. Generate Data (Static)
+        let stars = StarField::generate(1000, Self::WORLD_SIZE);
 
-        (
-            Self {
-                chart_state,
-                solar_system,
-            },
-            iced::Task::none(),
-        )
+        (Self { chart_state, stars }, iced::Task::none())
     }
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
@@ -95,40 +84,40 @@ impl SimpleExample {
                     | iced::mouse::ScrollDelta::Pixels { y, .. } => y,
                 };
 
-                // Zoom Factor: > 1.0 zooms in, < 1.0 zooms out
+                // Simple Zoom Logic
                 let factor = if delta_y > 0.0 { 1.10 } else { 0.90 };
 
-                // Constraint Logic: Check current span before applying zoom out
-                let can_zoom = if factor < 1.0 {
-                    // If zooming out, check if we are already too wide
-                    let current_span = self
-                        .chart_state
-                        .axis(&Self::X_ID)
-                        .map(|ax| {
-                            let (min, max) = ax.domain();
-                            max - min
-                        })
-                        .unwrap_or(0.0);
+                // Get current zoom level
+                let current_span = self
+                    .chart_state
+                    .axis(&Self::X_ID)
+                    .map(|ax| {
+                        let (min, max) = ax.domain();
+                        max - min
+                    })
+                    .unwrap_or(0.0);
 
-                    current_span < Self::MAX_ZOOM_OUT_SPAN
-                } else {
-                    true // Always allow zooming in
-                };
+                // Check if the NEXT zoom level would exceed the world size
+                let next_span = current_span / factor;
+                let should_clamp = factor < 1.0 && next_span >= Self::MAX_SPAN;
 
-                if can_zoom {
+                if should_clamp {
+                    // Snap to exact world bounds
                     if let Some(axis) = self.chart_state.axis_mut(&Self::X_ID) {
-                        axis.zoom(factor, Some(cursor_norm.x));
+                        axis.set_domain(-Self::WORLD_SIZE, Self::WORLD_SIZE);
                     }
                     if let Some(axis) = self.chart_state.axis_mut(&Self::Y_ID) {
-                        axis.zoom(factor, Some(1.0 - cursor_norm.y));
+                        axis.set_domain(-Self::WORLD_SIZE, Self::WORLD_SIZE);
+                    }
+                } else {
+                    // Standard Zoom
+                    if let Some(axis) = self.chart_state.axis_mut(&Self::X_ID) {
+                        axis.zoom(factor as f32, Some(cursor_norm.x));
+                    }
+                    if let Some(axis) = self.chart_state.axis_mut(&Self::Y_ID) {
+                        axis.zoom(factor as f32, Some(cursor_norm.y));
                     }
                 }
-            }
-            Message::Dragged(delta) => {
-                // Standard Pan Logic
-                // We invert both axes to match the "Camera/Viewport" control feel.
-                self.chart_state
-                    .pan_axes(Self::X_ID, Self::Y_ID, -delta.x, -delta.y);
             }
         }
         iced::Task::none()
@@ -136,25 +125,10 @@ impl SimpleExample {
 
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.chart_state)
-            .plot_data(&self.solar_system, Self::X_ID, Self::Y_ID)
-            .on_scroll(Message::Scrolled)
-            .on_drag(Message::Dragged);
+            .plot_data(&self.stars, Self::X_ID, Self::Y_ID)
+            .on_scroll(Message::Scrolled);
 
-        let instruction = container(
-            text("Scroll to Zoom. Drag to Pan.\nNotice how background stars (white) stay fixed size, while planets (colored) scale.")
-                .size(14)
-                .align_x(iced::alignment::Horizontal::Center)
-                .color(Color::from_rgb(0.7, 0.7, 0.7))
-        )
-        .padding(15)
-        .width(Length::Fill)
-        .align_x(iced::alignment::Horizontal::Center);
-
-        column![
-            instruction,
-            container(chart).width(Length::Fill).height(Length::Fill)
-        ]
-        .into()
+        column![container(chart).width(Length::Fill).height(Length::Fill)].into()
     }
 }
 
@@ -164,53 +138,28 @@ impl SimpleExample {
 
 struct Star {
     position: PlotPoint,
-    // Using `Measure<f64>` allows us to mix Screen pixels and Plot units
-    size: Measure<f64>,
     color: Color,
 }
 
-struct SolarSystem {
+struct StarField {
     objects: Vec<Star>,
 }
 
-impl SolarSystem {
-    fn generate(count: usize) -> Self {
+impl StarField {
+    fn generate(count: usize, range: f64) -> Self {
         let mut rng = rand::rng();
         let mut objects = Vec::with_capacity(count);
 
-        // 1. Create "Background Stars"
-        // Use Measure::Screen: These stay the same pixel size regardless of zoom
-        // giving the illusion of being very far away.
-        for _ in 0..(count * 9 / 10) {
+        for _ in 0..count {
             objects.push(Star {
                 position: PlotPoint {
-                    x: rng.random_range(-200.0..200.0),
-                    y: rng.random_range(-200.0..200.0),
+                    x: rng.random_range(-range..range),
+                    y: rng.random_range(-range..range),
                 },
-                size: Measure::Screen(rng.random_range(1.5..3.0)),
-                color: Color::from_rgb(
-                    rng.random_range(0.8..1.0),
-                    rng.random_range(0.8..1.0),
-                    rng.random_range(0.9..1.0),
-                ),
-            });
-        }
-
-        // 2. Create "Planets"
-        // Use Measure::Plot: These sizes are in Data Units.
-        // They will enlarge when you zoom in, behaving like local objects.
-        for _ in 0..(count / 10) {
-            objects.push(Star {
-                position: PlotPoint {
-                    x: rng.random_range(-80.0..80.0),
-                    y: rng.random_range(-80.0..80.0),
+                color: Color {
+                    a: rng.random_range(0.2..0.8),
+                    ..Color::WHITE
                 },
-                size: Measure::Plot(rng.random_range(3.0..8.0)),
-                color: Color::from_rgb(
-                    rng.random_range(0.8..1.0),
-                    rng.random_range(0.4..0.6),
-                    rng.random_range(0.4..0.6),
-                ),
             });
         }
 
@@ -218,14 +167,13 @@ impl SolarSystem {
     }
 }
 
-impl PlotData<f64, iced::Renderer, Theme> for SolarSystem {
+impl PlotData<f64, iced::Renderer, Theme> for StarField {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, _theme: &Theme) {
-        for object in &self.objects {
-            // Draw object as a square
-            let shape =
-                Rectangle::new(object.position, object.size, object.size).fill(object.color);
+        // Very small fixed size (1 screen pixel)
+        let size = Measure::Screen(1.0);
 
-            plot.add_shape(shape);
+        for obj in &self.objects {
+            plot.add_shape(Rectangle::new(obj.position, size, size).fill(obj.color));
         }
     }
 }
