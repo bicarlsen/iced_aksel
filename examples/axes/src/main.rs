@@ -33,7 +33,7 @@ pub struct AxesExample {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TickStyle {
+pub enum TickStyle {
     Simple,
     OnlyMajor,
 }
