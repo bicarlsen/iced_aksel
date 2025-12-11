@@ -12,6 +12,33 @@ use iced::{
 use lyon_tessellation::math::Point;
 
 /// A rectangle shape that can be drawn on a chart.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, Measure, shape::Rectangle, Stroke};
+/// use iced::Color;
+///
+/// // Filled rectangle centered at (10, 20)
+/// let filled = Rectangle::new(
+///     PlotPoint::new(10.0, 20.0),
+///     Measure::Plot(5.0),   // width
+///     Measure::Plot(10.0)   // height
+/// ).fill(Color::from_rgb(0.0, 1.0, 0.0));
+///
+/// // Stroked rectangle
+/// let outlined = Rectangle::new(
+///     PlotPoint::new(30.0, 40.0),
+///     Measure::Screen(100.0),
+///     Measure::Screen(50.0)
+/// ).stroke(Stroke::new(Color::from_rgb(1.0, 0.0, 0.0), Measure::Screen(2.0)));
+///
+/// // Rectangle from corners
+/// let from_corners = Rectangle::from_corners(
+///     PlotPoint::new(0.0, 0.0),
+///     PlotPoint::new(10.0, 10.0)
+/// ).fill(Color::from_rgb(0.0, 0.0, 1.0));
+/// ```
 #[derive(Debug, Clone)]
 pub struct Rectangle<D> {
     center: PlotPoint<D>,

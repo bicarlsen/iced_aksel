@@ -14,6 +14,21 @@ use lyon::math::{Angle, Point, Vector};
 
 /// A circle shape defined by a center point and a radius.
 ///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, Measure, shape::Circle, Stroke};
+/// use iced::Color;
+///
+/// // Filled circle
+/// let filled = Circle::new(PlotPoint::new(5.0, 10.0), Measure::Screen(20.0))
+///     .fill(Color::from_rgb(1.0, 0.0, 0.0));
+///
+/// // Stroked circle
+/// let outlined = Circle::new(PlotPoint::new(15.0, 20.0), Measure::Plot(5.0))
+///     .stroke(Stroke::new(Color::from_rgb(0.0, 0.0, 1.0), Measure::Screen(2.0)));
+/// ```
+///
 /// # Rendering Strategy (Hybrid Engine)
 /// This shape utilizes a dual-path rendering strategy for maximum performance:
 /// * **Manual Tessellation (Fast Path):** For solid fills and solid strokes, vertices are

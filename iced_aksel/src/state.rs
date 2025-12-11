@@ -20,21 +20,16 @@ use crate::Axis;
 /// # Example
 ///
 /// ```rust
-/// use my_crate::{State, Axis, axis, Chart};
+/// use iced_aksel::{State, Axis, axis, Chart, scale::Linear};
 ///
 /// // 1. Initialize the state (store this in your app struct)
-/// let mut chart_state = State::new()
-///     .with_axis(
-///         "x_axis_id",
-///         Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
-///     )
-///     .with_axis(
-///         "y_axis_id",
-///         Axis::new(Linear::new(0.0, 100.0), axis::Position::Right),
-///     );
+/// # #[derive(Clone)] enum Message {}
+/// let mut chart_state: State<&str, f64> = State::new();
+/// chart_state.set_axis("x_axis_id", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+/// chart_state.set_axis("y_axis_id", Axis::new(Linear::new(0.0, 100.0), axis::Position::Right));
 ///
 /// // 2. Pass the state to the Chart during rendering
-/// let chart = Chart::new(&chart_state);
+/// let chart: Chart<&str, f64, Message> = Chart::new(&chart_state);
 /// ```
 pub struct State<AxisId: Hash + Eq, Domain> {
     axes: IndexMap<AxisId, Axis<Domain>>,
@@ -51,28 +46,59 @@ where
         }
     }
 
-    /// Builder style: `State::new().with_axis(...)`
+    /// Builder-style method to add an axis during construction.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{State, Axis, axis, scale::Linear};
+    /// let state: State<&str, f64> = State::new()
+    ///     .with_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom))
+    ///     .with_axis("y", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+    /// ```
     pub fn with_axis(mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Self {
         self.axes.insert(id.into(), axis);
         self
     }
 
-    /// Get a read-only reference to the axes.
+    /// Returns a reference to all axes in the state.
     pub const fn get_axes(&self) -> &IndexMap<AxisId, Axis<D>> {
         &self.axes
     }
 
-    /// Takes in a Id and Axis. Replaces the axis if it exists.
+    /// Adds or replaces an axis with the given ID.
+    ///
+    /// Returns the previous axis if one existed with this ID.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{State, Axis, axis, scale::Linear};
+    /// let mut state: State<&str, f64> = State::new();
+    /// state.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+    /// ```
     pub fn set_axis(&mut self, id: impl Into<AxisId>, axis: Axis<D>) -> Option<Axis<D>> {
         self.axes.insert(id.into(), axis)
     }
 
     /// Removes an axis from the state.
+    ///
+    /// Returns the removed axis if it existed.
     pub fn remove_axis(&mut self, id: &AxisId) -> Option<Axis<D>> {
         self.axes.swap_remove(id)
     }
 
-    /// Checks if an axis exists.
+    /// Checks if an axis with the given ID exists.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::State;
+    /// # let state: State<&str, f64> = State::new();
+    /// if state.has_axis(&"x") {
+    ///     // axis exists
+    /// }
+    /// ```
     pub fn has_axis(&self, id: &AxisId) -> bool {
         self.axes.contains_key(id)
     }
@@ -81,18 +107,41 @@ where
     // B. Data Access
     // -------------------------------------------------------------------------
 
-    /// Get a read-only reference to an axis.
+    /// Returns a reference to an axis by ID.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{State, Axis, axis, scale::Linear};
+    /// # let mut state = State::new();
+    /// # state.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+    /// if let Some(x_axis) = state.axis(&"x") {
+    ///     let (min, max) = x_axis.domain();
+    /// }
+    /// ```
     pub fn axis(&self, id: &AxisId) -> Option<&Axis<D>> {
         self.axes.get(id)
     }
 
-    /// Get a mutable reference to an axis.
+    /// Returns a mutable reference to an axis by ID.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{State, Axis, axis, scale::Linear};
+    /// # let mut state = State::new();
+    /// # state.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+    /// if let Some(x_axis) = state.axis_mut(&"x") {
+    ///     x_axis.pan(0.1);
+    /// }
+    /// ```
     pub fn axis_mut(&mut self, id: &AxisId) -> Option<&mut Axis<D>> {
         self.axes.get_mut(id)
     }
 
-    /// Iterates over all axes mutably.
-    /// If you need to modify multiple axes (e.g. X and Y), use this iterator.
+    /// Returns an iterator over all axes mutably.
+    ///
+    /// Useful when you need to modify multiple axes simultaneously.
     pub fn axes_iter_mut(&mut self) -> IterMut<'_, AxisId, Axis<D>> {
         self.axes.iter_mut()
     }
@@ -101,24 +150,40 @@ where
     // C. Coordinated Logic Helpers (The "Controller")
     // -------------------------------------------------------------------------
 
-    /// Get the current domain of a specific axis.
+    /// Returns the current domain (min, max) of a specific axis.
     pub fn domain(&self, id: &AxisId) -> Option<(&D, &D)> {
         self.axes.get(id).map(|a| a.domain())
     }
 
+    /// Returns a mutable reference to the internal axis map.
     pub const fn axes_mut(&mut self) -> &mut IndexMap<AxisId, Axis<D>> {
         &mut self.axes
     }
 
+    /// Removes all axes except those in the provided list.
     pub fn retain_axes(&mut self, active_axes: &[AxisId]) {
         self.axes.retain(|k, _| active_axes.contains(k));
     }
 
+    /// Returns an iterator over visible axes only.
     pub fn visible_axes(&self) -> impl Iterator<Item = (&AxisId, &Axis<D>)> {
         self.axes.iter().filter(|(_, axis)| axis.is_visible())
     }
 
-    // NOTE: If one ID is wrong it will still mutate the axis that had the right ID
+    /// Pans both X and Y axes simultaneously.
+    ///
+    /// The deltas are normalized (0.0-1.0) values relative to each axis's domain.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{State, Axis, axis, scale::Linear};
+    /// # let mut state = State::new();
+    /// # state.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+    /// # state.set_axis("y", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+    /// // Pan 10% right and 5% up
+    /// state.pan_axes("x", "y", 0.1, 0.05);
+    /// ```
     pub fn pan_axes(
         &mut self,
         x_scale: AxisId,
@@ -134,7 +199,20 @@ where
         }
     }
 
-    // NOTE: If one ID is wrong it will still mutate the axis that had the right ID
+    /// Zooms both X and Y axes simultaneously around the given anchor points.
+    ///
+    /// Anchor points are normalized (0.0-1.0). Factor > 1.0 zooms in, < 1.0 zooms out.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{State, Axis, axis, scale::Linear};
+    /// # let mut state = State::new();
+    /// # state.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+    /// # state.set_axis("y", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+    /// // Zoom in 2x around the center
+    /// state.zoom_axes("x", "y", 0.5, 0.5, 2.0);
+    /// ```
     pub fn zoom_axes(
         &mut self,
         x_scale: AxisId,
@@ -151,7 +229,16 @@ where
         }
     }
 
-    /// Manually set the domain of an axis.
+    /// Sets the domain (min, max) of an axis.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{State, Axis, axis, scale::Linear};
+    /// # let mut state = State::new();
+    /// # state.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+    /// state.set_domain(&"x", 0.0, 200.0);
+    /// ```
     pub fn set_domain(&mut self, id: &AxisId, min: D, max: D) {
         if let Some(axis) = self.axes.get_mut(id) {
             axis.set_domain(min, max);

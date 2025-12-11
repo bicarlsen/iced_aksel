@@ -1,3 +1,8 @@
+//! Plot rendering and data traits.
+//!
+//! This module provides the core plotting infrastructure for rendering data on charts.
+//! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
+
 use aksel::{Float, PlotRect, Transform};
 
 use crate::{
@@ -7,16 +12,29 @@ use crate::{
 
 use iced::{Color, Point, advanced::Text};
 
-/// Delta for dragging the plot.
+/// Normalized drag delta for panning operations.
 ///
-/// The x and y values are normalized (between 0.0-1.0) to be used with scales to translate values
-/// into actual values on the plot relative to a set of scales
+/// Values are in the range 0.0-1.0 and can be passed directly to axis `pan` methods.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::plot::DragDelta;
+///
+/// let delta = DragDelta { x: 0.1, y: 0.05 };
+/// // Use with state.pan_axes(..., delta.x, delta.y)
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct DragDelta {
+    /// Normalized horizontal drag distance (0.0-1.0).
     pub x: f32,
+    /// Normalized vertical drag distance (0.0-1.0).
     pub y: f32,
 }
 
+/// Renderer requirements for plotting.
+///
+/// This trait is automatically implemented for any renderer that satisfies the requirements.
 pub trait Renderer:
     iced::advanced::Renderer
     + iced::advanced::graphics::mesh::Renderer
@@ -31,11 +49,40 @@ impl<T> Renderer for T where
 {
 }
 
+/// Trait for drawable data on a plot.
+///
+/// Implement this trait for your data types to render them on a chart. The `draw` method
+/// receives a [`Plot`] context where you can add shapes.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{plot::{Plot, PlotData}, PlotPoint, shape::Circle, Measure};
+/// use iced::{Color, Theme};
+///
+/// struct DataPoints {
+///     points: Vec<PlotPoint<f64>>,
+/// }
+///
+/// impl PlotData<f64> for DataPoints {
+///     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
+///         for point in &self.points {
+///             plot.add_shape(
+///                 Circle::new(*point, Measure::Screen(3.0))
+///                     .fill(theme.palette().primary)
+///             );
+///         }
+///     }
+/// }
+/// ```
 pub trait PlotData<D, R = iced::Renderer, Theme = iced::Theme>
 where
     D: Float,
     R: Renderer,
 {
+    /// Draws this data onto the plot.
+    ///
+    /// Use `plot.add_shape()` to add visual elements to the chart.
     fn draw(&self, plot: &mut Plot<D, R>, theme: &Theme);
 }
 
@@ -112,6 +159,10 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
     }
 }
 
+/// The plot rendering context for drawing shapes.
+///
+/// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
+/// to render visual elements.
 pub struct Plot<'a, D: Float, R: self::Renderer> {
     context: Context<'a, D, R>,
 }
@@ -121,6 +172,9 @@ where
     D: Float,
     R: self::Renderer,
 {
+    /// Creates a new plot context.
+    ///
+    /// This is typically called internally by the Chart widget.
     pub fn new(
         tessellators: &'a mut Tessellators,
         renderer: &'a mut R,
@@ -140,10 +194,42 @@ where
         Self { context }
     }
 
+    /// Returns the current plot bounds in data space.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::plot::{Plot, PlotData};
+    /// # struct MyData;
+    /// # impl PlotData<f64> for MyData {
+    /// #     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &iced::Theme) {
+    /// let bounds = plot.bounds();
+    /// let (x_min, x_max) = (bounds.min_x(), bounds.max_x());
+    /// let (y_min, y_max) = (bounds.min_y(), bounds.max_y());
+    /// #     }
+    /// # }
+    /// ```
     pub fn bounds(&self) -> PlotRect<D> {
         self.context.transform.plot_bounds()
     }
 
+    /// Adds a shape to the plot.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{plot::{Plot, PlotData}, PlotPoint, shape::Circle, Measure};
+    /// # use iced::Color;
+    /// # struct MyData;
+    /// # impl PlotData<f64> for MyData {
+    /// #     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &iced::Theme) {
+    /// plot.add_shape(
+    ///     Circle::new(PlotPoint::new(5.0, 10.0), Measure::Screen(5.0))
+    ///         .fill(Color::from_rgb(1.0, 0.0, 0.0))
+    /// );
+    /// #     }
+    /// # }
+    /// ```
     pub fn add_shape<S: Shape<D, R>>(&mut self, shape: S) {
         shape.render(&mut self.context)
     }

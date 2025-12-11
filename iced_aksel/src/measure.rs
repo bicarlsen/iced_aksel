@@ -2,15 +2,49 @@ use std::ops::{Add, Div, Mul, Sub};
 
 use aksel::Float;
 
-/// Defines how a dimension should be interpreted by `Chart`.
+/// Defines how a dimension should be interpreted by the chart.
+///
+/// `Measure` allows you to specify sizes in either screen pixels (fixed) or plot
+/// data units (scales with zoom). This is useful for shapes that should maintain
+/// their size regardless of zoom level, or for shapes that should scale with the data.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::Measure;
+///
+/// // Fixed size: always 10 pixels wide, regardless of zoom
+/// let fixed: Measure<f64> = Measure::Screen(10.0);
+///
+/// // Data size: 5.0 units in plot space, scales when zooming
+/// let scalable = Measure::Plot(5.0_f64);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub enum Measure<D> {
-    /// Fixed size in screen pixels (e.g., "10px wide").
-    /// Does not scale when zooming the chart.
+    /// Fixed size in screen pixels.
+    ///
+    /// This size does not change when zooming the chart. Useful for UI elements
+    /// like markers, labels, or decorations that should remain visually consistent.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::Measure;
+    /// let marker_size: Measure<f64> = Measure::Screen(5.0); // 5 pixels
+    /// ```
     Screen(f32),
 
-    /// Size in chart data units (e.g., "5.0 units on the X axis").
-    /// Scales when zooming the chart.
+    /// Size in chart data units.
+    ///
+    /// This size scales proportionally when zooming the chart. Useful for data
+    /// visualizations where the size represents a meaningful quantity.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::Measure;
+    /// let bar_width = Measure::Plot(10.0_f64); // 10 data units
+    /// ```
     Plot(D),
 }
 

@@ -1,3 +1,30 @@
+//! Axis configuration and rendering.
+//!
+//! This module provides the [`Axis`] type for configuring chart axes, including:
+//!
+//! - **Scales**: Linear, logarithmic, or custom domain-to-screen mappings
+//! - **Position**: Top, bottom, left, or right placement
+//! - **Ticks & Labels**: Customizable tick marks and text labels
+//! - **Grids**: Optional grid lines extending into the plot area
+//! - **Interactivity**: Cursor labels that follow mouse position
+//!
+//! # Example
+//!
+//! ```rust
+//! use iced_aksel::{Axis, axis, scale::Linear};
+//!
+//! // Create a horizontal axis at the bottom
+//! let x_axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+//!     .with_thickness(50.0)
+//!     .with_grid_renderer(|tick| {
+//!         if tick.level == 0 {
+//!             Some(axis::GridLine { thickness: 1.0.into() })
+//!         } else {
+//!             None
+//!         }
+//!     });
+//! ```
+
 use std::{
     cell::RefCell,
     ops::{Deref, DerefMut},
@@ -46,6 +73,31 @@ type TickRendererFn<D> = Rc<RefCell<dyn FnMut(TickLabelContext<D>) -> Option<Tic
 type LabelFormatter<D> = Box<dyn Fn(D) -> Option<Label>>;
 type GridRendererFn<D> = Box<dyn Fn(Tick<D>) -> Option<GridLine>>;
 
+/// An axis that maps data values to screen coordinates.
+///
+/// Axes define the data range, screen position, and visual appearance of chart boundaries.
+/// They generate ticks, labels, and optional grid lines automatically based on the configured scale.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{Axis, axis, scale::Linear};
+///
+/// // Bottom X axis from 0 to 100
+/// let x_axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+///     .with_thickness(50.0);
+///
+/// // Left Y axis from -50 to 50, invisible axes but grid visible
+/// let y_axis = Axis::new(Linear::new(-50.0, 50.0), axis::Position::Left)
+///     .invisible()
+///     .with_grid_renderer(|tick| {
+///         if tick.level == 0 {
+///             Some(axis::GridLine { thickness: 1.0.into() })
+///         } else {
+///             None
+///         }
+///     });
+/// ```
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Axis<D> {
@@ -82,6 +134,15 @@ impl<D: Float> DerefMut for Axis<D> {
 }
 
 impl<D: Float> Axis<D> {
+    /// Creates a new axis with the given scale and position.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use iced_aksel::{Axis, axis, scale::Linear};
+    ///
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom);
+    /// ```
     pub fn new(
         scale: impl Scale<Domain = D, Normalized = f32> + 'static,
         position: Position,
@@ -127,19 +188,55 @@ impl<D: Float> Axis<D> {
     // BUILDERS
     // =====================================
 
-    /// Sets the spacing between labels and tick-lines
+    /// Sets the spacing between labels and tick lines.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .with_label_spacing(10.0);
+    /// ```
     pub fn with_label_spacing<P: Into<Pixels>>(mut self, spacing: P) -> Self {
         self.label_spacing = spacing.into();
         self
     }
 
-    /// Sets the thickness of the axis (width for vertical, heigh for horizontal)
+    /// Sets the thickness of the axis.
+    ///
+    /// For horizontal axes (Top/Bottom), this is the height.
+    /// For vertical axes (Left/Right), this is the width.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .with_thickness(60.0);
+    /// ```
     pub fn with_thickness<P: Into<Pixels>>(mut self, thickness: P) -> Self {
         self.thickness = thickness.into();
         self
     }
 
-    /// Sets the grid renderer for the axis
+    /// Sets a custom grid line renderer.
+    ///
+    /// The renderer receives tick information and returns `Some(GridLine)` to draw a grid line,
+    /// or `None` to skip it. Typically you filter by `tick.level` to only draw major ticks.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis::{self, GridLine}, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .with_grid_renderer(|tick| {
+    ///         if tick.level == 0 {
+    ///             Some(GridLine { thickness: 1.0.into() })
+    ///         } else {
+    ///             None
+    ///         }
+    ///     });
+    /// ```
     pub fn with_grid_renderer<F>(mut self, renderer: F) -> Self
     where
         F: Fn(Tick<D>) -> Option<GridLine> + 'static,
@@ -148,8 +245,20 @@ impl<D: Float> Axis<D> {
         self
     }
 
-    /// Sets the tick renderer for the axis. This defines which ticks should have lines and
-    /// are allowed to have labels & grid lines.
+    /// Sets a custom tick renderer.
+    ///
+    /// The renderer receives tick context and returns `Some(TickLine)` with optional label,
+    /// or `None` to hide that tick entirely.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis::{self, TickLine}, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .with_tick_renderer(|ctx| {
+    ///         Some(TickLine::simple(format!("{:.0}", ctx.tick.value)))
+    ///     });
+    /// ```
     pub fn with_tick_renderer<F>(mut self, renderer: F) -> Self
     where
         F: FnMut(TickLabelContext<D>) -> Option<TickLine> + 'static,
@@ -158,19 +267,56 @@ impl<D: Float> Axis<D> {
         self
     }
 
-    /// Removes the grid from the axis
+    /// Removes grid lines from this axis.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .without_grid();
+    /// ```
     pub fn without_grid(mut self) -> Self {
         self.grid_renderer = None;
         self
     }
 
-    /// Determines a minimum gap that should be maintained between labels. It will make the chart skip labels that are too close to each other.
+    /// Enables automatic label overlap detection and skipping.
+    ///
+    /// Labels that would overlap with previously placed labels within `min_gap_px`
+    /// pixels will be hidden.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .skip_overlapping_labels(10.0);
+    /// ```
     pub fn skip_overlapping_labels(mut self, min_gap_px: f32) -> Self {
         self.label_policy = LabelPolicy::skip_overlapping(min_gap_px);
         self
     }
 
-    // TODO: Is this implemented yet?
+    /// Sets a custom label rendering policy.
+    ///
+    /// The policy function receives label context and returns [`LabelDecision::Render`]
+    /// or [`LabelDecision::Skip`].
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis::{self, LabelDecision}, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .with_custom_label_policy(|ctx| {
+    ///         // Only show even numbers
+    ///         if ctx.tick.value as i32 % 2 == 0 {
+    ///             LabelDecision::Render
+    ///         } else {
+    ///             LabelDecision::Skip
+    ///         }
+    ///     });
+    /// ```
     pub fn with_custom_label_policy<F>(mut self, policy: F) -> Self
     where
         F: for<'a> Fn(LabelDecisionContext<'a, D>) -> LabelDecision + 'static,
@@ -179,7 +325,24 @@ impl<D: Float> Axis<D> {
         self
     }
 
-    // TODO: Is this implemented yet?
+    /// Sets a formatter for the cursor label that follows the mouse.
+    ///
+    /// When the mouse hovers over the plot, this formatter is called with the data value
+    /// under the cursor. Return `Some(Label)` to show a label, or `None` to hide it.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .with_cursor_formatter(|value| {
+    ///         Some(axis::Label {
+    ///             content: format!("{:.2}", value),
+    ///             size: 12.into(),
+    ///             ..Default::default()
+    ///         })
+    ///     });
+    /// ```
     pub fn with_cursor_formatter<F>(mut self, renderer: F) -> Self
     where
         F: Fn(D) -> Option<Label> + 'static,
@@ -188,7 +351,17 @@ impl<D: Float> Axis<D> {
         self
     }
 
-    /// Sets the axis as invisible.
+    /// Makes this axis invisible (no ticks, labels, or visual elements).
+    ///
+    /// The axis still defines the coordinate system and can render grid lines.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use iced_aksel::{Axis, axis, scale::Linear};
+    /// let axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
+    ///     .invisible();
+    /// ```
     pub const fn invisible(mut self) -> Self {
         self.invisible = true;
         self

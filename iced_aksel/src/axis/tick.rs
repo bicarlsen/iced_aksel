@@ -31,28 +31,32 @@ pub mod label;
 /// and thick lines, while rendering minor ticks as smaller lines without labels.
 ///
 /// ```rust
-/// use aksel::{Axis, TickLine, Label, Pixels};
+/// use iced_aksel::{Axis, axis::TickLine, scale::Linear};
+/// use iced::Pixels;
 ///
-/// // Assume we have an axis and a scale setup
-/// let axis = axis.with_tick_renderer(|ctx| {
-///     match ctx.tick.level {
-///         // Major Tick (Level 0): Thicker, longer, and has a text label
-///         0 => Some(TickLine {
-///             thickness: Pixels(2.0),
-///             length: Pixels(10.0),
-///             // We use the context's value to format the text
-///             label: Some(Label::new(format!("{:.1}", ctx.tick.value))),
-///         }),
-///         // Minor Tick (Level 1): Thinner, shorter, no label
-///         1 => Some(TickLine {
-///             thickness: Pixels(1.0),
-///             length: Pixels(5.0),
-///             label: None,
-///         }),
-///         // Any other importance level: Do not draw (return None)
-///         _ => None,
-///     }
-/// });
+/// let axis = Axis::new(Linear::new(0.0, 100.0), iced_aksel::axis::Position::Bottom)
+///     .with_tick_renderer(|ctx| {
+///         match ctx.tick.level {
+///             // Major Tick (Level 0): Thicker, longer, and has a text label
+///             0 => Some(TickLine {
+///                 thickness: Pixels(2.0),
+///                 length: Pixels(10.0),
+///                 // We use the context's value to format the text
+///                 label: Some(iced_aksel::axis::Label {
+///                     content: format!("{:.1}", ctx.tick.value),
+///                     ..Default::default()
+///                 }),
+///             }),
+///             // Minor Tick (Level 1): Thinner, shorter, no label
+///             1 => Some(TickLine {
+///                 thickness: Pixels(1.0),
+///                 length: Pixels(5.0),
+///                 label: None,
+///             }),
+///             // Any other importance level: Do not draw (return None)
+///             _ => None,
+///         }
+///     });
 /// ```
 #[derive(Debug, Clone)]
 pub struct TickLine {

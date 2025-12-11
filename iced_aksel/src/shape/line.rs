@@ -14,6 +14,34 @@ use lyon::math::{Point, Vector};
 ///
 /// Supports infinite extension in either direction (Ray or Line), optional arrowheads,
 /// and utilizes a Hybrid Engine for high-performance rendering.
+///
+/// # Example
+///
+/// ```rust
+/// use iced_aksel::{PlotPoint, Measure, shape::Line, Stroke};
+/// use iced::Color;
+///
+/// // Simple line from (0, 0) to (10, 10)
+/// let line = Line::new(
+///     PlotPoint::new(0.0, 0.0),
+///     PlotPoint::new(10.0, 10.0),
+///     Stroke::new(Color::from_rgb(0.0, 0.0, 1.0), Measure::Screen(2.0))
+/// );
+///
+/// // Line with arrow at the end
+/// let arrow_line = Line::new(
+///     PlotPoint::new(5.0, 5.0),
+///     PlotPoint::new(15.0, 15.0),
+///     Stroke::new(Color::from_rgb(1.0, 0.0, 0.0), Measure::Screen(3.0))
+/// ).arrow_end(true);
+///
+/// // Infinite line through two points
+/// let infinite = Line::new(
+///     PlotPoint::new(0.0, 0.0),
+///     PlotPoint::new(1.0, 1.0),
+///     Stroke::new(Color::from_rgb(0.0, 1.0, 0.0), Measure::Screen(1.0))
+/// ).infinite();
+/// ```
 #[derive(Debug, Clone)]
 pub struct Line<D> {
     pub p1: PlotPoint<D>,

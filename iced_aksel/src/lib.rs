@@ -1,3 +1,77 @@
+//! A high-performance plotting library for Iced applications.
+//!
+//! `iced_aksel` provides interactive charts and plots for the Iced GUI framework,
+//! built on top of the `aksel` plotting core. It offers flexible axis configuration,
+//! multiple shape primitives, and robust interaction handling.
+//!
+//! # Quick Start
+//!
+//! ```rust,no_run
+//! use iced_aksel::{
+//!     Chart, State, Axis, Plot, PlotPoint, axis, scale::Linear,
+//!     plot::PlotData, shape::Circle, Measure
+//! };
+//! use iced::{Element, Theme};
+//!
+//! struct App {
+//!     chart_state: State<&'static str, f64>,
+//!     data: ScatterData,
+//! }
+//!
+//! #[derive(Debug, Clone)]
+//! enum Message {}
+//!
+//! impl App {
+//!     fn new() -> Self {
+//!         let mut chart_state = State::new();
+//!         chart_state.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+//!         chart_state.set_axis("y", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+//!
+//!         Self {
+//!             chart_state,
+//!             data: ScatterData {
+//!                 points: vec![
+//!                     PlotPoint::new(10.0, 20.0),
+//!                     PlotPoint::new(50.0, 80.0),
+//!                     PlotPoint::new(90.0, 30.0),
+//!                 ],
+//!             },
+//!         }
+//!     }
+//!
+//!     fn view(&self) -> Element<Message> {
+//!         Chart::new(&self.chart_state)
+//!             .plot_data(&self.data, "x", "y")
+//!             .into()
+//!     }
+//! }
+//!
+//! // Your data struct
+//! struct ScatterData {
+//!     points: Vec<PlotPoint<f64>>,
+//! }
+//!
+//! // Implement PlotData to define how your data is drawn
+//! impl PlotData<f64> for ScatterData {
+//!     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
+//!         for point in &self.points {
+//!             plot.add_shape(
+//!                 Circle::new(*point, Measure::Screen(5.0))
+//!                     .fill(theme.palette().primary)
+//!             );
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! # Core Concepts
+//!
+//! - **[`Chart`]**: The main widget that renders axes and data
+//! - **[`State`]**: Manages axis configuration and chart state
+//! - **[`Axis`]**: Configures scales, ticks, grids, and labels
+//! - **[`PlotData`]**: Trait for drawable data types
+//! - **[`Shape`]**: Primitives for rendering (lines, circles, rectangles, etc.)
+
 use std::{fmt::Debug, hash::Hash, ops::Deref};
 
 use aksel::ScreenRect;
@@ -46,10 +120,13 @@ use plot::DragDelta;
 // Default value for how many pixels till a drag actually counts as a drag
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
 
+/// Errors that can occur during chart construction or rendering.
 #[derive(Debug, Clone, Error, Display)]
 pub enum Error<AxisId> {
+    /// Two axes with the same ID were assigned to a single layer.
     #[display("Duplicate axis id's received for a layer: {id:?}")]
     DuplicateAxis { id: AxisId },
+    /// Two axes have conflicting orientations (e.g., both horizontal).
     #[display(
         "Conflicting axis orientations: {horizontal:?}({horizontal_orientation:?}) | {vertical:?}(vertical_orientation:?)"
     )]
@@ -59,6 +136,7 @@ pub enum Error<AxisId> {
         vertical: AxisId,
         vertical_orientation: Orientation,
     },
+    /// Referenced an axis ID that doesn't exist in the State.
     #[display("Unknown axis id: '{id:?}'")]
     UnknownAxis { id: AxisId },
 }
@@ -93,6 +171,32 @@ impl<AxisId> Default for Memory<AxisId> {
     }
 }
 
+/// The main charting widget that renders axes and plot data.
+///
+/// `Chart` manages the layout and rendering of axes, grid lines, and data layers.
+/// It supports rich interactions including click, drag, scroll, and hover events
+/// on both the plot area and individual axes.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use iced_aksel::{Chart, State, Axis, axis, scale::Linear, plot::PlotData};
+///
+/// # #[derive(Clone)]
+/// # enum Message { Scroll(iced::Point, iced::mouse::ScrollDelta) }
+/// # struct MyData;
+/// # impl PlotData<f64> for MyData {
+/// #     fn draw(&self, plot: &mut iced_aksel::Plot<f64, iced::Renderer>, theme: &iced::Theme) {}
+/// # }
+/// let mut state: State<&str, f64> = State::new();
+/// state.set_axis("x_axis", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+/// state.set_axis("y_axis", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+/// let data = MyData;
+///
+/// let chart = Chart::new(&state)
+///     .plot_data(&data, "x_axis", "y_axis")
+///     .on_scroll(|pos, delta| Message::Scroll(pos, delta));
+/// ```
 pub struct Chart<'a, AxisId, Domain, Message, Theme = iced::Theme, Renderer = iced::Renderer>
 where
     AxisId: Hash + Eq + Clone + Debug,
@@ -131,6 +235,16 @@ where
     Theme: Catalog,
     Renderer: plot::Renderer,
 {
+    /// Creates a new chart from the given state.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{Chart, State};
+    /// # #[derive(Clone)] enum Message {}
+    /// let state: State<&str, f64> = State::new();
+    /// let chart: Chart<&str, f64, Message> = Chart::new(&state);
+    /// ```
     pub fn new(state: &'a State<AxisId, Domain>) -> Self {
         Self {
             state,
@@ -155,6 +269,24 @@ where
         }
     }
 
+    /// Adds a data layer to the chart using the specified axes.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{Chart, State, Axis, axis, scale::Linear, plot::PlotData};
+    /// # #[derive(Clone)] enum Message {}
+    /// # struct MyData;
+    /// # impl PlotData<f64> for MyData {
+    /// #     fn draw(&self, plot: &mut iced_aksel::Plot<f64, iced::Renderer>, theme: &iced::Theme) {}
+    /// # }
+    /// # let mut state: State<&str, f64> = State::new();
+    /// # state.set_axis("x_axis", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+    /// # state.set_axis("y_axis", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+    /// # let data = MyData;
+    /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
+    ///     .plot_data(&data, "x_axis", "y_axis");
+    /// ```
     pub fn plot_data<T: plot::PlotData<Domain, Renderer, Theme>>(
         mut self,
         items: &'a T,
@@ -169,11 +301,33 @@ where
         self
     }
 
+    /// Sets the width of the chart.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{Chart, State};
+    /// # #[derive(Clone)] enum Message {}
+    /// # let state: State<&str, f64> = State::new();
+    /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
+    ///     .width(iced::Length::Fixed(600.0));
+    /// ```
     pub const fn width(mut self, width: iced::Length) -> Self {
         self.width = width;
         self
     }
 
+    /// Sets the height of the chart.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{Chart, State};
+    /// # #[derive(Clone)] enum Message {}
+    /// # let state: State<&str, f64> = State::new();
+    /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
+    ///     .height(iced::Length::Fixed(400.0));
+    /// ```
     pub const fn height(mut self, height: iced::Length) -> Self {
         self.height = height;
         self
@@ -186,11 +340,17 @@ where
         self
     }
 
+    /// Sets the minimum drag distance in pixels before drag events are triggered.
+    ///
+    /// Default is 10 pixels. This helps distinguish clicks from drags.
     pub const fn drag_deadband(mut self, distance: f32) -> Self {
         self.drag_deadband = distance;
         self
     }
 
+    /// Sets a callback for chart errors.
+    ///
+    /// Errors can occur when axes are misconfigured or missing.
     pub fn on_error<F>(mut self, f: F) -> Self
     where
         F: Fn(Error<AxisId>) -> Message + 'static,
@@ -199,6 +359,19 @@ where
         self
     }
 
+    /// Sets a callback for plot area clicks.
+    ///
+    /// The callback receives normalized coordinates (0.0-1.0) relative to the plot area.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{Chart, State};
+    /// # #[derive(Clone)] enum Message { PlotClicked(iced::Point) }
+    /// # let state: State<&str, f64> = State::new();
+    /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
+    ///     .on_click(|point| Message::PlotClicked(point));
+    /// ```
     pub fn on_click<F>(mut self, f: F) -> Self
     where
         F: Fn(Point) -> Message + 'static,
@@ -207,6 +380,9 @@ where
         self
     }
 
+    /// Sets a callback for plot area double-clicks.
+    ///
+    /// The callback receives normalized coordinates (0.0-1.0).
     pub fn on_double_click<F>(mut self, f: F) -> Self
     where
         F: Fn(Point) -> Message + 'static,
@@ -215,6 +391,19 @@ where
         self
     }
 
+    /// Sets a callback for plot area drag events.
+    ///
+    /// The callback receives normalized deltas that can be used with axis `pan` methods.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{Chart, State, plot::DragDelta};
+    /// # #[derive(Clone)] enum Message { Pan(DragDelta) }
+    /// # let state: State<&str, f64> = State::new();
+    /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
+    ///     .on_drag(|delta| Message::Pan(delta));
+    /// ```
     pub fn on_drag<F>(mut self, f: F) -> Self
     where
         F: Fn(DragDelta) -> Message + 'static,
@@ -223,6 +412,9 @@ where
         self
     }
 
+    /// Sets a callback for plot area hover events.
+    ///
+    /// The callback receives normalized coordinates (0.0-1.0).
     pub fn on_hover<F>(mut self, f: F) -> Self
     where
         F: Fn(Point) -> Message + 'static,
@@ -231,6 +423,20 @@ where
         self
     }
 
+    /// Sets a callback for plot area scroll events.
+    ///
+    /// The callback receives normalized coordinates and scroll delta, useful for zooming.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use iced_aksel::{Chart, State};
+    /// # use iced::mouse::ScrollDelta;
+    /// # #[derive(Clone)] enum Message { Zoom(iced::Point, ScrollDelta) }
+    /// # let state: State<&str, f64> = State::new();
+    /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
+    ///     .on_scroll(|point, delta| Message::Zoom(point, delta));
+    /// ```
     pub fn on_scroll<F>(mut self, f: F) -> Self
     where
         F: Fn(Point, ScrollDelta) -> Message + 'static,
@@ -239,6 +445,9 @@ where
         self
     }
 
+    /// Sets a callback for axis click events.
+    ///
+    /// Receives the axis ID and normalized position (0.0-1.0) along that axis.
     pub fn on_axis_click<F>(mut self, f: F) -> Self
     where
         F: Fn(AxisId, f32) -> Message + 'static,
@@ -247,6 +456,9 @@ where
         self
     }
 
+    /// Sets a callback for axis double-click events.
+    ///
+    /// Receives the axis ID and normalized position (0.0-1.0) along that axis.
     pub fn on_axis_double_click<F>(mut self, f: F) -> Self
     where
         F: Fn(AxisId, f32) -> Message + 'static,
@@ -255,6 +467,9 @@ where
         self
     }
 
+    /// Sets a callback for axis drag events.
+    ///
+    /// Receives the axis ID and normalized delta along that axis.
     pub fn on_axis_drag<F>(mut self, f: F) -> Self
     where
         F: Fn(AxisId, f32) -> Message + 'static,
@@ -263,6 +478,9 @@ where
         self
     }
 
+    /// Sets a callback for axis scroll events.
+    ///
+    /// Receives the axis ID, normalized position (0.0-1.0), and scroll delta.
     pub fn on_axis_scroll<F>(mut self, f: F) -> Self
     where
         F: Fn(AxisId, f32, ScrollDelta) -> Message + 'static,
@@ -271,6 +489,9 @@ where
         self
     }
 
+    /// Sets a callback for axis hover events.
+    ///
+    /// Receives the axis ID and normalized position (0.0-1.0) along that axis.
     pub fn on_axis_hover<F>(mut self, f: F) -> Self
     where
         F: Fn(AxisId, f32) -> Message + 'static,
