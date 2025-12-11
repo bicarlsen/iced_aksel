@@ -10,7 +10,7 @@ authors = ["Mads Ahlquist Jensen <madsaj10@outlook.com>", "Dennis Mellquist"]
 repository = "https://github.com/QuistHQ/iced_aksel"
 license = "MIT"
 keywords = ["iced", "chart", "canvas"]
-categories = ["GUI"]
+categories = ["gui"]
 exclude = [
 "flake.nix",
 "flake.lock",
