@@ -1,3 +1,137 @@
-# Iced Aksel (Chart)
+# 📊 Iced Aksel
 
-TBD
+`iced_aksel` is an experimental, "batteries not included", charting crate for
+the [Iced](https://iced.rs/) GUI toolkit that wraps the
+[aksel](https://github.com/QuistAPS/aksel) plotting core in an ergonomic widget.
+It focuses on rendering large, interactive data sets with customizable axes,
+grids, styles, and event handlers that plug directly into your Iced application
+logic.
+
+> [!WARNING]
+>
+> The library is still pretty early in development. Breaking changes will occur
+> as we iron out the API.
+
+## 🔍 Highlights
+
+- 📈 **Chart-first widget** – `Chart` provides layout and event handling that
+  feels native to Iced apps.
+- 🪓 **Powerful axes** – Configure positions, scales, tick/label policies,
+  cursor readouts, visibility, and grid renderers per axis.
+- 🖌️**Canvas-like API** – Implement `PlotData` to add any shape primitive
+  (`shape::Line`, `shape::Circle`, `shape::Rectangle`, etc.) to layered plots.
+  Or create your own shape primitives with the `Shape` trait!
+- 👉 **Rich interactivity** – Subscribe to click, drag, hover, scroll, and
+  double-click callbacks for both the plot area and individual axes.
+- 🎨 **Composable styling** – Override per-axis/plot styles or swap in entire
+  `style::Catalog`s to match your own theming.
+- 🔥 **Performant** - The library handles layering and mesh-squashing to ensure
+  proper rendering while staying fast!
+
+## 🔽 Install
+
+Add the following to your `Cargo.toml`:
+
+```toml
+[dependencies]
+iced = { version = "0.14", features = ["advanced"] }
+iced_aksel = { path = "./iced_aksel" } # or from crates.io once released
+```
+
+## 🌟 Quick Start
+
+```rust,no_run
+use iced::{Element, Theme};
+use iced_aksel::{
+    axis, scale::Linear,
+    Axis, Chart, Measure, Plot, PlotData, PlotPoint, State,
+    shape::Circle,
+};
+
+struct App {
+    chart: State<&'static str, f64>,
+    scatter: Scatter,
+}
+
+#[derive(Debug, Clone)]
+enum Message {}
+
+impl App {
+    fn new() -> Self {
+        let mut chart = State::new();
+        chart.set_axis("x", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
+        chart.set_axis("y", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+
+        Self { chart, scatter: Scatter::demo() }
+    }
+
+    fn view(&self) -> Element<Message> {
+        Chart::new(&self.chart)
+            .plot_data(&self.scatter, "x", "y")
+            .into()
+    }
+}
+
+struct Scatter {
+    points: Vec<PlotPoint<f64>>,
+}
+
+impl Scatter {
+    fn demo() -> Self {
+        Self {
+            points: vec![
+                PlotPoint::new(10.0, 20.0),
+                PlotPoint::new(50.0, 80.0),
+                PlotPoint::new(90.0, 30.0),
+            ],
+        }
+    }
+}
+
+impl PlotData<f64> for Scatter {
+    fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
+        for point in &self.points {
+            plot.add_shape(
+                Circle::new(*point, Measure::Screen(5.0))
+                    .fill(theme.palette().primary),
+            );
+        }
+    }
+}
+```
+
+### Core Concepts
+
+- `State` holds every axis definition and is shared between updates and
+  rendering.
+- `Axis` controls domain, scale, position, grid lines, cursor labels, and more.
+- `Chart` is the widget that lays out axes and plots, and routes user events.
+- `PlotData` is implemented by your data structures; it receives a `Plot`
+  builder to push shapes into.
+- `shape`, `stroke`, and `Measure` describe how primitives are drawn.
+
+## 🧩 Examples
+
+The workspace ships multiple runnable examples that showcase axes, shapes,
+interactions, dashboards, and stress tests. From the repository root:
+
+```bash
+cargo run -p core_template
+cargo run -p core_axes
+cargo run -p core_interactions
+cargo run -p candlestick
+cargo run -p dashboard
+cargo run -p spectrum
+cargo run -p stress
+```
+
+Each example is a separate crate under `examples/` so you can copy-paste code
+into your own application.
+
+## 💻 Development
+
+- `cargo fmt` and `cargo clippy` enforce the workspace style (Clippy perf,
+  correctness, complexity, and style lints are denied).
+
+Contributions are welcome! Feel free to open issues with bug reports, feature
+ideas, or performance traces that can help steer the roadmap.
