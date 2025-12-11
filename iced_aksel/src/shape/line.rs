@@ -1,5 +1,5 @@
 use crate::{
-    Length, Shape, Stroke, StrokeStyle,
+    Measure, Shape, Stroke, StrokeStyle,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
@@ -133,8 +133,8 @@ impl<D: Float> Line<D> {
 
         // 2. Resolve Stroke Thickness
         let width = match self.stroke.thickness {
-            Length::Screen(w) => w,
-            Length::Plot(w) => {
+            Measure::Screen(w) => w,
+            Measure::Plot(w) => {
                 let p0 = transform.x_to_screen(&D::zero());
                 let p1 = transform.x_to_screen(&w);
                 (p1 - p0).abs()

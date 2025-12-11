@@ -17,7 +17,7 @@ use iced::{
 
 mod action;
 mod layer;
-mod length;
+mod measure;
 mod render;
 mod state;
 mod stroke;
@@ -29,7 +29,7 @@ pub mod shape;
 
 pub use axis::Axis;
 use layer::Layer;
-pub use length::Length;
+pub use measure::Measure;
 pub use plot::Plot;
 pub use shape::Shape;
 pub use state::State;
@@ -147,7 +147,7 @@ where
             class: <Theme as Catalog>::default(),
             errors: vec![],
             drag_deadband: DEFAULT_DRAG_DEADBAND,
-            padding: Padding::new(10.0),
+            padding: Padding::new(0.),
             on_error: None,
             on_click: None,
             on_double_click: None,

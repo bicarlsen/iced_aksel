@@ -4,7 +4,7 @@ use iced::{
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
-    Axis, Chart, Length, State as ChartState,
+    Axis, Chart, Measure, State as ChartState,
     axis::{self},
     plot::{Items, Plot},
 };
@@ -410,8 +410,8 @@ impl Items<f64> for Gauge {
             plot.add_shape(
                 Rectangle::new(
                     PlotPoint::new(0.0, 0.0),
-                    Length::Plot(limit * 2.0),
-                    Length::Plot(limit * 2.0),
+                    Measure::Plot(limit * 2.0),
+                    Measure::Plot(limit * 2.0),
                 )
                 .fill(Color::from_rgba(1.0, 0.0, 0.0, 0.2)),
             );
@@ -437,8 +437,8 @@ impl Items<f64> for Gauge {
 
         // 2. Geometry
         let center = PlotPoint::new(0.0, 0.0);
-        let radius = Length::Plot(1.0);
-        let inner_radius = Length::Plot(self.inner_radius_factor);
+        let radius = Measure::Plot(1.0);
+        let inner_radius = Measure::Plot(self.inner_radius_factor);
 
         let total_sweep = self.end_angle - self.start_angle;
         let safe_denominator = if self.max == self.min {
@@ -474,8 +474,8 @@ impl Items<f64> for Gauge {
                 // 2. Thickness "Pop": Grow radius slightly when active
                 // Base: 1.08. Active Boost: +0.04
                 let pop = 0.00 * factor;
-                let current_radius = Length::Plot(GAUGE_RADIUS + pop);
-                let current_inner = Length::Plot(1.02);
+                let current_radius = Measure::Plot(GAUGE_RADIUS + pop);
+                let current_inner = Measure::Plot(1.02);
 
                 if zone_end_angle > current_angle {
                     plot.add_shape(
@@ -510,8 +510,8 @@ impl Items<f64> for Gauge {
             let tick_len = 0.05;
             let tick_pos = inner_radius;
             let tick_inner = match inner_radius {
-                Length::Plot(v) => Length::Plot(v - tick_len),
-                _ => Length::Plot(0.0),
+                Measure::Plot(v) => Measure::Plot(v - tick_len),
+                _ => Measure::Plot(0.0),
             };
             let tick_color = Color {
                 a: 0.5,

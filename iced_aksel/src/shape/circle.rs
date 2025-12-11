@@ -1,5 +1,5 @@
 use crate::{
-    Length, Shape, Stroke, StrokeStyle,
+    Measure, Shape, Stroke, StrokeStyle,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
@@ -23,7 +23,7 @@ use lyon::math::{Angle, Point, Vector};
 #[derive(Debug, Clone)]
 pub struct Circle<D> {
     pub center: PlotPoint<D>,
-    pub radius: Length<D>,
+    pub radius: Measure<D>,
     pub fill: Option<Color>,
     pub stroke: Option<Stroke<D>>,
 }
@@ -46,7 +46,7 @@ impl<D: Float> Circle<D> {
     /// # Arguments
     /// * `center` - The position of the center in Plot coordinates.
     /// * `radius` - The radius, either in fixed Screen pixels or scalable Plot units.
-    pub const fn new(center: PlotPoint<D>, radius: Length<D>) -> Self {
+    pub const fn new(center: PlotPoint<D>, radius: Measure<D>) -> Self {
         Self {
             center,
             radius,
@@ -92,8 +92,8 @@ impl<D: Float> Circle<D> {
         // This ensures the marker remains a perfect circle that fits within its
         // data bounds, even if the aspect ratio is skewed.
         let r = match self.radius {
-            Length::Screen(pixels) => pixels,
-            Length::Plot(units) => {
+            Measure::Screen(pixels) => pixels,
+            Measure::Plot(units) => {
                 let x0 = transform.x_to_screen(&D::zero());
                 let x1 = transform.x_to_screen(&units);
                 let dx = (x1 - x0).abs();
@@ -114,8 +114,8 @@ impl<D: Float> Circle<D> {
         // 2. Resolve Stroke Thickness
         let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let width = match stroke.thickness {
-                Length::Screen(w) => w,
-                Length::Plot(w) => {
+                Measure::Screen(w) => w,
+                Measure::Plot(w) => {
                     let x0 = transform.x_to_screen(&D::zero());
                     let x1 = transform.x_to_screen(&w);
                     let dx = (x1 - x0).abs();

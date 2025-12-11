@@ -19,7 +19,7 @@ use iced::{
     window,
 };
 use iced_aksel::{
-    Axis, Chart, DragDelta, Length, Plot, State, Stroke, StrokeStyle,
+    Axis, Chart, DragDelta, Measure, Plot, State, Stroke, StrokeStyle,
     axis::{Position, TickLabelContext, TickLine},
     plot, shape,
 };
@@ -416,11 +416,11 @@ impl CandlestickChart {
             state,
             candle_items: CandleItems {
                 candles: Vec::new(),
-                candle_width: Length::Plot(1.0),
+                candle_width: Measure::Plot(1.0),
             },
             volume_items: VolumeItems {
                 candles: Vec::new(),
-                bar_width: Length::Plot(2.0),
+                bar_width: Measure::Plot(2.0),
             },
             sma_items: SmaItems { points: Vec::new() },
             bband_items: BbandsItems {
@@ -582,7 +582,7 @@ impl CandlestickChart {
 
         let candle_width_plot =
             self.settings.time_interval as f64 * self.settings.candle_width_ratio;
-        let candle_width = Length::Plot(candle_width_plot);
+        let candle_width = Measure::Plot(candle_width_plot);
 
         let x_domain = self
             .state
@@ -771,7 +771,7 @@ struct Candle {
 /// Holds candle data for rendering candlesticks
 struct CandleItems {
     candles: Vec<(i64, Candle)>,
-    candle_width: Length<f64>,
+    candle_width: Measure<f64>,
 }
 
 impl<R: plot::Renderer> plot::Items<f64, R> for CandleItems {
@@ -786,14 +786,14 @@ impl<R: plot::Renderer> plot::Items<f64, R> for CandleItems {
             let wick = shape::Line::new(
                 PlotPoint::new(x, candle.high),
                 PlotPoint::new(x, candle.low),
-                Stroke::new(color, Length::Screen(1.0)),
+                Stroke::new(color, Measure::Screen(1.0)),
             );
 
             let body_y_center = (candle.open + candle.close) / 2.0;
             let body = shape::Rectangle::new(
                 PlotPoint::new(x, body_y_center),
                 self.candle_width,
-                Length::Plot((candle.open - candle.close).abs()),
+                Measure::Plot((candle.open - candle.close).abs()),
             )
             .fill(color);
 
@@ -806,7 +806,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for CandleItems {
 /// Holds volume bar data
 struct VolumeItems {
     candles: Vec<(i64, Candle)>,
-    bar_width: Length<f64>,
+    bar_width: Measure<f64>,
 }
 
 impl<R: plot::Renderer> plot::Items<f64, R> for VolumeItems {
@@ -820,7 +820,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for VolumeItems {
             let bar = shape::Rectangle::new(
                 PlotPoint::new(x_position, 0.0),
                 self.bar_width,
-                Length::Plot(candle.volume / 10.0),
+                Measure::Plot(candle.volume / 10.0),
             )
             .fill(color);
 
@@ -843,7 +843,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for SmaItems {
                 self.points.clone(),
                 Stroke {
                     fill: palette.warning,
-                    thickness: Length::Screen(1.5),
+                    thickness: Measure::Screen(1.5),
                     style: StrokeStyle::Solid,
                 },
             );
@@ -868,7 +868,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for BbandsItems {
                 self.upper.clone(),
                 Stroke {
                     fill: palette.text.scale_alpha(0.5),
-                    thickness: Length::Screen(1.0),
+                    thickness: Measure::Screen(1.0),
                     style: StrokeStyle::Solid,
                 },
             );
@@ -880,7 +880,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for BbandsItems {
                 self.middle.clone(),
                 Stroke {
                     fill: palette.primary.scale_alpha(0.5),
-                    thickness: Length::Screen(1.0),
+                    thickness: Measure::Screen(1.0),
                     style: StrokeStyle::Solid,
                 },
             );
@@ -892,7 +892,7 @@ impl<R: plot::Renderer> plot::Items<f64, R> for BbandsItems {
                 self.lower.clone(),
                 Stroke {
                     fill: palette.text.scale_alpha(0.5),
-                    thickness: Length::Screen(1.0),
+                    thickness: Measure::Screen(1.0),
                     style: StrokeStyle::Solid,
                 },
             );

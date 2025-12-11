@@ -1,5 +1,5 @@
 use crate::{
-    Length, Shape, Stroke,
+    Measure, Shape, Stroke,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
@@ -107,8 +107,8 @@ impl<D: Float> Polyline<D> {
 
         // 2. Resolve Stroke Thickness
         let width = match self.stroke.thickness {
-            Length::Screen(w) => w,
-            Length::Plot(w) => {
+            Measure::Screen(w) => w,
+            Measure::Plot(w) => {
                 let p0 = transform.x_to_screen(&D::zero());
                 let p1 = transform.x_to_screen(&w);
                 (p1 - p0).abs()

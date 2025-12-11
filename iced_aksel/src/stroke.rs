@@ -1,4 +1,4 @@
-use crate::Length;
+use crate::Measure;
 
 use iced::Color;
 
@@ -19,13 +19,13 @@ pub enum StrokeStyle {
 #[derive(Debug, Clone, Copy)]
 pub struct Stroke<D> {
     pub fill: Color,
-    pub thickness: Length<D>,
+    pub thickness: Measure<D>,
     pub style: StrokeStyle,
 }
 
 impl<D> Stroke<D> {
     /// Creates a new stroke with the given fill color and thickness. Defaults style to `StrokeStyle::Solid`
-    pub const fn new(fill: Color, thickness: Length<D>) -> Self {
+    pub const fn new(fill: Color, thickness: Measure<D>) -> Self {
         Self {
             fill,
             thickness,
@@ -34,7 +34,7 @@ impl<D> Stroke<D> {
     }
 
     /// Creates a new stroke with the given fill color, thickness, and style.
-    pub const fn with_style(fill: Color, thickness: Length<D>, style: StrokeStyle) -> Self {
+    pub const fn with_style(fill: Color, thickness: Measure<D>, style: StrokeStyle) -> Self {
         Self {
             fill,
             thickness,

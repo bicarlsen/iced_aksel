@@ -2,9 +2,9 @@ use std::ops::{Add, Div, Mul, Sub};
 
 use aksel::Float;
 
-/// Defines how a dimension should be interpreted.
+/// Defines how a dimension should be interpreted by `Chart`.
 #[derive(Clone, Copy, Debug)]
-pub enum Length<D> {
+pub enum Measure<D> {
     /// Fixed size in screen pixels (e.g., "10px wide").
     /// Does not scale when zooming the chart.
     Screen(f32),
@@ -15,7 +15,7 @@ pub enum Length<D> {
 }
 
 // 1. Implement Multiplication: Length * Number
-impl<D: Float> Mul<D> for Length<D> {
+impl<D: Float> Mul<D> for Measure<D> {
     type Output = Self;
 
     fn mul(self, scalar: D) -> Self {
@@ -29,7 +29,7 @@ impl<D: Float> Mul<D> for Length<D> {
 }
 
 // 2. Implement Division: Length / Number
-impl<D: Float> Div<D> for Length<D> {
+impl<D: Float> Div<D> for Measure<D> {
     type Output = Self;
 
     fn div(self, scalar: D) -> Self {
@@ -41,7 +41,7 @@ impl<D: Float> Div<D> for Length<D> {
 }
 
 // --- Addition (Length + Number) ---
-impl<D: Float> Add<D> for Length<D> {
+impl<D: Float> Add<D> for Measure<D> {
     type Output = Self;
 
     fn add(self, scalar: D) -> Self {
@@ -55,7 +55,7 @@ impl<D: Float> Add<D> for Length<D> {
 }
 
 // --- Subtraction (Length - Number) ---
-impl<D: Float> Sub<D> for Length<D> {
+impl<D: Float> Sub<D> for Measure<D> {
     type Output = Self;
 
     fn sub(self, scalar: D) -> Self {

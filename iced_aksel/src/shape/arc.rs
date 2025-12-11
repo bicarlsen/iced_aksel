@@ -1,5 +1,5 @@
 use crate::{
-    Length, Shape, Stroke,
+    Measure, Shape, Stroke,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
@@ -19,8 +19,8 @@ use lyon::path::Path;
 #[derive(Debug, Clone)]
 pub struct Arc<D> {
     pub center: PlotPoint<D>,
-    pub radius: Length<D>,
-    pub inner_radius: Length<D>,
+    pub radius: Measure<D>,
+    pub inner_radius: Measure<D>,
     pub start_angle: f32, // Radians
     pub end_angle: f32,   // Radians
     pub fill: Option<Color>,
@@ -43,14 +43,14 @@ impl<D: Float> Arc<D> {
     /// Creates a new Arc/Pie Slice.
     pub const fn new(
         center: PlotPoint<D>,
-        radius: Length<D>,
+        radius: Measure<D>,
         start_angle: f32,
         end_angle: f32,
     ) -> Self {
         Self {
             center,
             radius,
-            inner_radius: Length::Screen(0.0),
+            inner_radius: Measure::Screen(0.0),
             start_angle,
             end_angle,
             fill: None,
@@ -63,7 +63,7 @@ impl<D: Float> Arc<D> {
     // =========================================================================
 
     /// Sets the inner radius to create a Ring/Donut sector.
-    pub const fn inner_radius(mut self, radius: Length<D>) -> Self {
+    pub const fn inner_radius(mut self, radius: Measure<D>) -> Self {
         self.inner_radius = radius;
         self
     }
@@ -289,10 +289,10 @@ impl<D: Float> Arc<D> {
 
     // --- Helpers ---
 
-    fn resolve_length(&self, transform: &Transform<D, f32, f32>, len: Length<D>) -> f32 {
+    fn resolve_length(&self, transform: &Transform<D, f32, f32>, len: Measure<D>) -> f32 {
         match len {
-            Length::Screen(px) => px,
-            Length::Plot(units) => {
+            Measure::Screen(px) => px,
+            Measure::Plot(units) => {
                 // Calculate scale for X (Horizontal)
                 let p0_x = transform.x_to_screen(&D::zero());
                 let p1_x = transform.x_to_screen(&units);

@@ -1,5 +1,5 @@
 use crate::{
-    Length, Shape, Stroke, StrokeStyle,
+    Measure, Shape, Stroke, StrokeStyle,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
@@ -80,8 +80,8 @@ impl<D: Float> Polygon<D> {
         // 2. Resolve Stroke Thickness
         let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let width = match stroke.thickness {
-                Length::Screen(w) => w,
-                Length::Plot(w) => {
+                Measure::Screen(w) => w,
+                Measure::Plot(w) => {
                     let p0 = transform.x_to_screen(&D::zero());
                     let p1 = transform.x_to_screen(&w);
                     (p1 - p0).abs()

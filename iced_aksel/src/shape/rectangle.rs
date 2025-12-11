@@ -1,5 +1,5 @@
 use crate::{
-    Length, Shape, Stroke, StrokeStyle,
+    Measure, Shape, Stroke, StrokeStyle,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
@@ -14,8 +14,8 @@ use lyon_tessellation::math::Point;
 #[derive(Debug, Clone)]
 pub struct Rectangle<D> {
     center: PlotPoint<D>,
-    width: Length<D>,
-    height: Length<D>,
+    width: Measure<D>,
+    height: Measure<D>,
     fill: Option<Color>,
     stroke: Option<Stroke<D>>,
 }
@@ -43,7 +43,7 @@ impl<D: Float> Rectangle<D> {
     /// * `center` - The center position in chart coordinates.
     /// * `width` - The width of the rectangle (Screen pixels or Plot units).
     /// * `height` - The height of the rectangle (Screen pixels or Plot units).
-    pub const fn new(center: PlotPoint<D>, width: Length<D>, height: Length<D>) -> Self {
+    pub const fn new(center: PlotPoint<D>, width: Measure<D>, height: Measure<D>) -> Self {
         Self {
             center,
             width,
@@ -59,7 +59,7 @@ impl<D: Float> Rectangle<D> {
     /// min/max coordinates but not the center.
     ///
     /// This method automatically calculates the `center`, `width`, and `height`
-    /// in `Length::Plot` units.
+    /// in `Measure::Plot` units.
     pub fn from_corners(p1: PlotPoint<D>, p2: PlotPoint<D>) -> Self {
         let (x_min, x_max) = scale::util::sorted_pair(p1.x, p2.x);
         let (y_min, y_max) = scale::util::sorted_pair(p1.y, p2.y);
@@ -70,8 +70,8 @@ impl<D: Float> Rectangle<D> {
                 x: (x_min + x_max) / two,
                 y: (y_min + y_max) / two,
             },
-            width: Length::Plot(x_max - x_min),
-            height: Length::Plot(y_max - y_min),
+            width: Measure::Plot(x_max - x_min),
+            height: Measure::Plot(y_max - y_min),
             fill: None,
             stroke: None,
         }
@@ -117,12 +117,12 @@ impl<D: Float> Rectangle<D> {
 
         // Resolve Width
         let (x_min, x_max) = match &self.width {
-            Length::Screen(px) => {
+            Measure::Screen(px) => {
                 let c = transform.x_to_screen(&self.center.x);
                 let half = px * 0.5;
                 (c - half, c + half)
             }
-            Length::Plot(width) => {
+            Measure::Plot(width) => {
                 let half_w = *width * half_const;
                 let p1 = transform.x_to_screen(&(self.center.x - half_w));
                 let p2 = transform.x_to_screen(&(self.center.x + half_w));
@@ -132,12 +132,12 @@ impl<D: Float> Rectangle<D> {
 
         // Resolve Height
         let (y_min, y_max) = match &self.height {
-            Length::Screen(px) => {
+            Measure::Screen(px) => {
                 let c = transform.y_to_screen(&self.center.y);
                 let half = px * 0.5;
                 (c - half, c + half)
             }
-            Length::Plot(height) => {
+            Measure::Plot(height) => {
                 let half_h = *height * half_const;
                 let p1 = transform.y_to_screen(&(self.center.y - half_h));
                 let p2 = transform.y_to_screen(&(self.center.y + half_h));
@@ -163,8 +163,8 @@ impl<D: Float> Rectangle<D> {
         // in the Manual implementation.
         let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let (th_x, th_y) = match stroke.thickness {
-                Length::Screen(px) => (px, px),
-                Length::Plot(units) => (
+                Measure::Screen(px) => (px, px),
+                Measure::Plot(units) => (
                     (transform.x_to_screen(&units) - transform.x_to_screen(&D::zero())).abs(),
                     (transform.y_to_screen(&units) - transform.y_to_screen(&D::zero())).abs(),
                 ),

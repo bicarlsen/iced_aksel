@@ -4,7 +4,7 @@ use iced::{
     alignment::{Horizontal, Vertical},
 };
 use iced_aksel::{
-    Axis, Chart, Length, State,
+    Axis, Chart, Measure, State,
     axis::{self, TickLine},
     plot::{Items, Plot},
 };
@@ -604,7 +604,7 @@ impl Items<f64> for LineChart {
 
             plot.add_shape(Polyline {
                 points: points.clone(),
-                stroke: Stroke::new(s.color, Length::Screen(s.width)),
+                stroke: Stroke::new(s.color, Measure::Screen(s.width)),
                 extend_start: false,
                 extend_end: false,
                 arrow_start: false,
@@ -614,7 +614,7 @@ impl Items<f64> for LineChart {
 
             if s.show_markers {
                 for point in &points {
-                    let marker_size = Length::Screen(s.width.mul_add(2.0, 2.0));
+                    let marker_size = Measure::Screen(s.width.mul_add(2.0, 2.0));
                     plot.add_shape(Rectangle::new(*point, marker_size, marker_size).fill(s.color));
                 }
             }
@@ -642,8 +642,8 @@ impl Items<f64> for LineChart {
                     plot.add_shape(
                         Rectangle::new(
                             PlotPoint::new(start_x, y_pos),
-                            Length::Screen(10.0),
-                            Length::Screen(10.0),
+                            Measure::Screen(10.0),
+                            Measure::Screen(10.0),
                         )
                         .fill(series.color),
                     );

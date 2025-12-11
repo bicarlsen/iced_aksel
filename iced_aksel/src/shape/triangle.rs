@@ -1,5 +1,5 @@
 use crate::{
-    Length, Shape, Stroke, StrokeStyle,
+    Measure, Shape, Stroke, StrokeStyle,
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
@@ -18,7 +18,7 @@ enum Geometry<D> {
     /// Defined by center and radius (Dynamic resolution)
     Equilateral {
         center: PlotPoint<D>,
-        radius: Length<D>,
+        radius: Measure<D>,
     },
 }
 
@@ -64,9 +64,9 @@ impl<D: Float> Triangle<D> {
     ///
     /// The triangle points upwards (one vertex at 12 o'clock).
     ///
-    /// - If `radius` is [`Length::Screen`], the triangle will maintain constant pixel size.
-    /// - If `radius` is [`Length::Plot`], the triangle will scale with the chart zoom.
-    pub const fn equilateral(center: PlotPoint<D>, radius: Length<D>) -> Self {
+    /// - If `radius` is [`Measure::Screen`], the triangle will maintain constant pixel size.
+    /// - If `radius` is [`Measure::Plot`], the triangle will scale with the chart zoom.
+    pub const fn equilateral(center: PlotPoint<D>, radius: Measure<D>) -> Self {
         Self {
             geometry: Geometry::Equilateral { center, radius },
             fill: None,
@@ -126,8 +126,8 @@ impl<D: Float> Triangle<D> {
 
                 // Resolve Radius to Pixels (Screen vs Plot)
                 let r_px = match radius {
-                    Length::Screen(px) => px,
-                    Length::Plot(units) => {
+                    Measure::Screen(px) => px,
+                    Measure::Plot(units) => {
                         let p0 = transform.x_to_screen(&D::zero());
                         let p1 = transform.x_to_screen(&units);
                         (p1 - p0).abs()
@@ -182,8 +182,8 @@ impl<D: Float> Triangle<D> {
         // 3. Resolve Stroke
         let maybe_stroke_data = self.stroke.as_ref().and_then(|stroke| {
             let width = match stroke.thickness {
-                Length::Screen(w) => w,
-                Length::Plot(w) => {
+                Measure::Screen(w) => w,
+                Measure::Plot(w) => {
                     let p0 = transform.x_to_screen(&D::zero());
                     let p1 = transform.x_to_screen(&w);
                     (p1 - p0).abs()
