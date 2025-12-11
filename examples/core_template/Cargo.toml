@@ -1,5 +1,5 @@
 [package]
-name = "simple"
+name = "core_template"
 version.workspace = true
 edition.workspace = true
 
