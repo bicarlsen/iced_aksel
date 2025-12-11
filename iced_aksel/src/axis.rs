@@ -34,7 +34,6 @@ pub use tick::{
 use tick::{LabelCandidate, PlacedLabelInfo, ResolvedLabelCandidate};
 
 use crate::{
-    Catalog,
     render::MeshBuffer,
     style::{AxisStyle, Style},
 };
@@ -306,7 +305,7 @@ impl<D: Float> Axis<D> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn draw<Renderer, Theme>(
+    pub(crate) fn draw<Renderer>(
         &self,
         renderer: &mut Renderer,
         style: &Style,
@@ -319,7 +318,6 @@ impl<D: Float> Axis<D> {
         Renderer: iced::advanced::Renderer
             + iced::advanced::graphics::mesh::Renderer
             + iced::advanced::text::Renderer<Font = iced::Font>,
-        Theme: Catalog,
     {
         if self.invisible && self.grid_renderer.is_none() {
             return; // We don't need to render anything
@@ -382,7 +380,8 @@ impl<D: Float> Axis<D> {
             && let Some(cursor_pos) = cursor.position_over(full_bounds)
         {
             renderer.start_layer(bounds);
-            let cursor_rect = match orientation {
+
+            let mut cursor_rect = match orientation {
                 // Create a vertical rect
                 Orientation::Horizontal => Rectangle {
                     x: cursor_pos.x - (theme.cursor.width.0 / 2.0),
@@ -398,11 +397,6 @@ impl<D: Float> Axis<D> {
                     width: bounds.width,
                 },
             };
-            let quad = Quad {
-                bounds: cursor_rect,
-                ..Default::default()
-            };
-            renderer.fill_quad(quad, theme.cursor.color);
 
             if let Some(cursor_formatter) = &self.cursor_formatter
                 && let Some(label) = {
@@ -428,7 +422,7 @@ impl<D: Float> Axis<D> {
                 };
 
                 // Render label on top of cursor position using the label_formatter.
-                let text = Text {
+                let text = Plain::<Renderer::Paragraph>::new(Text {
                     content: label.content,
                     bounds: bounds.size(),
                     size: label.size,
@@ -438,7 +432,7 @@ impl<D: Float> Axis<D> {
                     align_y,
                     shaping: Shaping::Auto,
                     wrapping: iced::widget::text::Wrapping::None,
-                };
+                });
 
                 // Position cursor label at cursor position with padding
                 let position = match self.position {
@@ -453,8 +447,33 @@ impl<D: Float> Axis<D> {
                     }
                 };
 
-                renderer.fill_text(text, position, theme.label_color, bounds);
+                let min_bounds = text.min_bounds();
+
+                cursor_rect = match orientation {
+                    Orientation::Vertical => cursor_rect, // Do nothing for now on vertical
+                    Orientation::Horizontal => Rectangle {
+                        x: cursor_pos.x - (min_bounds.width / 2.0),
+                        y: position.y - min_bounds.height,
+                        width: min_bounds.width,
+                        height: min_bounds.height,
+                    },
+                }
+                .expand(label.padding);
+
+                renderer.fill_text(
+                    text.as_text().with_content(text.content().to_string()),
+                    position,
+                    theme.label_color,
+                    bounds,
+                );
             };
+
+            let quad = Quad {
+                bounds: cursor_rect,
+                ..Default::default()
+            };
+
+            renderer.fill_quad(quad, theme.cursor.color);
 
             renderer.end_layer();
         }

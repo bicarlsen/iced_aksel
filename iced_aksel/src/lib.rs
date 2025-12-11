@@ -803,7 +803,7 @@ where
         // Render axes and grids
         for (i, (_, axis)) in self.state.get_axes().iter().enumerate() {
             let axis_layout = layout.children().nth(i).unwrap();
-            axis.draw::<Renderer, Theme>(
+            axis.draw::<Renderer>(
                 renderer,
                 &style,
                 axis_layout,

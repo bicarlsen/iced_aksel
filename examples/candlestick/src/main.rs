@@ -20,7 +20,7 @@ use iced::{
 };
 use iced_aksel::{
     Axis, Chart, DragDelta, Measure, Plot, State, Stroke, StrokeStyle,
-    axis::{Position, TickLabelContext, TickLine},
+    axis::{self, Position, TickLabelContext, TickLine},
     plot, shape,
 };
 
@@ -733,6 +733,14 @@ impl CandlestickChart {
         };
         Axis::new(scale, Position::Bottom)
             .with_tick_renderer(tick_renderer)
+            .with_cursor_formatter(|x| {
+                let timestamp_seconds = x as i64 * 60;
+                let datetime = chrono::Utc.timestamp_opt(timestamp_seconds, 0).single()?;
+                Some(axis::Label {
+                    content: datetime.format("%a %d %b '%g").to_string(),
+                    ..Default::default()
+                })
+            })
             .skip_overlapping_labels(12.0)
     }
 
@@ -744,6 +752,12 @@ impl CandlestickChart {
         };
         Axis::new(scale, Position::Right)
             .with_tick_renderer(tick_renderer)
+            .with_cursor_formatter(|x| {
+                Some(axis::Label {
+                    content: format!("{x:.2}"),
+                    ..Default::default()
+                })
+            })
             .skip_overlapping_labels(8.0)
     }
 

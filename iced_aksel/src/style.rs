@@ -1,4 +1,4 @@
-use iced::{Color, Pixels, Theme};
+use iced::{Color, Padding, Pixels, Theme};
 
 /// Style of a `Chart`.
 #[derive(Debug, Clone, Copy, PartialEq)]

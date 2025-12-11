@@ -1,9 +1,10 @@
-use iced::Pixels;
+use iced::{Padding, Pixels};
 
 #[derive(Debug, Clone)]
 pub struct Label {
     pub size: Pixels,
     pub content: String,
+    pub padding: Padding,
 }
 
 impl Default for Label {
@@ -12,6 +13,7 @@ impl Default for Label {
         Self {
             size: Pixels(12.0),
             content: String::default(),
+            padding: Padding::new(4.0),
         }
     }
 }
