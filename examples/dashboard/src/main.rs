@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use iced::{
     Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme, font,
@@ -35,6 +35,7 @@ struct ExampleApp {
     gauge_chart: Gauge,
     line_chart: LineChart,
     color_index: usize,
+    last_theme_change: Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +56,7 @@ impl ExampleApp {
             Self {
                 theme: Theme::Dark,
                 color_index: 0,
+                last_theme_change: Instant::now(),
 
                 bar_chart: BarChart::new(bar::Orientation::Vertical).animated(0.3),
 
@@ -79,10 +81,22 @@ impl ExampleApp {
                 self.gauge_chart.tick(now);
                 self.line_chart.tick(now);
                 self.bar_chart.tick(now);
+
+                // Auto-switch theme every 3 seconds
+                if now.duration_since(self.last_theme_change) >= Duration::from_secs(3) {
+                    let all = Theme::ALL;
+                    if let Some(index) = all.iter().position(|x| x == &self.theme) {
+                        self.theme = all[(index + 1) % all.len()].clone();
+                    }
+                    self.last_theme_change = now;
+                }
+
                 Task::none()
             }
             Message::SwitchTheme(theme) => {
                 self.theme = theme;
+                // Reset timer so we don't switch immediately after a manual switch
+                self.last_theme_change = Instant::now();
                 Task::none()
             }
             Message::AddBarDataPoint => {
@@ -189,7 +203,11 @@ impl ExampleApp {
         let theme_picker =
             pick_list(Theme::ALL, Some(&self.theme), Message::SwitchTheme).width(Length::Fill);
 
-        column![theme_picker, top_row, bottom_row]
+        let help_text = text("Themes cycle automatically every 3 seconds.")
+            .size(12)
+            .color(self.theme.palette().text.scale_alpha(0.5));
+
+        column![theme_picker, help_text, top_row, bottom_row]
             .spacing(20)
             .padding(20)
             .into()

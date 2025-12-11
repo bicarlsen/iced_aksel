@@ -12,6 +12,8 @@ logic.
 > The library is still pretty early in development. Breaking changes will occur
 > as we iron out the API.
 
+![Dashboard Demo](./assets/dashboard_demo.gif)
+
 ## 🔍 Highlights
 
 - 📈 **Chart-first widget** – `Chart` provides layout and event handling that
