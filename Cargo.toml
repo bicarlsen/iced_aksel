@@ -1,6 +1,17 @@
 [workspace]
 members = ["iced_aksel", "examples/*"]
 resolver = "3"
+description = "A data-driven charting library for Iced"
+authors = ["Mads Ahlquist Jensen <madsaj10@outlook.com>", "Dennis Mellquist"]
+repository = "https://github.com/Quist/iced_aksel"
+license = "MIT"
+keywords = ["iced", "chart", "canvas"]
+categories = ["GUI"]
+exclude = [
+"flake.nix",
+"flake.lock",
+".github/*",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -8,7 +19,6 @@ edition = "2024"
 
 [workspace.lints.clippy]
 inline_always = "allow"
-
 perf = { level = "deny", priority = -1 }
 correctness = { level = "deny", priority = -1 }
 complexity = { level = "deny", priority = -1 }
