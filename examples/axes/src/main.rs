@@ -35,7 +35,7 @@ pub struct AxesExample {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TickStyle {
     Simple,
-    OnlyMajor, // Renamed from Dense
+    OnlyMajor,
 }
 
 impl std::fmt::Display for TickStyle {
@@ -54,8 +54,8 @@ struct AxisSettings {
     y_position_right: bool,
     show_grid: bool,
     show_cursor: bool,
-    sparse_labels: bool, // Custom Label Policy
-    skip_overlap: bool,  // Standard Skip Policy
+    sparse_labels: bool,
+    skip_overlap: bool,
     tick_style: TickStyle,
     thickness: f32,
     label_spacing: f32,
@@ -107,120 +107,93 @@ impl AxesExample {
     }
 
     fn rebuild_axes(&mut self) {
-        let s = self.settings;
+        // We abstract the creation logic into a helper function to keep this clean.
+        // This makes it easy to see we are creating two axes with slightly different configs.
 
-        // --- 1. X-AXIS ---
-        let mut x_axis = Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
-            .with_thickness(s.thickness)
-            .with_label_spacing(s.label_spacing)
-            .without_grid(); // Important: clear grid by default
-
-        if !s.x_visible {
-            x_axis = x_axis.invisible();
-        }
-
-        // Label Policy Logic
-        if s.sparse_labels {
-            // [Custom Policy]: Manually skip ticks (e.g., odd numbers)
-            x_axis = x_axis.with_custom_label_policy(|ctx| {
-                if ctx.tick.value as i32 % 2 == 0 {
-                    LabelDecision::Render
-                } else {
-                    LabelDecision::Skip
-                }
-            });
-        } else if s.skip_overlap {
-            // [Standard Feature]: Skip labels that overlap
-            x_axis = x_axis.skip_overlapping_labels(10.0);
-        }
-
-        // Cursor Formatter
-        if s.show_cursor {
-            x_axis = x_axis.with_cursor_formatter(|val| {
-                Some(axis::Label {
-                    content: format!("{:.1}", val),
-                    size: 10.into(),
-                })
-            });
-        }
-
-        x_axis = Self::apply_tick_style(x_axis, s.tick_style);
-
-        if s.show_grid {
-            x_axis = x_axis.with_grid_renderer(|tick| {
-                if tick.level == 0 {
-                    Some(GridLine {
-                        thickness: 1.0.into(),
-                    })
-                } else {
-                    None
-                }
-            });
-        }
-
-        // --- 2. Y-AXIS ---
-        let y_pos = if s.y_position_right {
-            axis::Position::Right
-        } else {
-            axis::Position::Left
-        };
-
-        let mut y_axis = Axis::new(Linear::new(-50.0, 50.0), y_pos)
-            .with_thickness(s.thickness)
-            .with_label_spacing(s.label_spacing)
-            .without_grid();
-
-        if !s.y_visible {
-            y_axis = y_axis.invisible();
-        }
-
-        // Label Policy Logic (Y Axis)
-        if s.sparse_labels {
-            y_axis = y_axis.with_custom_label_policy(|ctx| {
-                // Skip ticks that aren't multiples of 10
-                if ctx.tick.value as i32 % 10 == 0 {
-                    LabelDecision::Render
-                } else {
-                    LabelDecision::Skip
-                }
-            });
-        } else if s.skip_overlap {
-            y_axis = y_axis.skip_overlapping_labels(10.0);
-        }
-
-        if s.show_cursor {
-            y_axis = y_axis.with_cursor_formatter(|val| {
-                Some(axis::Label {
-                    content: format!("{:.1}", val),
-                    size: 10.into(),
-                })
-            });
-        }
-
-        y_axis = Self::apply_tick_style(y_axis, s.tick_style);
-
-        if s.show_grid {
-            y_axis = y_axis.with_grid_renderer(|tick| {
-                if tick.level == 0 {
-                    Some(GridLine {
-                        thickness: 0.5.into(),
-                    })
-                } else {
-                    None
-                }
-            });
-        }
+        let x_axis = self.create_axis(AxisKind::X);
+        let y_axis = self.create_axis(AxisKind::Y);
 
         self.chart_state.set_axis(Self::X_ID, x_axis);
         self.chart_state.set_axis(Self::Y_ID, y_axis);
     }
 
-    fn apply_tick_style(axis: Axis<f64>, style: TickStyle) -> Axis<f64> {
-        match style {
+    /// This function demonstrates the "Decision Flow" of configuring an Axis.
+    fn create_axis(&self, kind: AxisKind) -> Axis<f64> {
+        let s = self.settings;
+
+        // 1. Define Base Properties (Scale & Position)
+        let (scale, position) = match kind {
+            AxisKind::X => (Linear::new(0.0, 100.0), axis::Position::Bottom),
+            AxisKind::Y => (
+                Linear::new(-50.0, 50.0),
+                if s.y_position_right {
+                    axis::Position::Right
+                } else {
+                    axis::Position::Left
+                },
+            ),
+        };
+
+        // 2. Start the Builder
+        let mut axis = Axis::new(scale, position)
+            .with_thickness(s.thickness)
+            .with_label_spacing(s.label_spacing)
+            .without_grid(); // Start clean for the toggle logic below
+
+        // 3. Apply Visibility
+        let is_visible = match kind {
+            AxisKind::X => s.x_visible,
+            AxisKind::Y => s.y_visible,
+        };
+        if !is_visible {
+            axis = axis.invisible();
+        }
+
+        // 4. Configure Label Policy (Collision Avoidance)
+        if s.sparse_labels {
+            // Option A: Custom Logic (e.g., Even/Odd filtering)
+            axis = axis.with_custom_label_policy(move |ctx| {
+                let val = ctx.tick.value as i32;
+                let render = match kind {
+                    AxisKind::X => val % 2 == 0,  // X: Even numbers only
+                    AxisKind::Y => val % 10 == 0, // Y: Multiples of 10 only
+                };
+
+                if render {
+                    LabelDecision::Render
+                } else {
+                    LabelDecision::Skip
+                }
+            });
+        } else if s.skip_overlap {
+            // Option B: Automatic Collision Detection
+            axis = axis.skip_overlapping_labels(10.0);
+        }
+
+        // 5. Configure Visuals (Ticks & Grid)
+        axis = Self::apply_visuals(axis, s);
+
+        // 6. Configure Interactive Elements (Cursor Labels)
+        if s.show_cursor {
+            axis = axis.with_cursor_formatter(|val| {
+                Some(axis::Label {
+                    content: format!("{:.1}", val),
+                    size: 10.into(),
+                })
+            });
+        }
+
+        axis
+    }
+
+    /// Applies the TickRenderer and GridRenderer based on settings.
+    fn apply_visuals(axis: Axis<f64>, s: AxisSettings) -> Axis<f64> {
+        // A. Apply Tick Style
+        let axis = match s.tick_style {
             TickStyle::Simple => axis
                 .with_tick_renderer(|ctx| Some(TickLine::simple(format!("{:.0}", ctx.tick.value)))),
             TickStyle::OnlyMajor => axis.with_tick_renderer(|ctx| {
-                // Only render Major ticks (Level 0)
+                // Logic: Only draw tick if level is 0 (Major)
                 if ctx.tick.level == 0 {
                     Some(TickLine {
                         thickness: 1.5.into(),
@@ -231,9 +204,28 @@ impl AxesExample {
                         }),
                     })
                 } else {
-                    None
+                    None // Skip minor ticks entirely
                 }
             }),
+        };
+
+        // B. Apply Grid
+        if s.show_grid {
+            axis.with_grid_renderer(|tick| {
+                if tick.level == 0 {
+                    Some(GridLine {
+                        thickness: if tick.level == 0 {
+                            1.0.into()
+                        } else {
+                            0.5.into()
+                        },
+                    })
+                } else {
+                    None
+                }
+            })
+        } else {
+            axis
         }
     }
 
@@ -339,6 +331,12 @@ impl AxesExample {
         ]
         .into()
     }
+}
+
+// Helper enum to distinguish X/Y during creation
+enum AxisKind {
+    X,
+    Y,
 }
 
 struct DataLayer {
