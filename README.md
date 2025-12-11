@@ -2,7 +2,7 @@
 
 `iced_aksel` is an experimental, "batteries not included", charting crate for
 the [Iced](https://iced.rs/) GUI toolkit, wrapping the
-[aksel](https://github.com/QuistAPS/aksel) plotting core in an ergonomic widget.
+[aksel](https://github.com/QuistHQ/aksel) plotting core in an ergonomic widget.
 It focuses on rendering large, interactive datasets with customizable axes,
 grids, styles, and event handlers that plug directly into your Iced application
 logic.
@@ -18,22 +18,23 @@ logic.
 
 - 📈 **Chart-first widget** – `Chart` provides layout and event handling that
   feels native to Iced apps.
-  
+
 - 🪓 **Powerful axes** – Configure positions, scales, tick/label policies,
   cursor labels, visibility, and grid renderers per axis.
-  
+
 - 🖌️**Canvas-like API** – Implement `PlotData` to add any shape primitive
-  (`shape::Line`, `shape::Circle`, `shape::Rectangle`, etc.) to the plot - Or create your own shape primitives with the `Shape` trait!
-  
-- 📏 **Internal Transformation** - Handles all the math headaches associated with 
-  calculating screen- vs. plot-coordinates.
+  (`shape::Line`, `shape::Circle`, `shape::Rectangle`, etc.) to the plot - Or
+  create your own shape primitives with the `Shape` trait!
+
+- 📏 **Internal Transformation** - Handles all the math headaches associated
+  with calculating screen- vs. plot-coordinates.
 
 - 👉 **Rich interactivity** – Subscribe to click, drag, hover, scroll, and
   double-click callbacks for both the plot area and individual axes.
-  
+
 - 🎨 **Composable styling** – Override per-axis/plot styles or swap in entire
   `style::Catalog`s to match your own theming.
-  
+
 - 🔥 **Performant** - The library handles layering and mesh-squashing to ensure
   proper rendering while maintaining performance!
 
