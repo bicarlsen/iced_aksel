@@ -118,15 +118,23 @@ where
         self.axes.iter().filter(|(_, axis)| axis.is_visible())
     }
 
-    pub fn pan_axes(&mut self, x_scale: AxisId, y_scale: AxisId, dx: f32, dy: f32) {
+    // NOTE: If one ID is wrong it will still mutate the axis that had the right ID
+    pub fn pan_axes(
+        &mut self,
+        x_scale: AxisId,
+        y_scale: AxisId,
+        normalized_delta_x: f32,
+        normalized_delta_y: f32,
+    ) {
         if let Some(axis) = self.axes.get_mut(&x_scale) {
-            axis.pan(dx);
+            axis.pan(normalized_delta_x);
         }
         if let Some(axis) = self.axes.get_mut(&y_scale) {
-            axis.pan(dy);
+            axis.pan(normalized_delta_y);
         }
     }
 
+    // NOTE: If one ID is wrong it will still mutate the axis that had the right ID
     pub fn zoom_axes(
         &mut self,
         x_scale: AxisId,

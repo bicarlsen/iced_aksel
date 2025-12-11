@@ -223,12 +223,6 @@ impl<D: Float> Axis<D> {
         self
     }
 
-    /// Removes the grid from the axis
-    pub fn without_grid(mut self) -> Self {
-        self.grid_renderer = None;
-        self
-    }
-
     /// Sets the tick renderer for the axis. This defines which ticks should have lines and
     /// are allowed to have labels & grid lines.
     pub fn with_tick_renderer<F>(mut self, renderer: F) -> Self
@@ -236,6 +230,12 @@ impl<D: Float> Axis<D> {
         F: FnMut(TickLabelContext<D>) -> Option<TickLine> + 'static,
     {
         self.tick_renderer = Some(Rc::new(RefCell::new(renderer)));
+        self
+    }
+
+    /// Removes the grid from the axis
+    pub fn without_grid(mut self) -> Self {
+        self.grid_renderer = None;
         self
     }
 
@@ -380,7 +380,7 @@ impl<D: Float> Axis<D> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn draw<Renderer, Theme>(
+    pub(crate) fn draw<Renderer, Theme>(
         &self,
         renderer: &mut Renderer,
         style: &Style,
