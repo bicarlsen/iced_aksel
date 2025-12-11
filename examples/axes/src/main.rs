@@ -10,9 +10,9 @@ use iced_aksel::{
     shape::Polyline,
 };
 
-// -----------------------------------------------------------------------------
-// Application Entry
-// -----------------------------------------------------------------------------
+// =============================================================================
+//  APPLICATION ENTRY
+// =============================================================================
 
 pub fn main() -> iced::Result {
     iced::application(AxesExample::new, AxesExample::update, AxesExample::view)
@@ -22,13 +22,16 @@ pub fn main() -> iced::Result {
         .run()
 }
 
-// -----------------------------------------------------------------------------
-// Application State
-// -----------------------------------------------------------------------------
+// =============================================================================
+//  APPLICATION STATE
+// =============================================================================
 
 pub struct AxesExample {
+    // The chart state holds the configured axes
     chart_state: State<&'static str, f64>,
+    // The data to render
     data: DataLayer,
+    // The UI settings that control the axis configuration
     settings: AxisSettings,
 }
 
@@ -49,13 +52,18 @@ impl std::fmt::Display for TickStyle {
 
 #[derive(Debug, Clone, Copy)]
 struct AxisSettings {
+    // Visibility & Layout
     x_visible: bool,
     y_visible: bool,
     y_position_right: bool,
     show_grid: bool,
-    show_cursor: bool,
-    sparse_labels: bool,
-    skip_overlap: bool,
+
+    // Logic & Interaction
+    show_cursor: bool,   // Renders a label on the axis when hovering
+    sparse_labels: bool, // Uses a custom closure to skip specific ticks
+    skip_overlap: bool,  // Automatically hides labels that collide
+
+    // Styling
     tick_style: TickStyle,
     thickness: f32,
     label_spacing: f32,
@@ -92,6 +100,10 @@ pub enum Message {
     SpacingChanged(f32),
 }
 
+// =============================================================================
+//  LOGIC & UPDATES
+// =============================================================================
+
 impl AxesExample {
     const X_ID: &'static str = "x";
     const Y_ID: &'static str = "y";
@@ -102,26 +114,31 @@ impl AxesExample {
             data: DataLayer::new(),
             settings: AxisSettings::default(),
         };
+        // Perform initial configuration
         app.rebuild_axes();
         (app, iced::Task::none())
     }
 
+    /// This function applies the current `settings` to the Chart State.
+    /// It demonstrates the "Builder Pattern" used to configure axes.
     fn rebuild_axes(&mut self) {
-        // We abstract the creation logic into a helper function to keep this clean.
-        // This makes it easy to see we are creating two axes with slightly different configs.
-
-        let x_axis = self.create_axis(AxisKind::X);
-        let y_axis = self.create_axis(AxisKind::Y);
+        let x_axis = self.configure_axis(AxisKind::X);
+        let y_axis = self.configure_axis(AxisKind::Y);
 
         self.chart_state.set_axis(Self::X_ID, x_axis);
         self.chart_state.set_axis(Self::Y_ID, y_axis);
     }
 
-    /// This function demonstrates the "Decision Flow" of configuring an Axis.
-    fn create_axis(&self, kind: AxisKind) -> Axis<f64> {
+    /// A helper that acts as a factory for Axis configuration.
+    /// It goes through the standard pipeline:
+    /// Scale -> Position -> Dimensions -> Logic -> Visuals
+    fn configure_axis(&self, kind: AxisKind) -> Axis<f64> {
         let s = self.settings;
 
-        // 1. Define Base Properties (Scale & Position)
+        // ---------------------------------------------------------------------
+        // 1. BASE CONFIGURATION
+        //    Define the Domain (Linear/Log) and the Screen Position.
+        // ---------------------------------------------------------------------
         let (scale, position) = match kind {
             AxisKind::X => (Linear::new(0.0, 100.0), axis::Position::Bottom),
             AxisKind::Y => (
@@ -134,48 +151,55 @@ impl AxesExample {
             ),
         };
 
-        // 2. Start the Builder
         let mut axis = Axis::new(scale, position)
             .with_thickness(s.thickness)
             .with_label_spacing(s.label_spacing)
-            .without_grid(); // Start clean for the toggle logic below
+            .without_grid(); // Start clean so toggling grid works reliably
 
-        // 3. Apply Visibility
+        // ---------------------------------------------------------------------
+        // 2. VISIBILITY
+        // ---------------------------------------------------------------------
         let is_visible = match kind {
             AxisKind::X => s.x_visible,
             AxisKind::Y => s.y_visible,
         };
+
         if !is_visible {
             axis = axis.invisible();
         }
 
-        // 4. Configure Label Policy (Collision Avoidance)
+        // ---------------------------------------------------------------------
+        // 3. LABEL POLICY (Collision Avoidance)
+        // ---------------------------------------------------------------------
         if s.sparse_labels {
-            // Option A: Custom Logic (e.g., Even/Odd filtering)
+            // OPTION A: Custom Logic
+            // We manually decide which ticks to Render or Skip based on context.
             axis = axis.with_custom_label_policy(move |ctx| {
                 let val = ctx.tick.value as i32;
-                let render = match kind {
-                    AxisKind::X => val % 2 == 0,  // X: Even numbers only
-                    AxisKind::Y => val % 10 == 0, // Y: Multiples of 10 only
+                // Example logic: Skip odd numbers on X, skip non-10s on Y
+                let should_render = match kind {
+                    AxisKind::X => val % 2 == 0,
+                    AxisKind::Y => val % 10 == 0,
                 };
 
-                if render {
+                if should_render {
                     LabelDecision::Render
                 } else {
                     LabelDecision::Skip
                 }
             });
         } else if s.skip_overlap {
-            // Option B: Automatic Collision Detection
+            // OPTION B: Automatic Logic
+            // The chart will measure text and hide labels that collide.
             axis = axis.skip_overlapping_labels(10.0);
         }
 
-        // 5. Configure Visuals (Ticks & Grid)
-        axis = Self::apply_visuals(axis, s);
-
-        // 6. Configure Interactive Elements (Cursor Labels)
+        // ---------------------------------------------------------------------
+        // 4. INTERACTIVITY (Cursor Labels)
+        // ---------------------------------------------------------------------
         if s.show_cursor {
             axis = axis.with_cursor_formatter(|val| {
+                // Renders a floating label on the axis when hovering the plot
                 Some(axis::Label {
                     content: format!("{:.1}", val),
                     size: 10.into(),
@@ -183,17 +207,18 @@ impl AxesExample {
             });
         }
 
-        axis
-    }
+        // ---------------------------------------------------------------------
+        // 5. VISUALS (Ticks & Grids)
+        // ---------------------------------------------------------------------
 
-    /// Applies the TickRenderer and GridRenderer based on settings.
-    fn apply_visuals(axis: Axis<f64>, s: AxisSettings) -> Axis<f64> {
-        // A. Apply Tick Style
-        let axis = match s.tick_style {
-            TickStyle::Simple => axis
-                .with_tick_renderer(|ctx| Some(TickLine::simple(format!("{:.0}", ctx.tick.value)))),
+        // A. Tick Renderer
+        axis = match s.tick_style {
+            TickStyle::Simple => axis.with_tick_renderer(|ctx| {
+                // Standard: render everything
+                Some(TickLine::simple(format!("{:.0}", ctx.tick.value)))
+            }),
             TickStyle::OnlyMajor => axis.with_tick_renderer(|ctx| {
-                // Logic: Only draw tick if level is 0 (Major)
+                // Filtered: Only render Level 0 (Major) ticks
                 if ctx.tick.level == 0 {
                     Some(TickLine {
                         thickness: 1.5.into(),
@@ -204,29 +229,26 @@ impl AxesExample {
                         }),
                     })
                 } else {
-                    None // Skip minor ticks entirely
+                    None // Hides both the line and the label for minor ticks
                 }
             }),
         };
 
-        // B. Apply Grid
+        // B. Grid Renderer
         if s.show_grid {
-            axis.with_grid_renderer(|tick| {
+            axis = axis.with_grid_renderer(|tick| {
+                // Only draw grid lines for major ticks
                 if tick.level == 0 {
                     Some(GridLine {
-                        thickness: if tick.level == 0 {
-                            1.0.into()
-                        } else {
-                            0.5.into()
-                        },
+                        thickness: 1.0.into(),
                     })
                 } else {
                     None
                 }
-            })
-        } else {
-            axis
+            });
         }
+
+        axis
     }
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
@@ -250,6 +272,7 @@ impl AxesExample {
         let chart = Chart::new(&self.chart_state).plot_data(&self.data, Self::X_ID, Self::Y_ID);
 
         let controls = column![
+            // --- Section: Visibility ---
             text("Layout & Visibility")
                 .size(14)
                 .color(Color::from_rgb(0.7, 0.7, 0.7)),
@@ -273,6 +296,7 @@ impl AxesExample {
                 text("Grid Lines")
             ]
             .spacing(10),
+            // --- Section: Features ---
             text("Labels & Ticks")
                 .size(14)
                 .color(Color::from_rgb(0.7, 0.7, 0.7)),
@@ -291,6 +315,7 @@ impl AxesExample {
                 text("Sparse Policy (Custom)")
             ]
             .spacing(10),
+            // --- Section: Styling ---
             text("Tick Style")
                 .size(14)
                 .color(Color::from_rgb(0.7, 0.7, 0.7)),
@@ -333,7 +358,12 @@ impl AxesExample {
     }
 }
 
+// =============================================================================
+//  DATA LAYER
+// =============================================================================
+
 // Helper enum to distinguish X/Y during creation
+#[derive(Clone, Copy)]
 enum AxisKind {
     X,
     Y,
