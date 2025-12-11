@@ -171,7 +171,7 @@ impl BarChart {
             Orientation::Vertical => (Self::BAR_AXIS, Self::VALUE_AXIS),
         };
 
-        Chart::new(&self.state).layer(self, x_axis_id, y_axis_id)
+        Chart::new(&self.state).plot_data(self, x_axis_id, y_axis_id)
     }
 
     fn auto_scale(&mut self) {

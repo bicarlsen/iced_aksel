@@ -548,7 +548,7 @@ impl LineChart {
             .first()
             .map(|s| s.y_key.clone())
             .unwrap_or_else(|| Self::Y.to_string());
-        chart = chart.layer(self, Self::X.to_string(), first_y);
+        chart = chart.plot_data(self, Self::X.to_string(), first_y);
         chart
     }
 }

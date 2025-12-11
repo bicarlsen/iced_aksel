@@ -173,7 +173,7 @@ impl ScalesExample {
     }
 
     fn view_linear_chart(&self) -> iced::Element<'_, Message> {
-        let chart = Chart::new(&self.linear_view).layer(&self.data, Self::AXIS_X, Self::AXIS_Y);
+        let chart = Chart::new(&self.linear_view).plot_data(&self.data, Self::AXIS_X, Self::AXIS_Y);
 
         column![
             text("Linear Scale").size(20),
@@ -192,7 +192,7 @@ impl ScalesExample {
     }
 
     fn view_log_chart(&self) -> iced::Element<'_, Message> {
-        let chart = Chart::new(&self.log_view).layer(&self.data, Self::AXIS_X, Self::AXIS_Y);
+        let chart = Chart::new(&self.log_view).plot_data(&self.data, Self::AXIS_X, Self::AXIS_Y);
 
         column![
             text("Logarithmic Scale").size(20),

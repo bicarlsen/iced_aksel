@@ -382,7 +382,7 @@ impl Gauge {
     // =========================================================
 
     pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
-        Chart::new(&self.chart_state).layer(self, Self::X_AXIS, Self::Y_AXIS)
+        Chart::new(&self.chart_state).plot_data(self, Self::X_AXIS, Self::Y_AXIS)
     }
 
     // --- Getters ---

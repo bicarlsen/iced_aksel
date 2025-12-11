@@ -434,10 +434,10 @@ impl CandlestickChart {
     /// Returns the single `Chart` widget containing all layers.
     pub fn view(&self) -> Chart<'_, AxisId, f64, Message> {
         Chart::new(&self.state)
-            .layer(&self.candle_items, X_AXIS_ID, Y_AXIS_ID)
-            .layer(&self.volume_items, X_AXIS_ID, Y_VOL_AXIS_ID)
-            .layer(&self.sma_items, X_AXIS_ID, Y_AXIS_ID)
-            .layer(&self.bband_items, X_AXIS_ID, Y_AXIS_ID)
+            .plot_data(&self.candle_items, X_AXIS_ID, Y_AXIS_ID)
+            .plot_data(&self.volume_items, X_AXIS_ID, Y_VOL_AXIS_ID)
+            .plot_data(&self.sma_items, X_AXIS_ID, Y_AXIS_ID)
+            .plot_data(&self.bband_items, X_AXIS_ID, Y_AXIS_ID)
     }
 
     /// Handles incoming messages and updates the chart state.

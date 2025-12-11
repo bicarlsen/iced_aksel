@@ -209,7 +209,7 @@ impl Interactions {
 
         // 3. The Chart
         let chart = Chart::new(&self.state)
-            .layer(&self.signal, Self::AXIS_X, Self::AXIS_Y)
+            .plot_data(&self.signal, Self::AXIS_X, Self::AXIS_Y)
             .on_scroll(Message::Scrolled)
             .on_drag(Message::Dragged)
             .on_hover(Message::Hovered)
