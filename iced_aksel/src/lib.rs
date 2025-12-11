@@ -32,7 +32,7 @@ pub mod stroke;
 
 pub use axis::Axis;
 pub use measure::Measure;
-pub use plot::Plot;
+pub use plot::{Plot, PlotData};
 pub use shape::Shape;
 pub use state::State;
 pub use stroke::Stroke;
