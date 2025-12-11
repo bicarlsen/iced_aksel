@@ -70,7 +70,7 @@
 //! - **[`State`]**: Manages axis configuration and chart state
 //! - **[`Axis`]**: Configures scales, ticks, grids, and labels
 //! - **[`PlotData`]**: Trait for drawable data types
-//! - **[`Shape`]**: Primitives for rendering (lines, circles, rectangles, etc.)
+//! - **[`Shape`](crate::shape)**: Primitives for rendering (lines, circles, rectangles, etc.)
 
 use std::{fmt::Debug, hash::Hash, ops::Deref};
 
