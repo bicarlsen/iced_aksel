@@ -75,7 +75,6 @@ pub struct Gauge {
     padding: f64,
 
     zones: Vec<Zone>,
-    // Parallel state to track animation progress (0.0-1.0) for each zone
     zone_factors: Vec<f64>,
 
     base_color: Option<Color>,
@@ -127,7 +126,7 @@ impl Gauge {
             end_angle: 0.0,
             tick_count: 0,
 
-            zone_opacity: 0.3, // Default to dull zones so highlighting pops
+            zone_opacity: 0.3,
 
             value: min,
             target_value: min,
@@ -150,8 +149,7 @@ impl Gauge {
         self.target_value = value;
         if self.animation_speed.is_none() {
             self.value = value;
-            // Snap zones too if animation is off
-            self.update_zone_factors(1.0); // 1.0 alpha means instant snap
+            self.update_zone_factors(1.0);
         } else if self.last_tick.is_none() {
             self.last_tick = Some(Instant::now());
         }
