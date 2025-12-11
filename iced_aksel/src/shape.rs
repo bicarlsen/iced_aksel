@@ -42,18 +42,18 @@ use super::plot;
 
 use aksel::Float;
 
-mod label;
 mod arc;
 mod circle;
+mod label;
 mod line;
 mod polygon;
 mod polyline;
 mod rectangle;
 mod triangle;
 
-pub use label::Label;
 pub use arc::Arc;
 pub use circle::Circle;
+pub use label::Label;
 pub use line::Line;
 pub use polygon::Polygon;
 pub use polyline::Polyline;
