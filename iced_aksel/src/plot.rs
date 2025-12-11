@@ -21,7 +21,7 @@ impl<T> Renderer for T where
 {
 }
 
-pub trait Items<D, R = iced::Renderer, Theme = iced::Theme>
+pub trait PlotData<D, R = iced::Renderer, Theme = iced::Theme>
 where
     D: Float,
     R: Renderer,

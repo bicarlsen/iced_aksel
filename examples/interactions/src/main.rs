@@ -8,7 +8,7 @@ use iced::{
 use iced_aksel::{
     Axis, Chart, State, Stroke,
     axis::{self, TickLine},
-    plot::{Items, Plot},
+    plot::{Plot, PlotData},
     shape::Polyline,
 };
 
@@ -281,7 +281,7 @@ impl SignalData {
     }
 }
 
-impl Items<f64, iced::Renderer, Theme> for SignalData {
+impl PlotData<f64, iced::Renderer, Theme> for SignalData {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         plot.add_shape(Polyline::new(
             self.points.clone(),

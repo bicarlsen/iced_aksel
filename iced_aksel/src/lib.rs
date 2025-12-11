@@ -162,7 +162,7 @@ where
         }
     }
 
-    pub fn layer<T: plot::Items<Domain, Renderer, Theme>>(
+    pub fn layer<T: plot::PlotData<Domain, Renderer, Theme>>(
         mut self,
         items: &'a T,
         x_axis_id: AxisId,

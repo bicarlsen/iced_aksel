@@ -12,7 +12,7 @@ use iced_aksel::shape::{Circle, Polyline};
 use iced_aksel::{
     Axis, Chart, State,
     axis::{self, GridLine, TickLine},
-    plot::{Items, Plot},
+    plot::{Plot, PlotData},
 };
 
 // -----------------------------------------------------------------------------
@@ -250,7 +250,7 @@ impl ExponentialData {
     }
 }
 
-impl Items<f64, iced::Renderer, Theme> for ExponentialData {
+impl PlotData<f64, iced::Renderer, Theme> for ExponentialData {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         // Draw the line
         plot.add_shape(Polyline::new(

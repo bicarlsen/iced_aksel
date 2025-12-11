@@ -3,7 +3,7 @@ use iced::Theme;
 use iced_aksel::{
     Axis, Chart, Measure, State,
     axis::{self, TickLine},
-    plot::{Items, Plot},
+    plot::{Plot, PlotData},
     shape::Rectangle,
 };
 use std::time::Instant;
@@ -255,7 +255,7 @@ impl BarChart {
     }
 }
 
-impl Items<f64> for BarChart {
+impl PlotData<f64> for BarChart {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         let palette = theme.palette();
         let bar_color = palette.primary;

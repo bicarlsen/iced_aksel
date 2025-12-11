@@ -774,7 +774,7 @@ struct CandleItems {
     candle_width: Measure<f64>,
 }
 
-impl<R: plot::Renderer> plot::Items<f64, R> for CandleItems {
+impl<R: plot::Renderer> plot::PlotData<f64, R> for CandleItems {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, theme: &iced::Theme) {
         let palette = theme.extended_palette();
         // Create rectangles from candle data during draw
@@ -809,7 +809,7 @@ struct VolumeItems {
     bar_width: Measure<f64>,
 }
 
-impl<R: plot::Renderer> plot::Items<f64, R> for VolumeItems {
+impl<R: plot::Renderer> plot::PlotData<f64, R> for VolumeItems {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, theme: &iced::Theme) {
         let palette = theme.extended_palette();
         // Create volume bars from candle data during draw
@@ -834,7 +834,7 @@ struct SmaItems {
     points: Vec<PlotPoint<f64>>,
 }
 
-impl<R: plot::Renderer> plot::Items<f64, R> for SmaItems {
+impl<R: plot::Renderer> plot::PlotData<f64, R> for SmaItems {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, theme: &iced::Theme) {
         let palette = theme.palette();
 
@@ -859,7 +859,7 @@ struct BbandsItems {
     lower: Vec<PlotPoint<f64>>,
 }
 
-impl<R: plot::Renderer> plot::Items<f64, R> for BbandsItems {
+impl<R: plot::Renderer> plot::PlotData<f64, R> for BbandsItems {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, theme: &iced::Theme) {
         let palette = theme.palette();
 

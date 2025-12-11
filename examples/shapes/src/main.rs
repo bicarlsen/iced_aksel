@@ -6,7 +6,7 @@ use iced::{
 use iced_aksel::{
     Axis, Chart, Length, State, Stroke,
     axis::{self},
-    plot::{Items, Plot},
+    plot::{Plot, PlotData},
 };
 
 // Import all available shapes
@@ -60,7 +60,7 @@ impl ShapeGallery {
     }
 }
 
-impl Items<f64> for ShapeGallery {
+impl PlotData<f64> for ShapeGallery {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         let palette = theme.palette();
         let text_color = palette.text;

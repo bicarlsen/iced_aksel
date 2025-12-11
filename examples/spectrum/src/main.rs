@@ -108,7 +108,7 @@ impl SpectrumLayer {
     }
 }
 
-impl<R: plot::Renderer> plot::Items<f64, R> for SpectrumLayer {
+impl<R: plot::Renderer> plot::PlotData<f64, R> for SpectrumLayer {
     fn draw(&self, plot: &mut Plot<'_, f64, R>, theme: &iced::Theme) {
         if self.curve.len() < 2 {
             return;

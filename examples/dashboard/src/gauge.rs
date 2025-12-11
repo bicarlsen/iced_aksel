@@ -6,7 +6,7 @@ use iced::{
 use iced_aksel::{
     Axis, Chart, Measure, State as ChartState,
     axis::{self},
-    plot::{Items, Plot},
+    plot::{Plot, PlotData},
 };
 use std::f32::consts::PI;
 use std::time::Instant;
@@ -402,7 +402,7 @@ impl Gauge {
 
 // --- Drawing Logic ---
 
-impl Items<f64> for Gauge {
+impl PlotData<f64> for Gauge {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         // Debug Overlay
         if self.debug_mode {

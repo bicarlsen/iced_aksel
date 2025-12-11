@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 
 use aksel::{PlotPoint, scale::Linear};
 use iced::{Color, Element, Task, Theme};
-use iced_aksel::{Axis, Chart, DragDelta, State, axis, plot::Items, shape::Polygon};
+use iced_aksel::{Axis, Chart, DragDelta, State, axis, plot::PlotData, shape::Polygon};
 use rand::Rng;
 
 const X_ID: &str = "linear_x";
@@ -89,7 +89,7 @@ impl SolarSystem {
     }
 }
 
-impl Items<f64> for SolarSystem {
+impl PlotData<f64> for SolarSystem {
     fn draw(&self, plot: &mut iced_aksel::Plot<f64, iced::Renderer>, _theme: &iced::Theme) {
         // Prepare values
         let bounds = plot.bounds();

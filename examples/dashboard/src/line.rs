@@ -6,7 +6,7 @@ use iced::{
 use iced_aksel::{
     Axis, Chart, Measure, State,
     axis::{self, TickLine},
-    plot::{Items, Plot},
+    plot::{Plot, PlotData},
 };
 use std::collections::HashMap;
 use std::time::Instant;
@@ -554,7 +554,7 @@ impl LineChart {
 }
 
 // Unified Renderer
-impl Items<f64> for LineChart {
+impl PlotData<f64> for LineChart {
     fn draw(&self, plot: &mut Plot<f64, iced::Renderer>, theme: &Theme) {
         let chart_floor = self
             .state
