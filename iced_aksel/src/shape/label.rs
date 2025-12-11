@@ -9,7 +9,7 @@ use iced::{
 /// A text label positioned at a specific point in the chart.
 ///
 /// Unlike geometric shapes, labels are rendered using the backend's native text engine
-/// via [`plot::Renderer::fill_text`], ensuring crisp, hinted typography.
+/// via [`TextRenderer::fill_text`](crate::plot::TextRenderer::fill_text), ensuring crisp, hinted typography.
 ///
 /// # Example
 ///

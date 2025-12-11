@@ -56,7 +56,7 @@ pub trait Catalog {
     /// Returns the default styling class.
     fn default<'a>() -> <Self as Catalog>::Class<'a>;
 
-    /// Produces the [`Style`] of a class with the given status.
+    /// Produces the style of a class with the given status.
     fn style(&self, class: &<Self as Catalog>::Class<'_>) -> Style;
 }
 

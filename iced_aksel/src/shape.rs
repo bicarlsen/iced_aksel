@@ -11,7 +11,7 @@
 //! - **[`Rectangle`]**: Axis-aligned rectangles
 //! - **[`Triangle`]**: Three-vertex polygons
 //!
-//! All shapes support both screen-space (pixel) and plot-space (data) sizing via [`Measure`].
+//! All shapes support both screen-space (pixel) and plot-space (data) sizing via [`Measure`](crate::Measure).
 //!
 //! # Example
 //!

@@ -12,11 +12,11 @@ pub mod label;
 /// Understanding `TickLine` requires understanding how `aksel` processes axes.
 /// The relationship flows as follows:
 ///
-/// 1.  **Generation (`Scale`):** The [`Scale`] (e.g., `Linear`, `Log`) calculates logical positions
+/// 1.  **Generation (`Scale`):** The [`Scale`](crate::Scale) (e.g., `Linear`, `Log`) calculates logical positions
 ///     and importance levels for potential ticks, creating [`Tick`] objects.
-/// 2.  **Contextualization (`Axis`):** The Axis wraps each logical [`Tick`] into a [`TickLabelContext`].
+/// 2.  **Contextualization (`Axis`):** The Axis wraps each logical [`Tick`] into a [`TickLabelContext`](crate::axis::TickLabelContext).
 ///     This provides context like the axis bounds, domain, and orientation.
-/// 3.  **Styling (User Logic):** The user provides a closure via [`Axis::with_tick_renderer`].
+/// 3.  **Styling (User Logic):** The user provides a closure via [`Axis::with_tick_renderer`](crate::Axis::with_tick_renderer).
 ///     This closure receives the context and decides **if** and **how** that tick should be drawn
 ///     by returning an `Option<TickLine>`.
 ///

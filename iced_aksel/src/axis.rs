@@ -373,8 +373,6 @@ impl<D: Float> Axis<D> {
 
     /// Changes the tick renderer for the axis. This defines which ticks should have lines and
     /// are allowed to have labels & grid lines.
-    ///
-    /// OBS:
     pub fn set_tick_renderer<F>(&mut self, renderer: F)
     where
         F: Fn(TickLabelContext<D>) -> Option<TickLine> + 'static,
