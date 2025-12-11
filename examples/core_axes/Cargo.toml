@@ -2,6 +2,7 @@
 name = "core_axes"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 iced.workspace = true

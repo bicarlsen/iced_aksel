@@ -2,6 +2,7 @@
 name = "stress"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 iced.workspace = true

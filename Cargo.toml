@@ -16,7 +16,7 @@ style = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
 
 [workspace.dependencies]
-aksel = { git = "https://github.com/QuistAPS/aksel", branch = "main" }
+aksel = "0.2"
 chrono = "0.4"
 cpal = "0.16.0"
 derive_more = { version = "2.0", features = ["from", "error", "display", "into"]}
