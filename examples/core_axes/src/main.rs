@@ -203,6 +203,7 @@ impl AxesExample {
                 Some(axis::Label {
                     content: format!("{:.1}", val),
                     size: 10.into(),
+                    ..Default::default()
                 })
             });
         }
@@ -226,6 +227,7 @@ impl AxesExample {
                         label: Some(axis::Label {
                             content: format!("{:.0}", ctx.tick.value),
                             size: 10.into(),
+                            ..Default::default()
                         }),
                     })
                 } else {
