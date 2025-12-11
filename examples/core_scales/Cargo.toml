@@ -1,5 +1,5 @@
 [package]
-name = "scales"
+name = "core_scales"
 version.workspace = true
 edition.workspace = true
 

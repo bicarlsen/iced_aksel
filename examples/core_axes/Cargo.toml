@@ -1,5 +1,5 @@
 [package]
-name = "axes"
+name = "core_axes"
 version.workspace = true
 edition.workspace = true
 
