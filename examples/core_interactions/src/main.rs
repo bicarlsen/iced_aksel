@@ -7,7 +7,7 @@ use iced::{
 use iced_aksel::{
     Axis, Chart, PlotPoint, State, Stroke,
     axis::{self, TickLine},
-    plot::{Plot, PlotData},
+    plot::{self, Plot, PlotData},
     scale::Linear,
     shape::Polyline,
 };
@@ -42,7 +42,7 @@ pub struct Interactions {
 #[derive(Debug, Clone)]
 pub enum Message {
     Scrolled(iced::Point, iced::mouse::ScrollDelta),
-    Dragged(iced_aksel::DragDelta),
+    Dragged(plot::DragDelta),
     Hovered(iced::Point),
     Unhovered,
     ModifiersChanged(keyboard::Modifiers),

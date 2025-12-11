@@ -20,7 +20,7 @@ use iced::{
 use iced_aksel::{
     Axis, Chart, Measure, Plot, PlotPoint, State, Stroke,
     axis::{self, Position, TickLabelContext, TickLine},
-    plot,
+    plot::{self, DragDelta},
     scale::Linear,
     shape,
     stroke::StrokeStyle,

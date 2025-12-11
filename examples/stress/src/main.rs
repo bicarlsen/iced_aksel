@@ -17,9 +17,9 @@ use iced::{
     widget::{Slider, button, checkbox, column, radio, row, text},
 };
 use iced_aksel::{
-    Axis, Chart, DragDelta, Measure, Plot, PlotPoint, State, Stroke,
+    Axis, Chart, Measure, Plot, PlotPoint, State, Stroke,
     axis::Position,
-    plot,
+    plot::{self, DragDelta},
     scale::Linear,
     shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
     stroke::StrokeStyle,
