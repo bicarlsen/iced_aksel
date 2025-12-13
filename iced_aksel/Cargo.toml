@@ -13,14 +13,13 @@ repository.workspace = true
 aksel.workspace = true
 derive_more.workspace = true
 derivative.workspace = true
+iced_core.workspace = true 
+iced_graphics.workspace = true 
+iced_renderer.workspace = true
 indexmap.workspace = true
 lyon_tessellation.workspace = true
 lyon_path.workspace = true
 lyon.workspace = true
-
-iced_core = { workspace = true }
-iced_graphics = { workspace = true }
-iced_renderer = { workspace = true }
 
 [dev-dependencies]
 rand.workspace = true
@@ -29,6 +28,7 @@ cpal.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 chrono.workspace = true
+iced.workspace = true
 
 [lints]
 workspace = true
