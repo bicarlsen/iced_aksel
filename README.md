@@ -191,6 +191,6 @@ ideas, or performance traces that can help steer the roadmap.
 [Crate Badge]: https://img.shields.io/crates/v/iced_aksel
 [Docs-rs]: https://docs.rs/iced_aksel/latest/iced_aksel/
 [Docs-rs Badge]: https://img.shields.io/docsrs/iced_aksel
-[Built with Iced badge]: https://img.shields.io/docsrs/gladius
+[Built with Iced badge]: https://img.shields.io/badge/Built%20With%20Iced-3645FF?logo=iced&logoColor=fff
 [Aksel]: https://github.com/QuistHQ/aksel
 [Iced]: https://iced.rs/
