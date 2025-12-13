@@ -10,5 +10,9 @@ rand = "0.9.2"
 
 iced_aksel = { path = "../../iced_aksel/" }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iced = { workspace = true, features = ["web-colors", "thread-pool", "webgl", "fira-sans"] }
+getrandom = { version = "0.3", features = [ "wasm_js" ]}
+
 [lints]
 workspace = true

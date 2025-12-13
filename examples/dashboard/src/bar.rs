@@ -1,4 +1,4 @@
-use iced::Theme;
+use iced::{Theme, time::Instant};
 use iced_aksel::{
     Axis, Chart, Measure, PlotPoint, Scale, State,
     axis::{self, TickLine},
@@ -6,7 +6,6 @@ use iced_aksel::{
     scale::{Linear, Tick, TickIter},
     shape::Rectangle,
 };
-use std::time::Instant;
 
 type AxisId = &'static str;
 

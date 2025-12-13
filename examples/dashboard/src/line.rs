@@ -1,19 +1,16 @@
 use iced::{
     Color, Theme,
     alignment::{Horizontal, Vertical},
+    time::Instant,
 };
 use iced_aksel::{
-    Axis, Chart, Measure, PlotPoint, State,
+    Axis, Chart, Measure, PlotPoint, State, Stroke,
     axis::{self, TickLine},
     plot::{Plot, PlotData},
     scale::Linear,
+    shape::{Label, Polygon, Polyline, Rectangle},
 };
 use std::collections::HashMap;
-use std::time::Instant;
-
-// Import shapes
-use iced_aksel::Stroke;
-use iced_aksel::shape::{Label, Polygon, Polyline, Rectangle};
 
 type AxisId = String;
 

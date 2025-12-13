@@ -1,17 +1,16 @@
 use iced::{
     Color, Theme,
     alignment::{Horizontal, Vertical},
+    time::Instant,
 };
 use iced_aksel::{
     Axis, Chart, Measure, PlotPoint, State as ChartState,
     axis::{self},
     plot::{Plot, PlotData},
     scale::Linear,
+    shape::{Arc, Label, Rectangle},
 };
 use std::f32::consts::PI;
-use std::time::Instant;
-
-use iced_aksel::shape::{Arc, Label, Rectangle};
 
 type AxisId = &'static str;
 

@@ -1,7 +1,6 @@
-use std::time::Instant;
-
 use iced::{
     Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme, font, keyboard,
+    time::Instant,
     widget::{Space, button, column, container, pick_list, row, text},
 };
 
