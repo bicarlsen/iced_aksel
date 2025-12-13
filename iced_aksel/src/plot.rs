@@ -3,14 +3,13 @@
 //! This module provides the core plotting infrastructure for rendering data on charts.
 //! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
 
-use aksel::{Float, PlotRect, Transform};
-
 use crate::{
     render::{MeshBuffer, Tessellators},
     shape::Shape,
 };
 
-use iced::{Color, Point, advanced::Text};
+use aksel::{Float, PlotRect, Transform};
+use iced_core::{Color, Point, Text};
 
 /// Normalized drag delta for panning operations.
 ///
@@ -36,16 +35,16 @@ pub struct DragDelta {
 ///
 /// This trait is automatically implemented for any renderer that satisfies the requirements.
 pub trait Renderer:
-    iced::advanced::Renderer
-    + iced::advanced::graphics::mesh::Renderer
-    + iced::advanced::text::Renderer<Font = iced::Font>
+    iced_core::Renderer
+    + iced_graphics::mesh::Renderer
+    + iced_core::text::Renderer<Font = iced_core::Font>
 {
 }
 
 impl<T> Renderer for T where
-    T: iced::advanced::Renderer
-        + iced::advanced::graphics::mesh::Renderer
-        + iced::advanced::text::Renderer<Font = iced::Font>
+    T: iced_core::Renderer
+        + iced_graphics::mesh::Renderer
+        + iced_core::text::Renderer<Font = iced_core::Font>
 {
 }
 
@@ -75,7 +74,7 @@ impl<T> Renderer for T where
 ///     }
 /// }
 /// ```
-pub trait PlotData<D, R = iced::Renderer, Theme = iced::Theme>
+pub trait PlotData<D, R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
     D: Float,
     R: Renderer,
@@ -92,17 +91,17 @@ enum ShapeType {
     Text,
 }
 
-pub struct TextRenderer<'a, Renderer: iced::advanced::text::Renderer<Font = iced::Font>>(
+pub struct TextRenderer<'a, Renderer: iced_core::text::Renderer<Font = iced_core::Font>>(
     &'a mut Renderer,
 );
 
-impl<Renderer: iced::advanced::text::Renderer<Font = iced::Font>> TextRenderer<'_, Renderer> {
+impl<Renderer: iced_core::text::Renderer<Font = iced_core::Font>> TextRenderer<'_, Renderer> {
     pub fn fill_text(
         &mut self,
         text: Text,
         position: Point,
         color: Color,
-        clip_bounds: iced::Rectangle,
+        clip_bounds: iced_core::Rectangle,
     ) {
         self.0.fill_text(text, position, color, clip_bounds);
     }
@@ -110,7 +109,7 @@ impl<Renderer: iced::advanced::text::Renderer<Font = iced::Font>> TextRenderer<'
 
 pub struct Context<'a, D: Float, Renderer: self::Renderer> {
     transform: &'a Transform<'a, D, f32, f32>,
-    clip_bounds: &'a iced::Rectangle,
+    clip_bounds: &'a iced_core::Rectangle,
     renderer: &'a mut Renderer,
     tessellators: &'a mut Tessellators,
     mesh_buffer: &'a mut MeshBuffer,
@@ -178,7 +177,7 @@ where
     pub fn new(
         tessellators: &'a mut Tessellators,
         renderer: &'a mut R,
-        clip_bounds: &'a iced::Rectangle,
+        clip_bounds: &'a iced_core::Rectangle,
         mesh_buffer: &'a mut MeshBuffer,
         transform: &'a Transform<'a, D, f32, f32>,
     ) -> Self {
@@ -273,9 +272,7 @@ where
 impl<'a, D, R> Drop for Plot<'a, D, R>
 where
     D: Float,
-    R: iced::advanced::Renderer
-        + iced::advanced::graphics::mesh::Renderer
-        + iced::advanced::text::Renderer<Font = iced::Font>,
+    R: self::Renderer,
 {
     fn drop(&mut self) {
         self.context

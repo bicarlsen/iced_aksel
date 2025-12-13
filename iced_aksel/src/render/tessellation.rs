@@ -1,6 +1,7 @@
-use iced::{
-    Color,
-    advanced::graphics::{color::pack, mesh::SolidVertex2D},
+use iced_core::Color;
+use iced_graphics::{
+    color::{self, pack},
+    mesh::SolidVertex2D,
 };
 use lyon_path::{LineCap, LineJoin, PathEvent, iterator::FromPolyline, traits::PathIterator};
 use lyon_tessellation::{
@@ -138,7 +139,7 @@ impl Tessellators {
 
 #[derive(Copy, Clone)]
 pub struct SolidVertexConstructor {
-    pub color: iced::advanced::graphics::color::Packed,
+    pub color: color::Packed,
 }
 
 impl StrokeVertexConstructor<SolidVertex2D> for SolidVertexConstructor {

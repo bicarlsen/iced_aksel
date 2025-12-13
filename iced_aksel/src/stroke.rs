@@ -1,6 +1,6 @@
 use crate::Measure;
 
-use iced::Color;
+use iced_core::Color;
 
 /// Defines the visual style of a stroke.
 ///

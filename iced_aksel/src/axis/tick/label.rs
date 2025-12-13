@@ -1,4 +1,4 @@
-use iced::{Padding, Pixels};
+use iced_core::{Padding, Pixels};
 
 /// Configuration for a tick label on an axis.
 ///

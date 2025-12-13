@@ -1,4 +1,4 @@
-use iced::Pixels;
+use iced_core::Pixels;
 
 /// Configuration for a single grid line on the chart.
 ///

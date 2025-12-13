@@ -33,19 +33,16 @@ use std::{
 
 use aksel::{Float, Tick};
 use derivative::Derivative;
-use iced::{
-    Pixels, Point, Rectangle, Size,
-    advanced::{
-        Layout, Text,
-        graphics::{color, mesh::SolidVertex2D},
-        layout::{Limits, Node},
-        renderer::Quad,
-        text::paragraph::Plain,
-    },
+use iced_core::{
+    Font, Layout, Pixels, Point, Rectangle, Size, Text,
     alignment::Vertical,
+    layout::{Limits, Node},
     mouse::Cursor,
+    renderer::Quad,
+    text::{LineHeight, Wrapping, paragraph::Plain},
     widget::text::{Alignment, Shaping},
 };
+use iced_graphics::{color, mesh::SolidVertex2D};
 
 mod grid;
 mod position;
@@ -61,6 +58,7 @@ pub use tick::{
 use tick::{LabelCandidate, PlacedLabelInfo, ResolvedLabelCandidate};
 
 use crate::{
+    plot,
     render::MeshBuffer,
     style::{AxisStyle, Style},
 };
@@ -486,9 +484,7 @@ impl<D: Float> Axis<D> {
         mesh_buffer: &mut MeshBuffer,
         viewport: &Rectangle,
     ) where
-        Renderer: iced::advanced::Renderer
-            + iced::advanced::graphics::mesh::Renderer
-            + iced::advanced::text::Renderer<Font = iced::Font>,
+        Renderer: plot::Renderer,
     {
         if self.invisible && self.grid_renderer.is_none() {
             return; // We don't need to render anything
@@ -597,12 +593,12 @@ impl<D: Float> Axis<D> {
                     content: label.content,
                     bounds: bounds.size(),
                     size: label.size,
-                    line_height: iced::widget::text::LineHeight::Relative(1.0),
-                    font: iced::Font::default(),
+                    line_height: LineHeight::Relative(1.0),
+                    font: Font::default(),
                     align_x,
                     align_y,
                     shaping: Shaping::Auto,
-                    wrapping: iced::widget::text::Wrapping::None,
+                    wrapping: Wrapping::None,
                 });
 
                 // Position cursor label at cursor position with padding
@@ -659,9 +655,7 @@ impl<D: Float> Axis<D> {
         label_candidates: Vec<LabelCandidate<D>>,
         viewport: &Rectangle,
     ) where
-        Renderer: iced::advanced::Renderer
-            + iced::advanced::graphics::mesh::Renderer
-            + iced::advanced::text::Renderer<Font = iced::Font>,
+        Renderer: plot::Renderer,
     {
         let mut accepted: Vec<PlacedLabelInfo<D>> = Vec::new();
 
@@ -714,7 +708,7 @@ impl<D: Float> Axis<D> {
         orientation: Orientation,
     ) -> Option<ResolvedLabelCandidate<Renderer, D>>
     where
-        Renderer: iced::advanced::text::Renderer<Font = iced::Font>,
+        Renderer: iced_core::text::Renderer<Font = iced_core::Font>,
     {
         let label = candidate.label;
         if label.content.is_empty() {
@@ -772,12 +766,12 @@ impl<D: Float> Axis<D> {
             content: label.content,
             bounds: bounds.size(),
             size: label.size,
-            line_height: iced::widget::text::LineHeight::Relative(1.0),
-            font: iced::Font::default(),
+            line_height: LineHeight::Relative(1.0),
+            font: Font::default(),
             align_x,
             align_y,
             shaping: Shaping::Auto,
-            wrapping: iced::widget::text::Wrapping::None,
+            wrapping: Wrapping::None,
         });
 
         let text_bounds = paragraph.min_bounds();

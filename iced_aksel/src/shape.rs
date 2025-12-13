@@ -82,7 +82,7 @@ pub use triangle::Triangle;
 ///     }
 /// }
 /// ```
-pub trait Shape<D, Renderer = iced::Renderer>
+pub trait Shape<D, Renderer = iced_renderer::Renderer>
 where
     D: Float,
     Renderer: plot::Renderer,

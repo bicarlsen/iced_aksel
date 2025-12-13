@@ -4,11 +4,10 @@ use crate::{
     render::{MeshBuffer, Tessellators},
     stroke::StrokeStyle,
 };
+
 use aksel::{Float, PlotPoint, Transform};
-use iced::{
-    Color,
-    advanced::graphics::{color::pack, mesh::SolidVertex2D},
-};
+use iced_core::Color;
+use iced_graphics::{color::pack, mesh::SolidVertex2D};
 use lyon::math::{Point, Vector};
 
 /// A polygon defined by an arbitrary list of vertices.

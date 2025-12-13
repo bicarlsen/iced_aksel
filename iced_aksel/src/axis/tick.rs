@@ -1,5 +1,8 @@
 use aksel::Tick;
-use iced::{Pixels, Point, advanced::text::paragraph::Plain};
+use iced_core::{
+    Pixels, Point,
+    text::{self, paragraph::Plain},
+};
 
 use crate::axis::tick::label::{Label, LabelBounds};
 
@@ -139,7 +142,7 @@ pub struct LabelCandidate<D> {
 
 pub struct ResolvedLabelCandidate<Renderer, D>
 where
-    Renderer: iced::advanced::text::Renderer,
+    Renderer: text::Renderer,
 {
     pub(crate) tick: Tick<D>,
     pub(crate) normalized_position: f32,

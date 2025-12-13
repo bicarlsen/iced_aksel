@@ -1,4 +1,4 @@
-use iced::Point;
+use iced_core::Point;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Action<AxisId> {

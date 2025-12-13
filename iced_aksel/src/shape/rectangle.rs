@@ -5,10 +5,8 @@ use crate::{
     stroke::StrokeStyle,
 };
 use aksel::{Float, PlotPoint, Transform, scale};
-use iced::{
-    Color,
-    advanced::graphics::{color::pack, mesh::SolidVertex2D},
-};
+use iced_core::Color;
+use iced_graphics::{color::pack, mesh::SolidVertex2D};
 use lyon_tessellation::math::Point;
 
 /// A rectangle shape that can be drawn on a chart.

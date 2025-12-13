@@ -76,17 +76,14 @@ use std::{fmt::Debug, hash::Hash, ops::Deref};
 
 use aksel::ScreenRect;
 use derive_more::{Display, Error};
-use iced::{
-    Color, Element, Event, Padding, Point, Rectangle, Size,
-    advanced::{
-        Layout, Widget,
-        layout::{self, Limits, Node},
-        mouse,
-        renderer::Quad,
-        widget::{Tree, tree},
-    },
-    mouse::ScrollDelta,
+use iced_core::{
+    Clipboard, Color, Element, Event, Layout, Length, Padding, Point, Rectangle, Shell, Size,
+    Widget,
+    layout::{self, Limits, Node},
+    mouse::{self, ScrollDelta},
+    renderer::{Quad, Style},
     touch,
+    widget::{Tree, tree},
 };
 
 // Re-export aksel
@@ -197,8 +194,14 @@ impl<AxisId> Default for Memory<AxisId> {
 ///     .plot_data(&data, "x_axis", "y_axis")
 ///     .on_scroll(|pos, delta| Message::Scroll(pos, delta));
 /// ```
-pub struct Chart<'a, AxisId, Domain, Message, Theme = iced::Theme, Renderer = iced::Renderer>
-where
+pub struct Chart<
+    'a,
+    AxisId,
+    Domain,
+    Message,
+    Theme = iced_core::Theme,
+    Renderer = iced_renderer::Renderer,
+> where
     AxisId: Hash + Eq + Clone + Debug,
     Domain: Float,
     Theme: Catalog,
@@ -206,8 +209,8 @@ where
 {
     state: &'a State<AxisId, Domain>,
     layers: Vec<Layer<'a, AxisId, Domain, Renderer, Theme>>,
-    width: iced::Length,
-    height: iced::Length,
+    width: Length,
+    height: Length,
     class: <Theme as Catalog>::Class<'a>,
     errors: Vec<Error<AxisId>>, // Throw these into the shell at each update
     drag_deadband: f32,
@@ -249,8 +252,8 @@ where
         Self {
             state,
             layers: vec![],
-            width: iced::Length::Fill,
-            height: iced::Length::Fill,
+            width: Length::Fill,
+            height: Length::Fill,
             class: <Theme as Catalog>::default(),
             errors: vec![],
             drag_deadband: DEFAULT_DRAG_DEADBAND,
@@ -312,7 +315,7 @@ where
     /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
     ///     .width(iced::Length::Fixed(600.0));
     /// ```
-    pub const fn width(mut self, width: iced::Length) -> Self {
+    pub const fn width(mut self, width: Length) -> Self {
         self.width = width;
         self
     }
@@ -328,7 +331,7 @@ where
     /// let chart: Chart<&str, f64, Message> = Chart::new(&state)
     ///     .height(iced::Length::Fixed(400.0));
     /// ```
-    pub const fn height(mut self, height: iced::Length) -> Self {
+    pub const fn height(mut self, height: Length) -> Self {
         self.height = height;
         self
     }
@@ -505,7 +508,7 @@ where
         memory: &mut Memory<AxisId>,
         layout: Layout,
         cursor: mouse::Cursor,
-        shell: &mut iced::advanced::Shell<'_, Message>,
+        shell: &mut Shell<'_, Message>,
     ) {
         // If we click during any other action than idle, we must return
         if Action::Idle != memory.action {
@@ -597,7 +600,7 @@ where
         memory: &mut Memory<AxisId>,
         layout: Layout,
         _cursor: mouse::Cursor,
-        shell: &mut iced::advanced::Shell<'_, Message>,
+        shell: &mut Shell<'_, Message>,
     ) {
         let Memory { action, .. } = memory;
 
@@ -645,7 +648,7 @@ where
         memory: &mut Memory<AxisId>,
         layout: Layout,
         cursor: mouse::Cursor,
-        shell: &mut iced::advanced::Shell<'_, Message>,
+        shell: &mut Shell<'_, Message>,
     ) {
         let Memory { action, .. } = memory;
         let plot_bounds = self.get_plot_layout(layout).bounds();
@@ -809,7 +812,7 @@ where
 
     fn diff(&self, _tree: &mut Tree) {}
 
-    fn size(&self) -> Size<iced::Length> {
+    fn size(&self) -> Size<Length> {
         Size::new(self.width, self.height)
     }
 
@@ -888,13 +891,13 @@ where
 
     fn update(
         &mut self,
-        tree: &mut iced::advanced::widget::Tree,
-        event: &iced::Event,
+        tree: &mut Tree,
+        event: &Event,
         layout: layout::Layout<'_>,
-        cursor: iced::advanced::mouse::Cursor,
+        cursor: mouse::Cursor,
         _renderer: &Renderer,
-        _clipboard: &mut dyn iced::advanced::Clipboard,
-        shell: &mut iced::advanced::Shell<'_, Message>,
+        _clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
         if !self.errors.is_empty()
@@ -983,13 +986,13 @@ where
 
     fn draw(
         &self,
-        _tree: &iced::advanced::widget::Tree,
+        _tree: &Tree,
         renderer: &mut Renderer,
         theme: &Theme,
-        _style: &iced::advanced::renderer::Style,
-        layout: iced::advanced::Layout<'_>,
-        cursor: iced::advanced::mouse::Cursor,
-        _viewport: &iced::Rectangle,
+        _style: &Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _viewport: &Rectangle,
     ) {
         let style = theme.style(&self.class);
         let bounds = layout.bounds();
@@ -1057,9 +1060,7 @@ where
     Domain: Float,
     Message: Clone + 'a,
     Theme: Catalog + 'a,
-    Renderer: iced::advanced::Renderer
-        + iced::advanced::graphics::mesh::Renderer
-        + iced::advanced::text::Renderer<Font = iced::Font>,
+    Renderer: plot::Renderer,
 {
     fn from(plot: Chart<'a, AxisId, Domain, Message, Theme, Renderer>) -> Self {
         Element::new(plot)

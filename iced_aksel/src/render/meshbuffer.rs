@@ -1,7 +1,5 @@
-use iced::{
-    Transformation,
-    advanced::graphics::mesh::{self, Indexed, SolidVertex2D},
-};
+use iced_core::{Rectangle, Transformation};
+use iced_graphics::mesh::{self, Indexed, SolidVertex2D};
 use lyon_tessellation::{
     FillGeometryBuilder, FillVertex, FillVertexConstructor, GeometryBuilder, GeometryBuilderError,
     StrokeGeometryBuilder, StrokeVertex, StrokeVertexConstructor, VertexId,
@@ -33,18 +31,18 @@ impl MeshBuffer {
         self.vertex_limit
     }
 
-    pub fn render_if<R>(&mut self, predicate: bool, renderer: &mut R, clip_bounds: &iced::Rectangle)
+    pub fn render_if<R>(&mut self, predicate: bool, renderer: &mut R, clip_bounds: &Rectangle)
     where
-        R: iced::advanced::graphics::mesh::Renderer,
+        R: mesh::Renderer,
     {
         if predicate {
             self.render(renderer, clip_bounds)
         }
     }
 
-    pub fn render<R>(&mut self, renderer: &mut R, clip_bounds: &iced::Rectangle)
+    pub fn render<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
     where
-        R: iced::advanced::graphics::mesh::Renderer,
+        R: mesh::Renderer,
     {
         // 1. Take the buffer out of the Option
         if let Some(buffer) = self.buffer.take() {

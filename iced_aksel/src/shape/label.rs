@@ -1,9 +1,9 @@
 use crate::{Shape, plot};
 use aksel::{Float, PlotPoint};
-use iced::{
+use iced_core::{
     Color, Font, Pixels, Point, Rectangle, Size,
-    advanced::text::{LineHeight, Shaping, Text, Wrapping},
     alignment::{Horizontal, Vertical},
+    text::{LineHeight, Shaping, Text, Wrapping},
 };
 
 /// A text label positioned at a specific point in the chart.

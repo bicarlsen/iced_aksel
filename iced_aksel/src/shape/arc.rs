@@ -3,11 +3,10 @@ use crate::{
     plot::{self},
     render::{MeshBuffer, Tessellators},
 };
+
 use aksel::{Float, PlotPoint, Transform};
-use iced::{
-    Color,
-    advanced::graphics::{color::pack, mesh::SolidVertex2D},
-};
+use iced_core::Color;
+use iced_graphics::{color::pack, mesh::SolidVertex2D};
 use lyon::math::{Angle, Point, Vector};
 use lyon::path::Path;
 

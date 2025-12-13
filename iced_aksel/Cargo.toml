@@ -18,7 +18,9 @@ lyon_tessellation.workspace = true
 lyon_path.workspace = true
 lyon.workspace = true
 
-iced = { workspace = true, features = ["advanced"] }
+iced_core = { workspace = true }
+iced_graphics = { workspace = true }
+iced_renderer = { workspace = true }
 
 [dev-dependencies]
 rand.workspace = true
