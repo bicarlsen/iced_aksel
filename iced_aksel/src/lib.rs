@@ -200,7 +200,7 @@ pub struct Chart<
     Domain,
     Message,
     Theme = iced_core::Theme,
-    Renderer = iced_renderer::Renderer,
+    Renderer = iced_renderer::wgpu::Renderer,
 > where
     AxisId: Hash + Eq + Clone + Debug,
     Domain: Float,
