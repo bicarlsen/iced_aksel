@@ -35,16 +35,12 @@ pub struct DragDelta {
 ///
 /// This trait is automatically implemented for any renderer that satisfies the requirements.
 pub trait Renderer:
-    iced_core::Renderer
-    + iced_graphics::mesh::Renderer
-    + iced_core::text::Renderer<Font = iced_core::Font>
+    iced_core::Renderer + iced_graphics::mesh::Renderer + iced_core::text::Renderer
 {
 }
 
 impl<T> Renderer for T where
-    T: iced_core::Renderer
-        + iced_graphics::mesh::Renderer
-        + iced_core::text::Renderer<Font = iced_core::Font>
+    T: iced_core::Renderer + iced_graphics::mesh::Renderer + iced_core::text::Renderer
 {
 }
 
@@ -91,19 +87,21 @@ enum ShapeType {
     Text,
 }
 
-pub struct TextRenderer<'a, Renderer: iced_core::text::Renderer<Font = iced_core::Font>>(
-    &'a mut Renderer,
-);
+pub struct TextRenderer<'a, Renderer: iced_core::text::Renderer>(&'a mut Renderer);
 
-impl<Renderer: iced_core::text::Renderer<Font = iced_core::Font>> TextRenderer<'_, Renderer> {
+impl<Renderer: iced_core::text::Renderer> TextRenderer<'_, Renderer> {
     pub fn fill_text(
         &mut self,
-        text: Text,
+        text: Text<String, Renderer::Font>,
         position: Point,
         color: Color,
         clip_bounds: iced_core::Rectangle,
     ) {
         self.0.fill_text(text, position, color, clip_bounds);
+    }
+
+    pub fn default_font(&self) -> Renderer::Font {
+        self.0.default_font()
     }
 }
 

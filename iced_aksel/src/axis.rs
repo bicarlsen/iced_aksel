@@ -34,7 +34,7 @@ use std::{
 use aksel::{Float, Tick};
 use derivative::Derivative;
 use iced_core::{
-    Font, Layout, Pixels, Point, Rectangle, Size, Text,
+    Layout, Pixels, Point, Rectangle, Size, Text,
     alignment::Vertical,
     layout::{Limits, Node},
     mouse::Cursor,
@@ -594,7 +594,7 @@ impl<D: Float> Axis<D> {
                     bounds: bounds.size(),
                     size: label.size,
                     line_height: LineHeight::Relative(1.0),
-                    font: Font::default(),
+                    font: renderer.default_font(),
                     align_x,
                     align_y,
                     shaping: Shaping::Auto,
@@ -661,7 +661,7 @@ impl<D: Float> Axis<D> {
 
         for candidate in label_candidates {
             let Some(resolved) =
-                self.resolve_label_candidate::<Renderer>(candidate, bounds, orientation)
+                self.resolve_label_candidate(renderer, candidate, bounds, orientation)
             else {
                 continue;
             };
@@ -703,12 +703,13 @@ impl<D: Float> Axis<D> {
 
     fn resolve_label_candidate<Renderer>(
         &self,
+        renderer: &Renderer,
         candidate: LabelCandidate<D>,
         bounds: &Rectangle,
         orientation: Orientation,
     ) -> Option<ResolvedLabelCandidate<Renderer, D>>
     where
-        Renderer: iced_core::text::Renderer<Font = iced_core::Font>,
+        Renderer: iced_core::text::Renderer,
     {
         let label = candidate.label;
         if label.content.is_empty() {
@@ -767,7 +768,7 @@ impl<D: Float> Axis<D> {
             bounds: bounds.size(),
             size: label.size,
             line_height: LineHeight::Relative(1.0),
-            font: Font::default(),
+            font: renderer.default_font(),
             align_x,
             align_y,
             shaping: Shaping::Auto,

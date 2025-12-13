@@ -1,7 +1,7 @@
 use crate::{Shape, plot};
 use aksel::{Float, PlotPoint};
 use iced_core::{
-    Color, Font, Pixels, Point, Rectangle, Size,
+    Color, Pixels, Point, Rectangle, Size,
     alignment::{Horizontal, Vertical},
     text::{LineHeight, Shaping, Text, Wrapping},
 };
@@ -36,7 +36,6 @@ pub struct Label<D> {
     pub vertical_alignment: Vertical,
     pub fill: Color,
     pub font_size: f32,
-    pub font: Font,
 }
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Label<D> {
@@ -58,7 +57,7 @@ impl<D: Float, R: plot::Renderer> Shape<D, R> for Label<D> {
                 bounds: Size::new(500., 500.),
                 size: Pixels(self.font_size),
                 line_height: LineHeight::default(),
-                font: self.font,
+                font: renderer.default_font(),
                 align_x: self.horizontal_alignment.into(),
                 align_y: self.vertical_alignment,
                 shaping: Shaping::Basic,
@@ -87,7 +86,6 @@ impl<D: Float> Label<D> {
             vertical_alignment: Vertical::Center,
             fill: Color::BLACK,
             font_size: 12.0,
-            font: Font::default(),
         }
     }
 
@@ -107,11 +105,12 @@ impl<D: Float> Label<D> {
         self
     }
 
-    /// Sets the font.
-    pub const fn font(mut self, font: Font) -> Self {
-        self.font = font;
-        self
-    }
+    // TODO: Re-enable this - How can we do that?
+    // /// Sets the font.
+    // pub const fn font(mut self, font: Font) -> Self {
+    //     self.font = font;
+    //     self
+    // }
 
     /// Sets the horizontal and vertical alignment relative to the `position`.
     ///
