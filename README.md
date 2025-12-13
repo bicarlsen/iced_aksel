@@ -155,9 +155,10 @@ trunk serve
 
 > [!IMPORTANT]
 >
-> Due to a [breaking change to getrandom]() you might have to enable the
-> `wasm_js` backend for getrandom when running in WASM by setting the env-var:
-> `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`
+> Due to a
+> [breaking change to getrandom](https://github.com/rust-random/getrandom/issues/671)
+> you might have to enable the `wasm_js` backend for getrandom when running in
+> WASM by setting the env-var: `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`
 >
 > This only applies to examples depending on `getrandom` (usually through
 > `rand`).
