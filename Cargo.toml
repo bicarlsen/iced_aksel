@@ -9,12 +9,14 @@ description = "A data-driven charting library for Iced"
 authors = ["Mads Ahlquist Jensen <madsaj10@outlook.com>", "Dennis Mellquist"]
 repository = "https://github.com/QuistHQ/iced_aksel"
 license = "MIT"
+readme = "README.md"
 keywords = ["iced", "chart", "canvas"]
 categories = ["gui"]
 exclude = [
 "flake.nix",
 "flake.lock",
 ".github/*",
+"examples/*"
 ]
 
 [workspace.lints.clippy]
