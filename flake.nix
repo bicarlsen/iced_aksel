@@ -25,7 +25,14 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
-        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default.override {
+          targets = [
+            "wasm32-unknown-unknown"
+            "x86_64-pc-windows-msvc"
+            "x86_64-unknown-linux-gnu"
+            "x86_64-apple-darwin"
+          ]; # Make sure we have all targets installed
+        };
       in
         with pkgs; {
           devShells.default = mkShell rec {
