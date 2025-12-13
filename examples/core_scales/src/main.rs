@@ -3,13 +3,12 @@ use iced::{
     alignment::Horizontal,
     widget::{column, container, row, text},
 };
-use iced_aksel::Stroke;
-use iced_aksel::shape::{Circle, Polyline};
 use iced_aksel::{
-    Axis, Chart, PlotPoint, State,
+    Axis, Chart, PlotPoint, State, Stroke,
     axis::{self, GridLine, TickLine},
     plot::{Plot, PlotData},
     scale::{Linear, Logarithmic},
+    shape::{Circle, Polyline},
 };
 
 // -----------------------------------------------------------------------------

@@ -6,11 +6,8 @@ use iced_aksel::{
     Axis, Chart, PlotPoint, State, Stroke, axis,
     plot::{Plot, PlotData},
     scale::Linear,
+    shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
 };
-
-// Import all available shapes
-// Removed LineSegment
-use iced_aksel::shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle};
 
 type AxisId = &'static str;
 

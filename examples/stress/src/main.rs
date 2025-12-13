@@ -9,11 +9,10 @@
 //! - **View-Aware Generation**: Shapes generate within the current pan/zoom bounds.
 //! - **Measure Modes**: Switch between Screen (px) and Plot (data) units for sizes and strokes.
 
-use std::time::Instant;
-
 use iced::{
     Alignment, Color, Element, Point, Subscription, Task, Theme,
     mouse::ScrollDelta,
+    time::Instant,
     widget::{Slider, button, checkbox, column, radio, row, text},
 };
 use iced_aksel::{

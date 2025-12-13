@@ -146,6 +146,22 @@ cargo run -p stress
 Each example is a separate crate under `examples/` so you can copy-paste code
 into your own application.
 
+All examples can also be run in the web using `trunk`:
+
+```bash
+cd examples/core_axes
+trunk serve
+```
+
+> [!IMPORTANT]
+>
+> Due to a [breaking change to getrandom]() you might have to enable the
+> `wasm_js` backend for getrandom when running in WASM by setting the env-var:
+> `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`
+>
+> This only applies to examples depending on `getrandom` (usually through
+> `rand`).
+
 ## 💻 Development
 
 - `cargo fmt` and `cargo clippy` enforce the workspace style (Clippy perf,
