@@ -1,11 +1,19 @@
 # 📊 Iced Aksel
 
+<div align="center">
+
+[![Built with Iced badge]][Iced]
+[![Crate Badge]][Crate]
+[![Docs-rs Badge]][Docs-rs]
+
+</div>
+
+
 `iced_aksel` is an experimental, "batteries not included", charting crate for
-the [Iced](https://iced.rs/) GUI toolkit, wrapping the
-[aksel](https://github.com/QuistHQ/aksel) plotting core in an ergonomic widget.
-It focuses on rendering large, interactive datasets with customizable axes,
-grids, styles, and event handlers that plug directly into your Iced application
-logic.
+the [Iced] GUI toolkit, wrapping the [Aksel] plotting core in an ergonomic
+widget. It focuses on rendering large, interactive datasets with customizable
+axes, grids, styles, and event handlers that plug directly into your Iced
+application logic.
 
 > [!WARNING]
 >
@@ -176,3 +184,13 @@ ideas, or performance traces that can help steer the roadmap.
 > A nix-devshell is also supplied in the `flake.nix` for Nix users.
 >
 > It can be started by running: `nix develop .`
+
+<!-- LINKS -->
+
+[Crate]: https://crates.io/crates/iced_aksel
+[Crate Badge]: https://img.shields.io/crates/v/iced_aksel
+[Docs-rs]: https://docs.rs/iced_aksel/latest/iced_aksel/
+[Docs-rs Badge]: https://img.shields.io/docsrs/iced_aksel
+[Built with Iced badge]: https://img.shields.io/docsrs/gladius
+[Aksel]: https://github.com/QuistHQ/aksel
+[Iced]: https://iced.rs/
