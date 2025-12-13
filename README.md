@@ -169,3 +169,9 @@ trunk serve
 
 Contributions are welcome! Feel free to open issues with bug reports, feature
 ideas, or performance traces that can help steer the roadmap.
+
+> [!NOTE]
+>
+> A nix-devshell is also supplied in the `flake.nix` for Nix users.
+>
+> It can be started by running: `nix develop .`
