@@ -6,7 +6,7 @@ use iced::{
 };
 use iced_aksel::{
     Axis, Chart, PlotPoint, State, Stroke,
-    axis::{self, TickLine},
+    axis::{self, TickLine, TickResult},
     plot::{self, Plot, PlotData},
     scale::Linear,
     shape::Polyline,
@@ -53,35 +53,60 @@ impl Interactions {
     const AXIS_Y: &'static str = "amplitude";
 
     pub fn new() -> (Self, iced::Task<Message>) {
-        // 0. Initialize chartstate
+        // 0. Initialize chart state
         let mut state = State::new();
 
         // 1. Create the scales for the axes
         let linear_x = Linear::new(0.0, 10.0);
         let linear_y = Linear::new(-10.0, 10.0);
 
-        // 2. Create the axes themselves with formatting
-        let axis_x =
-            Axis::new(linear_x, axis::Position::Bottom).with_tick_renderer(|ctx| {
-                match ctx.tick.level {
-                    0 => Some(TickLine::simple(format!("{:.1}s", ctx.tick.value))),
-                    _ => None,
-                }
-            });
+        // 2. Create the axes with the new `TickResult` paradigm
 
-        let axis_y = Axis::new(linear_y, axis::Position::Left).with_tick_renderer(|ctx| match ctx
-            .tick
-            .level
-        {
-            0 => Some(TickLine::simple(format!("{:.1}V", ctx.tick.value))),
-            _ => Some(TickLine {
-                thickness: 0.5.into(),
-                length: 2.5.into(),
-                ..Default::default()
-            }),
+        // ---------------------------------------------------------------------
+        // X AXIS: Time (Seconds)
+        // Logic: Show simple ticks and labels, but ONLY for Major ticks.
+        // ---------------------------------------------------------------------
+        let axis_x = Axis::new(linear_x, axis::Position::Bottom).with_tick_renderer(|ctx| {
+            // If it's a Major tick (Level 0), show it.
+            if ctx.tick.level == 0 {
+                return TickResult {
+                    label: Some(format!("{:.1}s", ctx.tick.value).into()),
+                    ..Default::default()
+                };
+            }
+
+            // Otherwise, hide everything (Line and Label).
+            TickResult::new()
         });
 
-        // 3. Add the axes
+        // ---------------------------------------------------------------------
+        // Y AXIS: Voltage (Volts)
+        // Logic:
+        // - Major ticks: Standard line + Text Label
+        // - Minor ticks: Small/Thin line + NO Text
+        // ---------------------------------------------------------------------
+        let axis_y = Axis::new(linear_y, axis::Position::Left).with_tick_renderer(|ctx| {
+            if ctx.tick.level == 0 {
+                // Major: Full visibility
+                return TickResult {
+                    tick_line: Some(TickLine::default()),
+                    label: Some(format!("{:.1}V", ctx.tick.value).into()),
+                    ..Default::default()
+                };
+            }
+
+            // Minor and below: Small tick line, no text
+            TickResult {
+                tick_line: Some(TickLine {
+                    thickness: 0.5.into(),
+                    length: 2.5.into(),
+                }),
+                label: None, // Explicitly no label
+                ..Default::default()
+            }
+        });
+
+        // 3. Add the axes to the state
         state.set_axis(Self::AXIS_X, axis_x);
         state.set_axis(Self::AXIS_Y, axis_y);
 
