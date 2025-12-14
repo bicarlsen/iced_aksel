@@ -10,6 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   SDL_VIDEODRIVER: "dummy"
   SDL_AUDIODRIVER: "disk"
+  RUSTFLAGS: -D missing_docs -D warnings
 
 jobs:
   build:
@@ -35,13 +36,16 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Lint
-        run: cargo fmt -- --check --color always
-
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          cargo fmt -- --check --color always
+          cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
-        run: cargo build
+        run: |
+          cargo build
+          cargo doc --workspace --no-deps
 
       - name: Run tests
-        run: cargo nextest run --hide-progress-bar --failure-output final --no-tests warn
+        run: |
+          cargo nextest run --hide-progress-bar --failure-output final --no-tests warn
+          cargo test --doc
