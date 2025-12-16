@@ -20,7 +20,7 @@ use iced_aksel::{
     axis::Position,
     plot::{self, DragDelta},
     scale::Linear,
-    shape::{Arc, Circle, Label, Line, Polygon, Polyline, Rectangle, Triangle},
+    shape::{Arc, Area, Ellipse, Label, Line, Polygon, Polyline, Rectangle, Triangle},
     stroke::StrokeStyle,
 };
 use rand::Rng;
@@ -136,7 +136,7 @@ impl PlotData<f64> for StressRectangles {
 }
 
 struct StressCircles {
-    geometry: Vec<Circle<f64>>,
+    geometry: Vec<Ellipse<f64>>,
     colors: Vec<Color>,
     show_fill: bool,
     show_stroke: bool,
@@ -214,7 +214,6 @@ impl PlotData<f64> for StressTriangles {
 struct StressLines {
     geometry: Vec<Line<f64>>,
     colors: Vec<Color>,
-    // show_fill (from global toggle) controls visibility for Lines
     show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -239,7 +238,7 @@ impl PlotData<f64> for StressLines {
                 LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
             };
 
-            line.stroke = Stroke::with_style(color, thickness, self.stroke_style);
+            line.stroke = Some(Stroke::with_style(color, thickness, self.stroke_style));
             line.arrow_start = self.arrow_start;
             line.arrow_end = self.arrow_end;
             line.extend_start = self.extend_start;
@@ -253,7 +252,6 @@ impl PlotData<f64> for StressLines {
 struct StressPolylines {
     geometry: Vec<Polyline<f64>>,
     colors: Vec<Color>,
-    // show_fill (from global toggle) controls visibility for Polylines
     show_fill: bool,
     arrow_start: bool,
     arrow_end: bool,
@@ -278,7 +276,7 @@ impl PlotData<f64> for StressPolylines {
                 LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
             };
 
-            poly.stroke = Stroke::with_style(color, thickness, self.stroke_style);
+            poly.stroke = Some(Stroke::with_style(color, thickness, self.stroke_style));
             poly.arrow_start = self.arrow_start;
             poly.arrow_end = self.arrow_end;
             poly.extend_start = self.extend_start;
@@ -328,7 +326,8 @@ impl PlotData<f64> for StressArcs {
 }
 
 struct StressPolygons {
-    geometry: Vec<Polygon<f64>>,
+    zones: Vec<Area<f64>>,       // For concave/arbitrary shapes
+    polygons: Vec<Polygon<f64>>, // For regular convex markers
     colors: Vec<Color>,
     show_fill: bool,
     show_stroke: bool,
@@ -339,26 +338,49 @@ struct StressPolygons {
 
 impl plot::PlotData<f64> for StressPolygons {
     fn draw(&self, plot: &mut Plot<f64>, _theme: &iced::Theme) {
-        for (base_poly, &color) in self.geometry.iter().zip(self.colors.iter()) {
+        // Shared helper to build stroke options
+        let stroke_opts = if self.show_stroke {
+            let thickness = match self.stroke_width_mode {
+                LengthMode::Screen => Measure::Screen(self.stroke_width),
+                LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
+            };
+            Some(Stroke::with_style(
+                Color::WHITE,
+                thickness,
+                self.stroke_style,
+            ))
+        } else {
+            None
+        };
+
+        // 1. Draw Zones
+        for (base_zone, &color) in self.zones.iter().zip(self.colors.iter()) {
+            let mut zone = base_zone.clone();
+
+            if self.show_fill {
+                zone = zone.fill(color);
+            }
+            if let Some(s) = stroke_opts {
+                zone = zone.stroke(s);
+            }
+
+            if self.show_fill || stroke_opts.is_some() {
+                plot.add_shape(zone);
+            }
+        }
+
+        // 2. Draw Polygons
+        for (base_poly, &color) in self.polygons.iter().zip(self.colors.iter()) {
             let mut poly = base_poly.clone();
 
             if self.show_fill {
                 poly = poly.fill(color);
             }
-
-            if self.show_stroke {
-                let thickness = match self.stroke_width_mode {
-                    LengthMode::Screen => Measure::Screen(self.stroke_width),
-                    LengthMode::Plot => Measure::Plot(self.stroke_width as f64),
-                };
-                poly = poly.stroke(Stroke::with_style(
-                    Color::WHITE,
-                    thickness,
-                    self.stroke_style,
-                ));
+            if let Some(s) = stroke_opts {
+                poly = poly.stroke(s);
             }
 
-            if self.show_fill || self.show_stroke {
+            if self.show_fill || stroke_opts.is_some() {
                 plot.add_shape(poly);
             }
         }
@@ -504,7 +526,8 @@ impl StressTestApp {
                 stroke_style: StrokeStyle::Solid,
             },
             polygons_layer: StressPolygons {
-                geometry: Vec::new(),
+                zones: Vec::new(),
+                polygons: Vec::new(),
                 colors: Vec::new(),
                 show_fill: true,
                 show_stroke: false,
@@ -544,9 +567,6 @@ impl StressTestApp {
             fps: 0.0,
             frame_times: Vec::with_capacity(60),
         };
-
-        // Don't generate anything at start (counts are 0)
-        // app.generate_all();
 
         (app, Task::none())
     }
@@ -608,7 +628,7 @@ impl StressTestApp {
 
             self.rectangles_layer
                 .geometry
-                .push(Rectangle::new(center, width, height));
+                .push(Rectangle::centered(center, width, height));
             self.rectangles_layer
                 .colors
                 .push(random_color(&mut rng, self.opacity));
@@ -638,7 +658,7 @@ impl StressTestApp {
 
             self.circles_layer
                 .geometry
-                .push(Circle::new(PlotPoint::new(x, y), radius));
+                .push(Ellipse::new(PlotPoint::new(x, y), radius, radius));
             self.circles_layer
                 .colors
                 .push(random_color(&mut rng, self.opacity));
@@ -666,9 +686,11 @@ impl StressTestApp {
                 LengthMode::Plot => Measure::Plot(r_val),
             };
 
-            self.triangles_layer
-                .geometry
-                .push(Triangle::equilateral(PlotPoint::new(x, y), radius));
+            self.triangles_layer.geometry.push(Triangle::centered(
+                PlotPoint::new(x, y),
+                radius,
+                radius,
+            ));
             self.triangles_layer
                 .colors
                 .push(random_color(&mut rng, self.opacity));
@@ -694,11 +716,10 @@ impl StressTestApp {
             let x2 = angle.cos().mul_add(len, x1);
             let y2 = angle.sin().mul_add(len, y1);
 
-            self.lines_layer.geometry.push(Line::new(
-                PlotPoint::new(x1, y1),
-                PlotPoint::new(x2, y2),
-                Stroke::new(Color::BLACK, Measure::Screen(1.0)),
-            ));
+            self.lines_layer.geometry.push(
+                Line::new(PlotPoint::new(x1, y1), PlotPoint::new(x2, y2))
+                    .stroke(Stroke::new(Color::BLACK, Measure::Screen(1.0))),
+            );
             self.lines_layer
                 .colors
                 .push(random_color(&mut rng, self.opacity));
@@ -733,10 +754,9 @@ impl StressTestApp {
                 prev_y = next_y;
             }
 
-            self.polylines_layer.geometry.push(Polyline::new(
-                points,
-                Stroke::new(Color::BLACK, Measure::Screen(1.0)),
-            ));
+            self.polylines_layer.geometry.push(
+                Polyline::new(points).stroke(Stroke::new(Color::BLACK, Measure::Screen(1.0))),
+            );
             self.polylines_layer
                 .colors
                 .push(random_color(&mut rng, self.opacity));
@@ -788,36 +808,58 @@ impl StressTestApp {
         let ((x_min, x_max), (y_min, y_max)) = self.get_view_bounds();
         let mut rng = rand::rng();
 
-        self.polygons_layer.geometry.clear();
+        self.polygons_layer.zones.clear();
+        self.polygons_layer.polygons.clear();
         self.polygons_layer.colors.clear();
-        self.polygons_layer.geometry.reserve(self.polygon_count);
+
+        // Check whether we are in concave (Zone) mode or convex (Polygon) mode
+        if self.polygon_concave {
+            self.polygons_layer.zones.reserve(self.polygon_count);
+        } else {
+            self.polygons_layer.polygons.reserve(self.polygon_count);
+        }
         self.polygons_layer.colors.reserve(self.polygon_count);
 
         for _ in 0..self.polygon_count {
             let cx = rng.random_range(x_min..x_max);
             let cy = rng.random_range(y_min..y_max);
-            let radius_base = rng.random_range(
+            let radius_val = rng.random_range(
                 (self.min_size / 2.0)..(self.max_size / 2.0).max(self.min_size / 2.0 + 0.1),
             ) as f64;
 
-            let mut points = Vec::with_capacity(self.polygon_vertices);
-            let step = std::f64::consts::TAU / self.polygon_vertices as f64;
+            if self.polygon_concave {
+                // Zone path (Concave Star)
+                let mut points = Vec::with_capacity(self.polygon_vertices);
+                let step = std::f64::consts::TAU / self.polygon_vertices as f64;
 
-            for i in 0..self.polygon_vertices {
-                let theta = i as f64 * step;
+                for i in 0..self.polygon_vertices {
+                    let theta = i as f64 * step;
+                    let r = if i % 2 != 0 {
+                        radius_val * 0.5
+                    } else {
+                        radius_val
+                    };
 
-                let r = if self.polygon_concave && i % 2 != 0 {
-                    radius_base * 0.5
-                } else {
-                    radius_base
+                    let px = theta.cos().mul_add(r, cx);
+                    let py = theta.sin().mul_add(r, cy);
+                    points.push(PlotPoint::new(px, py));
+                }
+
+                self.polygons_layer.zones.push(Area::new(points));
+            } else {
+                // Polygon path (Regular Marker)
+                let radius = match self.size_mode {
+                    LengthMode::Screen => Measure::Screen(radius_val as f32),
+                    LengthMode::Plot => Measure::Plot(radius_val),
                 };
 
-                let px = theta.cos().mul_add(r, cx);
-                let py = theta.sin().mul_add(r, cy);
-                points.push(PlotPoint::new(px, py));
+                let poly =
+                    Polygon::new(PlotPoint::new(cx, cy), radius, self.polygon_vertices as u16)
+                        .rotation(rng.random_range(0.0..360.0));
+
+                self.polygons_layer.polygons.push(poly);
             }
 
-            self.polygons_layer.geometry.push(Polygon::new(points));
             self.polygons_layer
                 .colors
                 .push(random_color(&mut rng, self.opacity));
@@ -1070,6 +1112,7 @@ impl StressTestApp {
 
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.state)
+            .debug(true)
             .plot_data(&self.rectangles_layer, AXIS_ID_X, AXIS_ID_Y)
             .plot_data(&self.circles_layer, AXIS_ID_X, AXIS_ID_Y)
             .plot_data(&self.triangles_layer, AXIS_ID_X, AXIS_ID_Y)

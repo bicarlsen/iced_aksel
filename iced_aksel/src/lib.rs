@@ -72,7 +72,7 @@
 //! - **[`PlotData`]**: Trait for drawable data types
 //! - **[`Shape`](crate::shape)**: Primitives for rendering (lines, circles, rectangles, etc.)
 
-use std::{fmt::Debug, hash::Hash, ops::Deref};
+use std::{cell::RefCell, fmt::Debug, hash::Hash, ops::Deref};
 
 use aksel::ScreenRect;
 use derive_more::{Display, Error};
@@ -82,6 +82,7 @@ use iced_core::{
     layout::{self, Limits, Node},
     mouse::{self, ScrollDelta},
     renderer::{Quad, Style},
+    text::{LineHeight, Shaping, Wrapping},
     touch,
     widget::{Tree, tree},
 };
@@ -157,6 +158,8 @@ type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -
 struct Memory<AxisId> {
     action: Action<AxisId>,
     previous_click: Option<mouse::Click>,
+    // Add the persistent tessellators here
+    tessellators: RefCell<render::Tessellators>,
 }
 
 impl<AxisId> Default for Memory<AxisId> {
@@ -164,6 +167,8 @@ impl<AxisId> Default for Memory<AxisId> {
         Self {
             action: Action::default(),
             previous_click: None,
+            // Initialize them once. Lyon will reuse the internal Vec capacities.
+            tessellators: RefCell::new(render::Tessellators::default()),
         }
     }
 }
@@ -228,6 +233,8 @@ pub struct Chart<
     on_axis_drag: Option<AxisDragHandler<AxisId, Message>>,
     on_axis_hover: Option<AxisHoverHandler<AxisId, Message>>,
     on_axis_scroll: Option<AxisScrollHandler<AxisId, Message>>,
+
+    debug: bool,
 }
 
 impl<'a, AxisId, Domain, Message, Theme, Renderer>
@@ -269,7 +276,15 @@ where
             on_axis_drag: None,
             on_axis_hover: None,
             on_axis_scroll: None,
+
+            debug: false,
         }
+    }
+
+    /// Enables the debug overlay, showing vertex and index counts.
+    pub fn debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
+        self
     }
 
     /// Adds a data layer to the chart using the specified axes.
@@ -981,7 +996,7 @@ where
 
     fn draw(
         &self,
-        _tree: &Tree,
+        tree: &Tree,
         renderer: &mut Renderer,
         theme: &Theme,
         _style: &Style,
@@ -1002,8 +1017,13 @@ where
             Color::TRANSPARENT,
         );
 
+        // 1. Retrieve the Memory from the Tree directly
+        let memory = tree.state.downcast_ref::<Memory<AxisId>>();
+
+        // 2. Lock the tessellators for the duration of this draw call
+        let mut tessellators = memory.tessellators.borrow_mut();
+
         // Init mesh-rendering dependencies
-        let mut tessellators = render::Tessellators::default();
         let mut mesh_buffer = render::MeshBuffer::new(100_000);
         let screen_rect = ScreenRect {
             x: plot_bounds.x,
@@ -1035,14 +1055,53 @@ where
             let x_axis = self.state.axis(&layer.horizontal_axis_id);
             let y_axis = self.state.axis(&layer.vertical_axis_id);
             let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
+
+            // Pass the dereferenced mut borrow of tessellators
             let mut plot: Plot<Domain, Renderer> = Plot::new(
-                &mut tessellators,
+                &mut *tessellators,
                 renderer,
                 &plot_bounds,
                 &mut mesh_buffer,
                 &transform,
             );
             layer.items.draw(&mut plot, theme);
+        }
+
+        // --- NEW DEBUG OVERLAY CODE ---
+        if self.debug {
+            renderer.start_layer(bounds);
+            // Get total counts from the buffer (includes all flushed layers)
+            let v_count = mesh_buffer.total_vertices();
+            let i_count = mesh_buffer.total_indices();
+
+            // Color Coding: Green (Good), Yellow (Heavy), Red (Critical)
+            let color = if v_count < 50_000 {
+                Color::from_rgb(0.0, 0.7, 0.0) // Dark Green
+            } else if v_count < 200_000 {
+                Color::from_rgb(0.9, 0.7, 0.0) // Orange/Yellow
+            } else {
+                Color::from_rgb(0.9, 0.0, 0.0) // Red
+            };
+
+            let text = format!("Vertices: {} | Indices: {}", v_count, i_count);
+
+            let position = [bounds.x + 10.0, bounds.y + 10.0];
+
+            let text = iced_core::Text {
+                content: text,
+                bounds: Size::new(500., 500.),
+                size: 32.into(),
+                line_height: LineHeight::default(),
+                font: renderer.default_font(),
+                align_x: iced_core::text::Alignment::Left,
+                align_y: iced_core::alignment::Vertical::Top,
+                shaping: Shaping::Basic,
+                wrapping: Wrapping::None,
+            };
+
+            // Draw Text
+            renderer.fill_text(text, position.into(), color, bounds);
+            renderer.end_layer();
         }
     }
 }
