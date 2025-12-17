@@ -4,6 +4,30 @@
 
 use iced_core::{Point, Vector};
 
+/// Represents an Axis-Aligned Bounding Box (AABB) defined by min/max coordinates.
+///
+/// This is preferred over `Rectangle` for intersection math because it explicitly
+/// stores the boundaries, avoiding repeated `x + width` calculations.
+#[derive(Debug, Clone, Copy)]
+pub struct Bounds {
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+}
+
+impl Bounds {
+    /// Creates new bounds from an iced Rectangle, optionally expanding it by a margin.
+    pub fn new(rect: iced_core::Rectangle, margin: f32) -> Self {
+        Self {
+            min_x: rect.x - margin,
+            min_y: rect.y - margin,
+            max_x: rect.x + rect.width + margin,
+            max_y: rect.y + rect.height + margin,
+        }
+    }
+}
+
 /// Normalizes a 2D vector (makes its length 1.0).
 ///
 /// If the vector length is near zero, returns a zero vector.
@@ -154,56 +178,6 @@ pub fn compute_inset_polygon(points: &[Point], distance: f32) -> Vec<Point> {
     new_points
 }
 
-/// Clipping Algorithm: Liang-Barsky.
-///
-/// Calculates the intersection of a line segment `p1`->`p2` with a rectangle `rect`.
-/// Returns `Some((t0, t1))` where `t` are scalar values along the line segment (0.0 to 1.0).
-pub fn clip_line_liang_barsky(
-    p1: Point,
-    p2: Point,
-    rect: (f32, f32, f32, f32), // x_min, y_min, x_max, y_max
-) -> Option<(f32, f32)> {
-    let (x_min, y_min, x_max, y_max) = rect;
-    let dx = p2.x - p1.x;
-    let dy = p2.y - p1.y;
-
-    // p array: directional components
-    // q array: distance to boundaries
-    let p = [-dx, dx, -dy, dy];
-    let q = [p1.x - x_min, x_max - p1.x, p1.y - y_min, y_max - p1.y];
-
-    let mut t0 = 0.0;
-    let mut t1 = 1.0;
-
-    for i in 0..4 {
-        if p[i] == 0.0 {
-            // Parallel line outside?
-            if q[i] < 0.0 {
-                return None;
-            }
-        } else {
-            let t = q[i] / p[i];
-            if p[i] < 0.0 {
-                if t > t1 {
-                    return None;
-                }
-                if t > t0 {
-                    t0 = t;
-                }
-            } else {
-                if t < t0 {
-                    return None;
-                }
-                if t < t1 {
-                    t1 = t;
-                }
-            }
-        }
-    }
-
-    if t0 <= t1 { Some((t0, t1)) } else { None }
-}
-
 /// Calculates the Cubic Bézier control points for a Catmull-Rom spline segment.
 ///
 /// Given four points (p0, p1, p2, p3), this calculates the curve segment between p1 and p2.
@@ -231,4 +205,129 @@ pub fn catmull_rom_to_bezier(
     let c2 = p2 - tangent2 * (1.0 / 3.0);
 
     (c1, c2)
+}
+
+/// Calculates the intersection of an **Infinite Line** with a bounding box.
+///
+/// Returns `Some((entry_point, exit_point))` if the line is visible.
+pub fn clip_infinite_line(
+    line_start: Point,
+    line_end: Point,
+    bounds: Bounds,
+) -> Option<(Point, Point)> {
+    let delta_x = line_end.x - line_start.x;
+    let delta_y = line_end.y - line_start.y;
+
+    // Check for vertical lines
+    if delta_x.abs() < 1e-6 {
+        if line_start.x < bounds.min_x || line_start.x > bounds.max_x {
+            return None;
+        }
+        return Some((
+            Point::new(line_start.x, bounds.min_y),
+            Point::new(line_start.x, bounds.max_y),
+        ));
+    }
+    // Check for horizontal lines
+    if delta_y.abs() < 1e-6 {
+        if line_start.y < bounds.min_y || line_start.y > bounds.max_y {
+            return None;
+        }
+        return Some((
+            Point::new(bounds.min_x, line_start.y),
+            Point::new(bounds.max_x, line_start.y),
+        ));
+    }
+
+    // Calculate intersection parameter 't' for all 4 boundaries
+    let t_at_min_x = (bounds.min_x - line_start.x) / delta_x;
+    let t_at_max_x = (bounds.max_x - line_start.x) / delta_x;
+    let t_at_min_y = (bounds.min_y - line_start.y) / delta_y;
+    let t_at_max_y = (bounds.max_y - line_start.y) / delta_y;
+
+    // Find the range of 't' that is inside the X boundaries
+    let (t_enter_x, t_exit_x) = if delta_x > 0.0 {
+        (t_at_min_x, t_at_max_x)
+    } else {
+        (t_at_max_x, t_at_min_x)
+    };
+
+    // Find the range of 't' that is inside the Y boundaries
+    let (t_enter_y, t_exit_y) = if delta_y > 0.0 {
+        (t_at_min_y, t_at_max_y)
+    } else {
+        (t_at_max_y, t_at_min_y)
+    };
+
+    let t_entry = t_enter_x.max(t_enter_y);
+    let t_exit = t_exit_x.min(t_exit_y);
+
+    if t_entry > t_exit {
+        return None;
+    }
+
+    Some((
+        Point::new(
+            line_start.x + delta_x * t_entry,
+            line_start.y + delta_y * t_entry,
+        ),
+        Point::new(
+            line_start.x + delta_x * t_exit,
+            line_start.y + delta_y * t_exit,
+        ),
+    ))
+}
+
+/// Standard Liang-Barsky clipping for a finite line segment.
+pub fn clip_segment(start: Point, end: Point, bounds: Bounds) -> Option<(Point, Point)> {
+    let delta_x = end.x - start.x;
+    let delta_y = end.y - start.y;
+
+    let p_components = [-delta_x, delta_x, -delta_y, delta_y];
+    let q_distances = [
+        start.x - bounds.min_x,
+        bounds.max_x - start.x,
+        start.y - bounds.min_y,
+        bounds.max_y - start.y,
+    ];
+
+    let mut t_enter = 0.0;
+    let mut t_exit = 1.0;
+
+    for i in 0..4 {
+        let p = p_components[i];
+        let q = q_distances[i];
+
+        if p == 0.0 {
+            if q < 0.0 {
+                return None;
+            }
+        } else {
+            let t = q / p;
+            if p < 0.0 {
+                if t > t_exit {
+                    return None;
+                }
+                if t > t_enter {
+                    t_enter = t;
+                }
+            } else {
+                if t < t_enter {
+                    return None;
+                }
+                if t < t_exit {
+                    t_exit = t;
+                }
+            }
+        }
+    }
+
+    if t_enter > t_exit {
+        return None;
+    }
+
+    Some((
+        Point::new(start.x + delta_x * t_enter, start.y + delta_y * t_enter),
+        Point::new(start.x + delta_x * t_exit, start.y + delta_y * t_exit),
+    ))
 }
