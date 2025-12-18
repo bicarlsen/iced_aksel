@@ -217,7 +217,7 @@ pub struct Chart<
     width: Length,
     height: Length,
     class: <Theme as Catalog>::Class<'a>,
-    errors: Vec<Error<AxisId>>, // Throw these into the shell at each update
+    errors: Vec<Error<AxisId>>,
     drag_deadband: f32,
     padding: Padding,
 
@@ -282,7 +282,7 @@ where
     }
 
     /// Enables the debug overlay, showing vertex and index counts.
-    pub fn debug(mut self, debug: bool) -> Self {
+    pub const fn debug(mut self, debug: bool) -> Self {
         self.debug = debug;
         self
     }
@@ -1058,7 +1058,7 @@ where
 
             // Pass the dereferenced mut borrow of tessellators
             let mut plot: Plot<Domain, Renderer> = Plot::new(
-                &mut *tessellators,
+                &mut tessellators,
                 renderer,
                 &plot_bounds,
                 &mut mesh_buffer,

@@ -1,3 +1,4 @@
+//!
 //! Chart Stress Test
 //!
 //! A stress-testing example for the chart widget with:
@@ -1163,7 +1164,7 @@ impl StressTestApp {
             slider_row(
                 "Circles",
                 self.circle_count as f32,
-                15000.0,
+                150000.0,
                 Message::CircleCountChanged
             ),
             slider_row(
