@@ -1,5 +1,5 @@
 [package]
-name = "spectrum"
+name = "showcase_spectrum"
 version.workspace = true
 edition.workspace = true
 publish = false
