@@ -60,11 +60,8 @@ iced_aksel = { version = "0.1" }
 
 ```rust
 use iced::{Element, Theme};
-use iced_aksel::{
-    axis, scale::Linear,
-    Axis, Chart, Measure, Plot, PlotData, PlotPoint, State,
-    shape::Circle,
-};
+use iced_aksel::shape::Ellipse;
+use iced_aksel::{Axis, Chart, Measure, Plot, PlotData, PlotPoint, State, axis, scale::Linear};
 
 const X_ID: &'static str = "x_id";
 const Y_ID: &'static str = "y_id";
@@ -80,10 +77,19 @@ enum Message {}
 impl App {
     fn new() -> Self {
         let mut chart = State::new();
-        chart.set_axis(X_ID, Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
-        chart.set_axis(Y_ID, Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+        chart.set_axis(
+            X_ID,
+            Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom),
+        );
+        chart.set_axis(
+            Y_ID,
+            Axis::new(Linear::new(0.0, 100.0), axis::Position::Left),
+        );
 
-        Self { chart, scatter: Scatter::demo() }
+        Self {
+            chart,
+            scatter: Scatter::demo(),
+        }
     }
 
     fn view(&self) -> Element<Message> {
@@ -113,12 +119,13 @@ impl PlotData<f64> for Scatter {
     fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {
         for point in &self.points {
             plot.add_shape(
-                Circle::new(*point, Measure::Screen(5.0))
+                Ellipse::new(*point, Measure::Screen(5.0), Measure::Screen(5.0))
                     .fill(theme.palette().primary),
             );
         }
     }
 }
+
 ```
 
 ### Core Concepts
