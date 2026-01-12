@@ -1,5 +1,5 @@
 mod buffer;
-mod tessellation;
+pub(crate) mod tessellation;
 mod text;
 
 pub use buffer::MeshBuffer;
