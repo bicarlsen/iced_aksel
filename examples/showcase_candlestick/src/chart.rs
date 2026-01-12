@@ -15,7 +15,7 @@ use crate::{
     items::{BbandsItems, Candle, CandleItems, SmaItems, VolumeItems},
 };
 
-/// Generates a set of pseudo-random candlestick data.
+/// Generates a set of pseudo-random showcase_candlestick data.
 fn generate_candlestick_data() -> BTreeMap<i64, Candle> {
     let mut data = BTreeMap::new();
     let mut previous_close = rand::random::<f64>().mul_add(20.0, 100.0);
@@ -101,7 +101,7 @@ pub enum Message {
     OnAxisDoubleClick(AxisId),
 }
 
-/// Manages the state and rendering of the candlestick and volume charts.
+/// Manages the state and rendering of the showcase_candlestick and volume charts.
 pub struct CandlestickChart {
     /// Configuration for chart behavior.
     pub settings: ChartSettings,

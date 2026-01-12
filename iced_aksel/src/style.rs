@@ -11,10 +11,22 @@ pub struct Style {
 /// Style of dashed lines
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DashStyle {
+    /// Length of the dashes
+    pub line_length: f32,
     /// Length of the gap between dashes
     pub gap_length: f32,
-    /// Length of the dashes
-    pub dash_length: f32,
+}
+
+impl DashStyle {
+    /// Creates a new `DashStyle` from line_length and gap_length.
+    ///
+    /// This will draw a line in a pattern of line->gap->line->gap etc. based on inputs here.
+    pub fn new(line_length: f32, gap_length: f32) -> Self {
+        Self {
+            line_length,
+            gap_length,
+        }
+    }
 }
 
 /// Style of lines.

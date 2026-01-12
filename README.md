@@ -139,16 +139,13 @@ interactions, dashboards, and stress tests. From the repository root:
 ```bash
 # Core functionality examples
 cargo run -p core_axes
-cargo run -p core_interactions
 cargo run -p core_scales
-cargo run -p core_shapes
 cargo run -p core_template
 
 # Fancy Examples
-cargo run -p candlestick
-cargo run -p dashboard
-cargo run -p spectrum
-cargo run -p stress
+cargo run -p showcase_candlestick
+cargo run -p showcase_dashboard
+cargo run -p showcase_spectrum
 ```
 
 Each example is a separate crate under `examples/` so you can copy-paste code
@@ -188,9 +185,15 @@ ideas, or performance traces that can help steer the roadmap.
 <!-- LINKS -->
 
 [Crate]: https://crates.io/crates/iced_aksel
+
 [Crate Badge]: https://img.shields.io/crates/v/iced_aksel
+
 [Docs-rs]: https://docs.rs/iced_aksel/latest/iced_aksel/
+
 [Docs-rs Badge]: https://img.shields.io/docsrs/iced_aksel
+
 [Built with Iced badge]: https://img.shields.io/badge/Built%20With%20Iced-3645FF?logo=iced&logoColor=fff
+
 [Aksel]: https://github.com/QuistHQ/aksel
+
 [Iced]: https://iced.rs/

@@ -1,179 +1,200 @@
 use iced::{
-    Color, Element, Length, Theme,
-    widget::{column, container},
+    Element, Length, Theme, keyboard, mouse,
+    widget::{column, container, text},
 };
 use iced_aksel::{
-    Axis, Chart, Measure, PlotPoint, State,
-    axis::{self},
-    plot::{Plot, PlotData},
+    Axis, Chart, Measure, PlotPoint, State, Stroke,
+    axis::{self, TickResult},
+    plot::{self, Plot, PlotData},
     scale::Linear,
-    shape::Rectangle,
+    shape::{Ellipse, Polyline},
 };
-use rand::Rng;
 
 // -----------------------------------------------------------------------------
-// Application Entry
+// 1. Application Entry
 // -----------------------------------------------------------------------------
-
 pub fn main() -> iced::Result {
     iced::application(
-        SimpleExample::new,
-        SimpleExample::update,
-        SimpleExample::view,
+        ChartPlayground::new,
+        ChartPlayground::update,
+        ChartPlayground::view,
     )
+    .title("Aksel Playground")
     .theme(Theme::Dark)
     .antialiasing(true)
     .run()
 }
 
 // -----------------------------------------------------------------------------
-// Application State
+// 2. Application State
 // -----------------------------------------------------------------------------
-
-struct SimpleExample {
+struct ChartPlayground {
     chart_state: State<&'static str, f64>,
-    stars: StarField,
+    data: MyData, // <--- Your custom data struct
+
+    // Interaction state
+    cursor: Option<PlotPoint<f64>>,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
-    Scrolled(iced::Point, iced::mouse::ScrollDelta),
+    Scrolled(iced::Point, mouse::ScrollDelta),
+    Dragged(plot::DragDelta),
+    Hovered(iced::Point),
+    Unhovered,
 }
 
-impl SimpleExample {
-    const X_ID: &'static str = "x";
-    const Y_ID: &'static str = "y";
-
-    const WORLD_SIZE: f64 = 100.0;
-    // Maximum allowable span (World Diameter: -100 to 100 = 200)
-    const MAX_SPAN: f64 = 200.0;
+impl ChartPlayground {
+    const X: &'static str = "x";
+    const Y: &'static str = "y";
 
     fn new() -> (Self, iced::Task<Message>) {
-        let mut chart_state = State::new();
+        let mut state = State::new();
 
-        // 1. Setup Axes (Invisible)
-        chart_state.set_axis(
-            Self::X_ID,
-            Axis::new(
-                Linear::new(-Self::WORLD_SIZE, Self::WORLD_SIZE),
-                axis::Position::Bottom,
-            )
-            .invisible(),
-        );
+        // -- Setup Axes --
+        // Customizable: Change Linear to Logarithmic or adjust ranges here.
+        let x_scale = Linear::new(0.0, 10.0);
+        let y_scale = Linear::new(-1.5, 1.5);
 
-        chart_state.set_axis(
-            Self::Y_ID,
-            Axis::new(
-                Linear::new(-Self::WORLD_SIZE, Self::WORLD_SIZE),
-                axis::Position::Left,
-            )
-            .invisible(),
-        );
+        let x_axis = Axis::new(x_scale, axis::Position::Bottom).skip_overlapping_labels(6.);
+        let y_axis = Axis::new(y_scale, axis::Position::Left)
+            // Example: Custom Tick Renderer
+            .with_tick_renderer(|ctx| {
+                if ctx.tick.level == 0 {
+                    // Major ticks only
+                    TickResult {
+                        label: Some(ctx.label(format!("{:.1}", ctx.tick.value))),
+                        tick_line: Some(ctx.tickline()),
+                        ..Default::default()
+                    }
+                } else {
+                    TickResult::default()
+                }
+            });
 
-        // 2. Generate Data (Static)
-        let stars = StarField::generate(1000, Self::WORLD_SIZE);
+        state.set_axis(Self::X, x_axis);
+        state.set_axis(Self::Y, y_axis);
 
-        (Self { chart_state, stars }, iced::Task::none())
+        (
+            Self {
+                chart_state: state,
+                data: MyData::generate(),
+                cursor: None,
+            },
+            iced::Task::none(),
+        )
     }
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
+            // Standard Zoom Logic (Scroll)
             Message::Scrolled(cursor_norm, delta) => {
-                let delta_y = match delta {
-                    iced::mouse::ScrollDelta::Lines { y, .. }
-                    | iced::mouse::ScrollDelta::Pixels { y, .. } => y,
+                let y_delta = match delta {
+                    mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => y,
                 };
+                let factor = if y_delta > 0.0 { 1.1 } else { 0.9 };
 
-                // Simple Zoom Logic
-                let factor = if delta_y > 0.0 { 1.10 } else { 0.90 };
-
-                // Get current zoom level
-                let current_span = self
-                    .chart_state
-                    .axis_opt(&Self::X_ID)
-                    .map(|ax| {
-                        let (min, max) = ax.domain();
-                        max - min
-                    })
-                    .unwrap_or(0.0);
-
-                // Check if the NEXT zoom level would exceed the world size
-                let next_span = current_span / factor;
-                let should_clamp = factor < 1.0 && next_span >= Self::MAX_SPAN;
-
-                if should_clamp {
-                    // Snap to exact world bounds
-                    if let Some(axis) = self.chart_state.axis_mut_opt(&Self::X_ID) {
-                        axis.set_domain(-Self::WORLD_SIZE, Self::WORLD_SIZE);
-                    }
-                    if let Some(axis) = self.chart_state.axis_mut_opt(&Self::Y_ID) {
-                        axis.set_domain(-Self::WORLD_SIZE, Self::WORLD_SIZE);
-                    }
-                } else {
-                    // Standard Zoom
-                    if let Some(axis) = self.chart_state.axis_mut_opt(&Self::X_ID) {
-                        axis.zoom(factor as f32, Some(cursor_norm.x));
-                    }
-                    if let Some(axis) = self.chart_state.axis_mut_opt(&Self::Y_ID) {
-                        axis.zoom(factor as f32, Some(cursor_norm.y));
+                // Zoom both axes based on cursor position
+                if let Some(axis) = self.chart_state.axis_mut_opt(&Self::X) {
+                    axis.zoom(factor, Some(cursor_norm.x));
+                }
+                if let Some(axis) = self.chart_state.axis_mut_opt(&Self::Y) {
+                    axis.zoom(factor, Some(cursor_norm.y));
+                }
+            }
+            // Standard Pan Logic (Drag)
+            Message::Dragged(delta) => {
+                self.chart_state
+                    .pan_axes(Self::X, Self::Y, delta.x, delta.y);
+            }
+            // Hover Logic
+            Message::Hovered(cursor_norm) => {
+                // Convert screen coordinates (0.0-1.0) back to data coordinates
+                if let (Some(x_ax), Some(y_ax)) = (
+                    self.chart_state.axis_opt(&Self::X),
+                    self.chart_state.axis_opt(&Self::Y),
+                ) {
+                    if let (Some(x), Some(y)) = (
+                        x_ax.denormalize_opt(cursor_norm.x),
+                        y_ax.denormalize_opt(1.0 - cursor_norm.y), // Invert Y
+                    ) {
+                        self.cursor = Some(PlotPoint::new(x, y));
                     }
                 }
             }
+            Message::Unhovered => self.cursor = None,
         }
         iced::Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
+        // Simple header showing cursor position
+        let header = text(
+            self.cursor
+                .map(|p| format!("X: {:.2}, Y: {:.2}", p.x, p.y))
+                .unwrap_or_else(|| "Hover chart to inspect".to_string()),
+        );
+
         let chart = Chart::new(&self.chart_state)
-            .plot_data(&self.stars, Self::X_ID, Self::Y_ID)
-            .on_scroll(Message::Scrolled);
+            .plot_data(&self.data, Self::X, Self::Y)
+            .on_scroll(Message::Scrolled)
+            .on_drag(Message::Dragged)
+            .on_hover(Message::Hovered)
+            .on_error(|_| Message::Unhovered);
 
-        column![container(chart).width(Length::Fill).height(Length::Fill)].into()
+        column![
+            container(header).padding(10),
+            container(chart)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(style_chart_container)
+        ]
+        .padding(20)
+        .into()
     }
 }
 
 // -----------------------------------------------------------------------------
-// Data Model
+// 3. Data & Drawing Logic
 // -----------------------------------------------------------------------------
-
-struct Star {
-    position: PlotPoint,
-    color: Color,
+struct MyData {
+    points: Vec<PlotPoint<f64>>,
 }
 
-struct StarField {
-    objects: Vec<Star>,
-}
-
-impl StarField {
-    fn generate(count: usize, range: f64) -> Self {
-        let mut rng = rand::rng();
-        let mut objects = Vec::with_capacity(count);
-
-        for _ in 0..count {
-            objects.push(Star {
-                position: PlotPoint {
-                    x: rng.random_range(-range..range),
-                    y: rng.random_range(-range..range),
-                },
-                color: Color {
-                    a: rng.random_range(0.2..0.8),
-                    ..Color::WHITE
-                },
-            });
-        }
-
-        Self { objects }
+impl MyData {
+    fn generate() -> Self {
+        let points = (0..100)
+            .map(|i| {
+                let x = i as f64 / 10.0;
+                let y = x.sin();
+                PlotPoint::new(x, y)
+            })
+            .collect();
+        Self { points }
     }
 }
 
-impl PlotData<f64> for StarField {
-    fn draw(&self, plot: &mut Plot<f64>, _theme: &Theme) {
-        // Very small fixed size (1 screen pixel)
-        let size = Measure::Screen(1.0);
+// This is where the magic happens.
+// Use the `plot` argument to add shapes (Lines, Rectangles, Splines, etc.)
+impl PlotData<f64> for MyData {
+    fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {
+        // 1. Draw the line
+        plot.add_shape(
+            Polyline::new(self.points.clone())
+                .stroke(Stroke::new(theme.palette().primary, Measure::Screen(2.0))),
+        );
 
-        for obj in &self.objects {
-            plot.add_shape(Rectangle::centered(obj.position, size, size).fill(obj.color));
+        // 2. Draw markers on points > 0.5
+        for point in self.points.iter().filter(|p| p.y > 0.5) {
+            plot.add_shape(
+                Ellipse::circle(*point, Measure::Screen(3.0)).fill(theme.palette().danger),
+            );
         }
     }
+}
+
+fn style_chart_container(theme: &Theme) -> container::Style {
+    container::Style::default()
+        .background(theme.extended_palette().background.weak.color)
+        .border(iced::border::rounded(8))
 }

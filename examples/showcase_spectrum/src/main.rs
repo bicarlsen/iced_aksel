@@ -1,4 +1,4 @@
-//! Professional-style audio spectrum analyzer example.
+//! Professional-style audio showcase_spectrum analyzer example.
 //!
 //! The example focuses on a single smooth curve with a subtle glow/fill to mimic
 //! modern mastering tools (FabFilter Pro-Q, Izotope). Real-time audio is captured

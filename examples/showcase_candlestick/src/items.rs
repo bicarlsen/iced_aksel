@@ -1,7 +1,7 @@
 use iced::{Color, theme::palette::Extended};
 use iced_aksel::{Measure, Plot, PlotData, PlotPoint, Stroke, shape, stroke::StrokeStyle};
 
-/// Represents a single candlestick.
+/// Represents a single showcase_candlestick.
 #[derive(Debug, Clone, Copy)]
 pub struct Candle {
     pub open: f64,

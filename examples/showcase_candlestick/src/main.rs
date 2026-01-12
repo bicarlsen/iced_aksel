@@ -1,6 +1,6 @@
 //! Chart shape layer example
 //!
-//! An expanded example of the candlestick chart, now including:
+//! An expanded example of the showcase_candlestick chart, now including:
 //! - A synchronized volume panel.
 //! - Toggleable SMA (Simple Moving Average) indicator.
 //! - Toggleable Bollinger Bands (BBands) indicator.
@@ -181,7 +181,7 @@ impl ExampleApp {
             }
 
             // --- Chart Interaction Messages ---
-            // Other messages are handled directly by the candlestick chart.
+            // Other messages are handled directly by the showcase_candlestick chart.
             // The component's handle_message will trigger a rebuild internally.
             Message::Chart(message) => {
                 self.candlestick_chart.handle_message(message);

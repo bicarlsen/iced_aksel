@@ -246,12 +246,7 @@ fn y_axis_tick_renderer(ctx: TickContext<f64, Theme>) -> TickResult {
         return TickResult::default();
     }
 
-    let val = ctx.tick.value;
-    let label_text = if val >= 1000.0 {
-        format!("{:.0}k", val / 1000.0)
-    } else {
-        format!("{:.0}", val)
-    };
+    let label_text = format!("{:.0}", ctx.tick.value);
 
     TickResult {
         label: Some(ctx.label(label_text)),

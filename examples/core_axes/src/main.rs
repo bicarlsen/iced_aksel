@@ -1,15 +1,26 @@
+use iced::widget::checkbox;
+use iced::widget::text::LineHeight;
 use iced::{
-    Color, Element, Font, Length, Padding, Theme,
+    Border, Color, Element, Font, Length, Padding, Shadow, Theme,
     widget::{column, container, pick_list, row, text},
 };
+use iced_aksel::axis::{Marker, MarkerBadge, MarkerContext, MarkerLine, TickContext};
+use iced_aksel::style::{DashStyle, LabelStyle};
 use iced_aksel::{
-    Axis, Chart, Measure, PlotPoint, State, Stroke,
-    axis::{self, GridLine, Label, TickContext, TickLine, TickResult},
-    plot::{Plot, PlotData},
+    Axis, Chart, State,
+    axis::{self, GridLine, Label, TickLine, TickResult},
     scale::Linear,
-    shape::Polyline,
-    style::DashStyle,
 };
+
+// # Axes Styling Showcase
+//
+// A comprehensive example demonstrating how to customize Axis visualization dynamically.
+//
+// This showcase contrasts two approaches to rendering Markers and Ticks:
+// * **Simple:** Inheriting default styles and selectively overriding properties (e.g., changing badge color based on data thresholds).
+// * **Advanced:** Constructing visual elements from scratch for granular control (e.g., creating gradient ticks or custom label formatting).
+//
+// It also demonstrates axis label rendering management features like `skip_overlapping_labels`.
 
 pub fn main() -> iced::Result {
     iced::application(AxesShowcase::new, AxesShowcase::update, AxesShowcase::view)
@@ -20,20 +31,18 @@ pub fn main() -> iced::Result {
 }
 
 struct AxesShowcase {
-    theme: iced::Theme,
-    minimal_state: State<&'static str, f64>,
-    minimal_data: SineWave,
+    theme: Theme,
 
-    engineering_state: State<&'static str, f64>,
-    engineering_data: SineWave,
+    state: State<&'static str, f64>,
 
-    custom_state: State<&'static str, f64>,
-    custom_data: SineWave,
+    // Settings
+    skip_label_overlapping: bool,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     ThemeChanged(Theme),
+    SkipOverlappingToggle(bool),
 }
 
 impl AxesShowcase {
@@ -41,17 +50,13 @@ impl AxesShowcase {
     const Y: &'static str = "y";
 
     fn new() -> (Self, iced::Task<Message>) {
+        let theme = Theme::Dark;
         (
             Self {
-                theme: iced::Theme::Dark,
-                minimal_state: setup_minimal_axes(),
-                minimal_data: SineWave::new(1.0, 0.8, 50),
+                state: axes_setup(theme.clone(), true), // <-- OBS: Inside this function is where the magic starts
+                theme,
 
-                engineering_state: setup_engineering_axes(),
-                engineering_data: SineWave::new(2.5, 3.5, 100),
-
-                custom_state: setup_custom_axes(),
-                custom_data: SineWave::new(1.5, 0.8, 80),
+                skip_label_overlapping: false,
             },
             iced::Task::none(),
         )
@@ -59,252 +64,258 @@ impl AxesShowcase {
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
-            Message::ThemeChanged(theme) => self.theme = theme,
+            Message::ThemeChanged(theme) => {
+                self.theme = theme;
+                self.state = axes_setup(self.theme.clone(), self.skip_label_overlapping);
+            }
+            Message::SkipOverlappingToggle(status) => {
+                self.skip_label_overlapping = status;
+                self.state = axes_setup(self.theme.clone(), self.skip_label_overlapping);
+            }
         }
         iced::Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
-        column![
-            row![
-                text("Theme: "),
-                pick_list(iced::Theme::ALL, Some(&self.theme), Message::ThemeChanged)
-            ]
-            .padding(20),
-            row![
-                self.panel(
-                    "1. Minimal Layout",
-                    "Hidden Y-axis. No Grid.",
-                    Chart::new(&self.minimal_state).plot_data(&self.minimal_data, Self::X, Self::Y)
-                ),
-                self.panel(
-                    "2. Engineering Layout",
-                    "Custom Ruler Ticks. Monospace.",
-                    Chart::new(&self.engineering_state).plot_data(
-                        &self.engineering_data,
-                        Self::X,
-                        Self::Y
-                    )
-                ),
-                self.panel(
-                    "3. Custom Placement",
-                    "Top & Right Axes. Badges.",
-                    Chart::new(&self.custom_state).plot_data(&self.custom_data, Self::X, Self::Y)
-                ),
-            ]
+        // Theme Section
+        let theme_title = text("Theme:");
+        let theme_picker = pick_list(Theme::ALL, Some(&self.theme), Message::ThemeChanged);
+
+        let theme_section = row![theme_title, theme_picker,].spacing(16.);
+
+        // Skip overlapping labels settings
+        let skip_overlapping_title = text("Skip Overlapping Labels:");
+        let skip_overlapping_checkbox =
+            checkbox(self.skip_label_overlapping).on_toggle(Message::SkipOverlappingToggle);
+
+        let skip_overlapping_section =
+            row![skip_overlapping_title, skip_overlapping_checkbox,].spacing(16.);
+
+        // Chart Section
+        let chart_panel = panel("Axes Showcase", Chart::new(&self.state));
+
+        column![theme_section, skip_overlapping_section, chart_panel,]
             .spacing(20)
             .padding(20)
-        ]
-        .spacing(20)
-        .padding(20)
-        .into()
+            .into()
     }
 
-    fn theme(&self) -> iced::Theme {
+    fn theme(&self) -> Theme {
         self.theme.clone()
-    }
-
-    fn panel<'a>(
-        &self,
-        title: &'a str,
-        subtitle: &'a str,
-        chart: Chart<'a, &'static str, f64, Message>,
-    ) -> Element<'a, Message> {
-        column![
-            text(title).size(16).font(Font::MONOSPACE),
-            text(subtitle)
-                .size(12)
-                .color(Color::from_rgb(0.6, 0.6, 0.6)),
-            container(chart)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(|t: &Theme| container::Style::default()
-                    .background(t.extended_palette().background.weak.color)
-                    .border(iced::Border {
-                        radius: 8.0.into(),
-                        color: Color::from_rgba(1.0, 1.0, 1.0, 0.05),
-                        width: 1.0
-                    }))
-                .padding(Padding::new(15.))
-        ]
-        .spacing(10)
-        .width(Length::Fill)
-        .into()
     }
 }
 
-// -----------------------------------------------------------------------------
-// 1. MINIMAL CONFIGURATION
-// -----------------------------------------------------------------------------
+fn panel<'a>(title: &'a str, chart: Chart<'a, &'static str, f64, Message>) -> Element<'a, Message> {
+    column![
+        text(title).size(16).font(Font::MONOSPACE),
+        container(chart)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|t: &Theme| container::Style::default()
+                .background(t.extended_palette().background.weak.color)
+                .border(Border {
+                    radius: 8.0.into(),
+                    color: Color::from_rgba(1.0, 1.0, 1.0, 0.05),
+                    width: 1.0
+                }))
+            .padding(Padding::new(15.))
+    ]
+    .spacing(10)
+    .width(Length::Fill)
+    .into()
+}
 
-fn setup_minimal_axes() -> State<&'static str, f64> {
+fn axes_setup(theme: Theme, skip_overlapping_labels: bool) -> State<&'static str, f64> {
+    // Prepare the general state
     let mut state = State::new();
 
-    // X-Axis: Standard look, no grid
-    state.set_axis(
-        AxesShowcase::X,
-        Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom)
-            .with_thickness(45.0)
-            .without_grid()
-            .with_marker_renderer(|ctx| Some(ctx.marker(format!("{:.0}", ctx.value)))),
-    );
+    // ----- X-Axis -----
 
-    // Y-Axis: Invisible but active for scaling
-    state.set_axis(
-        AxesShowcase::Y,
-        Axis::new(Linear::new(-1.2, 1.2), axis::Position::Left).invisible(),
-    );
+    // X-Axis basic settings
+    let x_placement = axis::Position::Bottom;
+    let x_scale = Linear::new(0., 100.);
+
+    // TODO: Change this when we get better ergonomics
+    // X-Axis dynamic settings
+    // We attach specific renderers to the axis. These renderers are closures
+    // that determine how markers and ticks look at runtime.
+    let x_axis = if skip_overlapping_labels {
+        Axis::new(x_scale, x_placement)
+            .skip_overlapping_labels(6.) // <-- Automatically hides labels that would collide
+            .with_marker_renderer(simple_dynamic_marker(theme.clone()))
+            .with_tick_renderer(simple_tick_result(theme.clone()))
+    } else {
+        Axis::new(x_scale, x_placement)
+            .with_marker_renderer(simple_dynamic_marker(theme.clone()))
+            .with_tick_renderer(simple_tick_result(theme.clone()))
+    };
+
+    // ----- Y-Axis -----
+    let y_placement = axis::Position::Left;
+    let y_scale = Linear::new(0., 100.);
+
+    // TODO: Change this when we get better ergonomics
+    // For the Y-Axis, we use the "Advanced" renderers to show full manual control
+    let y_axis = if skip_overlapping_labels {
+        Axis::new(y_scale, y_placement)
+            .skip_overlapping_labels(6.)
+            .with_marker_renderer(advanced_dynamic_marker(theme.clone()))
+            .with_tick_renderer(advanced_tick_result(theme.clone()))
+    } else {
+        Axis::new(y_scale, y_placement)
+            .with_marker_renderer(advanced_dynamic_marker(theme.clone()))
+            .with_tick_renderer(advanced_tick_result(theme.clone()))
+    };
+
+    state.set_axis(AxesShowcase::X, x_axis);
+    state.set_axis(AxesShowcase::Y, y_axis);
 
     state
 }
+fn simple_dynamic_marker(theme: Theme) -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
+    move |ctx: MarkerContext<f64>| {
+        // Example: Change color based on data thresholds
+        let badge_color = if ctx.value <= 50.0 {
+            theme.palette().warning
+        } else {
+            theme.palette().danger
+        };
 
-// -----------------------------------------------------------------------------
-// 2. ENGINEERING CONFIGURATION
-// -----------------------------------------------------------------------------
+        // --- THE EASY WAY ---
+        // We use `ctx.marker(String)` to generate a fully populated default Marker.
+        // This allows us to use Rust's struct update syntax (default) to
+        // only override the specific fields we want to change.
 
-fn setup_engineering_axes() -> State<&'static str, f64> {
-    let mut state = State::new();
+        let default_marker = ctx.marker(format!("{:.2}", ctx.value));
 
-    // Define a custom renderer for a technical "ruler" look
-    let ruler_renderer = |ctx: TickContext<f64>| {
-        if ctx.tick.level == 0 {
+        let marker = Marker {
+            badge: MarkerBadge {
+                background: badge_color, // Override only the background color
+                ..default_marker.badge   // Keep the rest (border, shadow, radius) default
+            },
+            ..default_marker // Keep the label and line styles default
+        };
+
+        Some(marker)
+    }
+}
+
+fn advanced_dynamic_marker(
+    theme: Theme,
+) -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
+    move |ctx: MarkerContext<f64>| {
+        // --- THE MANUAL WAY ---
+        // For full control, we define every aspect of the marker manually.
+        // A marker consists of 3 parts: Label, Badge, and Line.
+
+        // 1. Label: The text content and its font styling
+        let label_text = format!("{:.2}", ctx.value);
+        let label_style = LabelStyle {
+            size: 12.into(),
+            color: theme.palette().text,
+            padding: 4.into(),
+            line_height: LineHeight::Relative(1.0),
+        };
+        let label = Label::from_style(label_text, label_style);
+
+        // 2. Line: The visual connector between the plot data and the badge
+        let line = MarkerLine {
+            color: theme.palette().primary,
+            width: 1.into(),
+            gap: 4.into(),
+        };
+
+        // 3. Badge: The container/box surrounding the text
+        let badge = MarkerBadge {
+            background: theme.palette().primary,
+            border: Border::default().rounded(4.),
+            shadow: Shadow::default(),
+        };
+
+        let marker = Marker { label, badge, line };
+
+        Some(marker)
+    }
+}
+
+fn simple_tick_result(_theme: Theme) -> impl Fn(TickContext<f64>) -> TickResult + 'static {
+    move |ctx: TickContext<f64>| {
+        let text = format!("{:.2}", ctx.tick.value);
+        let label = ctx.label(text);
+
+        TickResult {
+            label: Some(label),
+            tick_line: Some(ctx.tickline()),
+            grid_line: Some(ctx.gridline()),
+            label_priority: None,
+        }
+    }
+}
+
+fn advanced_tick_result(theme: Theme) -> impl Fn(TickContext<f64>) -> TickResult + 'static {
+    move |ctx: TickContext<f64>| {
+        // The library categorizes ticks by "levels". Level 0 is a Major tick.
+        let is_major_tick = ctx.tick.level == 0;
+
+        let label_text = format!("{:.2}", ctx.tick.value);
+
+        // Example: Create a color gradient based on the tick's position on the axis.
+        // ctx.normalized_position gives us a value between 0.0 (start) and 1.0 (end).
+        let lerp_color = color_lerped(
+            &theme.palette().danger,
+            &theme.palette().warning,
+            ctx.normalized_position,
+        );
+
+        let label_style = LabelStyle {
+            color: lerp_color,
+            padding: 4.into(),
+            size: 12.into(),
+            line_height: LineHeight::Relative(1.0),
+        };
+
+        let label = Label::from_style(label_text, label_style);
+
+        let tick_line = TickLine {
+            color: lerp_color,
+            width: 1.into(),
+            length: 4.into(),
+        };
+
+        let grid_line = GridLine {
+            color: theme.extended_palette().background.neutral.color,
+            width: 1.into(),
+            dashed: Some(DashStyle::new(6., 2.)),
+        };
+
+        // Conditional Rendering:
+        // We only return a Label if it is a Major tick.
+        // However, we still return tick_lines and grid_lines for minor ticks.
+        if is_major_tick {
             TickResult {
-                tick_line: Some(TickLine {
-                    length: 8.0.into(),
-                    width: 1.5.into(),
-                    ..ctx.tickline()
-                }),
-                grid_line: Some(GridLine {
-                    width: 1.0.into(),
-                    ..ctx.gridline()
-                }),
-                label: Some(Label {
-                    font: Some(Font::MONOSPACE),
-                    ..ctx.label(format!("{:.1}", ctx.tick.value))
-                }),
-                ..Default::default()
+                label: Some(label),
+                tick_line: Some(tick_line),
+                grid_line: Some(grid_line),
+                label_priority: None,
             }
         } else {
             TickResult {
-                tick_line: Some(TickLine {
-                    length: 4.0.into(),
-                    width: 1.0.into(),
-                    ..ctx.tickline()
-                }),
-                grid_line: Some(GridLine {
-                    width: 0.5.into(),
-                    ..ctx.gridline()
-                }),
-                label: None,
-                ..Default::default()
+                label: None, // <-- Hides the text for minor ticks
+                tick_line: Some(tick_line),
+                grid_line: Some(grid_line),
+                label_priority: None,
             }
         }
-    };
-
-    state.set_axis(
-        AxesShowcase::Y,
-        Axis::new(Linear::new(-4.0, 4.0), axis::Position::Left)
-            .with_thickness(50.0)
-            .with_tick_renderer(ruler_renderer),
-    );
-
-    state.set_axis(
-        AxesShowcase::X,
-        Axis::new(Linear::new(0.0, 100.0), axis::Position::Top)
-            .with_thickness(35.0)
-            .with_tick_renderer(ruler_renderer),
-    );
-
-    state
-}
-
-// -----------------------------------------------------------------------------
-// 3. CUSTOM PLACEMENT & BADGES
-// -----------------------------------------------------------------------------
-
-fn setup_custom_axes() -> State<&'static str, f64> {
-    let mut state = State::new();
-
-    // X-Axis on TOP
-    state.set_axis(
-        AxesShowcase::X,
-        Axis::new(Linear::new(0.0, 100.0), axis::Position::Top)
-            .with_thickness(45.0)
-            .style(|style| {
-                // Override style to have dashed gridlines, without changing the renderer itself
-                style.grid.dashed = Some(DashStyle {
-                    gap_length: 5.0,
-                    dash_length: 5.0,
-                });
-            })
-            .with_marker_renderer(|ctx| Some(ctx.marker(format!("T: {:.1}s", ctx.value)))),
-    );
-
-    // Y-Axis on RIGHT
-    state.set_axis(
-        AxesShowcase::Y,
-        Axis::new(Linear::new(-1.5, 1.5), axis::Position::Right)
-            .with_thickness(55.0)
-            .with_tick_renderer(|ctx| {
-                let is_major = ctx.tick.level == 0;
-
-                // Show grid only for major ticks
-                let grid_line = is_major.then(|| GridLine {
-                    width: 1.0.into(),
-                    dashed: Some(DashStyle {
-                        gap_length: 5.0,
-                        dash_length: 5.0,
-                    }),
-                    ..ctx.gridline()
-                });
-                // Show labels only for major ticks
-                let label = is_major.then(|| ctx.label(format!("{:.1}", ctx.tick.value)));
-                TickResult {
-                    grid_line,
-                    label,
-                    tick_line: Some(TickLine {
-                        width: 1.0.into(),
-                        length: 4.0.into(),
-                        ..ctx.tickline()
-                    }),
-                    ..Default::default()
-                }
-            })
-            .with_marker_renderer(|ctx| Some(ctx.marker(format!("{:.3}", ctx.value)))),
-    );
-
-    state
-}
-
-// -----------------------------------------------------------------------------
-// DATA GENERATION
-// -----------------------------------------------------------------------------
-
-struct SineWave {
-    points: Vec<PlotPoint<f64>>,
-}
-
-impl SineWave {
-    fn new(frequency: f64, amplitude: f64, count: usize) -> Self {
-        let points = (0..=count)
-            .map(|i| {
-                let x = (i as f64 / count as f64) * 100.0;
-                let y = (x * 0.1 * frequency).sin() * amplitude;
-                PlotPoint::new(x, y)
-            })
-            .collect();
-
-        Self { points }
     }
 }
 
-impl PlotData<f64> for SineWave {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {
-        let palette = theme.extended_palette();
+fn color_lerped(start: &Color, end: &Color, v: f32) -> Color {
+    let t = v.clamp(0.0, 1.0);
 
-        plot.add_shape(Polyline::new(self.points.clone()).stroke(Stroke::new(
-            palette.primary.base.color,
-            Measure::Screen(2.0),
-        )));
+    Color {
+        r: start.r + (end.r - start.r) * t,
+        g: start.g + (end.g - start.g) * t,
+        b: start.b + (end.b - start.b) * t,
+        a: start.a + (end.a - start.a) * t,
     }
 }

@@ -887,7 +887,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             Orientation::Horizontal => {
                 let x = axis_bounds.width.mul_add(pos_norm, axis_bounds.x);
                 if let Some(DashStyle {
-                    dash_length,
+                    line_length,
                     gap_length,
                 }) = line.dashed
                 {
@@ -898,7 +898,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                         plot_bounds.y + plot_bounds.height,
                         width,
                         color,
-                        dash_length,
+                        line_length,
                         gap_length,
                         true,
                     );
@@ -917,7 +917,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             Orientation::Vertical => {
                 let y = axis_bounds.height.mul_add(1.0 - pos_norm, axis_bounds.y);
                 if let Some(DashStyle {
-                    dash_length,
+                    line_length,
                     gap_length,
                 }) = line.dashed
                 {
@@ -928,7 +928,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                         y,
                         width,
                         color,
-                        dash_length,
+                        line_length,
                         gap_length,
                         true,
                     );
