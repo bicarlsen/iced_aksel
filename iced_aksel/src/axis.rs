@@ -224,6 +224,13 @@ impl<D: Float, Theme> Axis<D, Theme> {
         self
     }
 
+    /// Configures the axis to skip labels that would overlap.
+    ///
+    /// `min_gap_px` specifies the minimum distance in pixels required between labels.
+    pub fn set_skip_overlapping_labels(&mut self, min_gap_px: f32) {
+        self.label_policy = LabelPolicy::skip_overlapping(min_gap_px);
+    }
+
     /// Updates the tick renderer in-place.
     pub fn set_tick_renderer<F>(&mut self, renderer: F)
     where

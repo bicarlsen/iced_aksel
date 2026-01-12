@@ -53,7 +53,7 @@ impl AxesShowcase {
         let theme = Theme::Dark;
         (
             Self {
-                state: axes_setup(theme.clone(), true), // <-- OBS: Inside this function is where the magic starts
+                state: axes_setup(true), // <-- OBS: Inside this function is where the magic starts
                 theme,
 
                 skip_label_overlapping: false,
@@ -66,11 +66,11 @@ impl AxesShowcase {
         match message {
             Message::ThemeChanged(theme) => {
                 self.theme = theme;
-                self.state = axes_setup(self.theme.clone(), self.skip_label_overlapping);
+                self.state = axes_setup(self.skip_label_overlapping);
             }
             Message::SkipOverlappingToggle(status) => {
                 self.skip_label_overlapping = status;
-                self.state = axes_setup(self.theme.clone(), self.skip_label_overlapping);
+                self.state = axes_setup(self.skip_label_overlapping);
             }
         }
         iced::Task::none()
@@ -125,7 +125,7 @@ fn panel<'a>(title: &'a str, chart: Chart<'a, &'static str, f64, Message>) -> El
     .into()
 }
 
-fn axes_setup(theme: Theme, skip_overlapping_labels: bool) -> State<&'static str, f64> {
+fn axes_setup(skip_overlapping_labels: bool) -> State<&'static str, f64> {
     // Prepare the general state
     let mut state = State::new();
 
@@ -135,36 +135,29 @@ fn axes_setup(theme: Theme, skip_overlapping_labels: bool) -> State<&'static str
     let x_placement = axis::Position::Bottom;
     let x_scale = Linear::new(0., 100.);
 
-    // TODO: Change this when we get better ergonomics
     // X-Axis dynamic settings
-    // We attach specific renderers to the axis. These renderers are closures
-    // that determine how markers and ticks look at runtime.
-    let x_axis = if skip_overlapping_labels {
-        Axis::new(x_scale, x_placement)
-            .skip_overlapping_labels(6.) // <-- Automatically hides labels that would collide
-            .with_marker_renderer(simple_dynamic_marker(theme.clone()))
-            .with_tick_renderer(simple_tick_result(theme.clone()))
-    } else {
-        Axis::new(x_scale, x_placement)
-            .with_marker_renderer(simple_dynamic_marker(theme.clone()))
-            .with_tick_renderer(simple_tick_result(theme.clone()))
-    };
+    let mut x_axis = Axis::new(x_scale, x_placement)
+        .with_marker_renderer(simple_dynamic_marker())
+        .with_tick_renderer(simple_tick_result());
+
+    if skip_overlapping_labels {
+        x_axis.set_skip_overlapping_labels(6.) // <-- Automatically hides labels that would collide
+    }
 
     // ----- Y-Axis -----
     let y_placement = axis::Position::Left;
     let y_scale = Linear::new(0., 100.);
 
-    // TODO: Change this when we get better ergonomics
     // For the Y-Axis, we use the "Advanced" renderers to show full manual control
     let y_axis = if skip_overlapping_labels {
         Axis::new(y_scale, y_placement)
             .skip_overlapping_labels(6.)
-            .with_marker_renderer(advanced_dynamic_marker(theme.clone()))
-            .with_tick_renderer(advanced_tick_result(theme.clone()))
+            .with_marker_renderer(advanced_dynamic_marker())
+            .with_tick_renderer(advanced_tick_result())
     } else {
         Axis::new(y_scale, y_placement)
-            .with_marker_renderer(advanced_dynamic_marker(theme.clone()))
-            .with_tick_renderer(advanced_tick_result(theme.clone()))
+            .with_marker_renderer(advanced_dynamic_marker())
+            .with_tick_renderer(advanced_tick_result())
     };
 
     state.set_axis(AxesShowcase::X, x_axis);
@@ -172,13 +165,13 @@ fn axes_setup(theme: Theme, skip_overlapping_labels: bool) -> State<&'static str
 
     state
 }
-fn simple_dynamic_marker(theme: Theme) -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
+fn simple_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
     move |ctx: MarkerContext<f64>| {
         // Example: Change color based on data thresholds
         let badge_color = if ctx.value <= 50.0 {
-            theme.palette().warning
+            ctx.theme.palette().warning
         } else {
-            theme.palette().danger
+            ctx.theme.palette().danger
         };
 
         // --- THE EASY WAY ---
@@ -200,19 +193,23 @@ fn simple_dynamic_marker(theme: Theme) -> impl Fn(MarkerContext<f64>) -> Option<
     }
 }
 
-fn advanced_dynamic_marker(
-    theme: Theme,
-) -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
+fn advanced_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
     move |ctx: MarkerContext<f64>| {
         // --- THE MANUAL WAY ---
         // For full control, we define every aspect of the marker manually.
         // A marker consists of 3 parts: Label, Badge, and Line.
 
+        let lerp_color = color_lerped(
+            &ctx.theme.palette().danger,
+            &ctx.theme.palette().warning,
+            ctx.normalized_position,
+        );
+
         // 1. Label: The text content and its font styling
         let label_text = format!("{:.2}", ctx.value);
         let label_style = LabelStyle {
             size: 12.into(),
-            color: theme.palette().text,
+            color: ctx.theme.palette().text,
             padding: 4.into(),
             line_height: LineHeight::Relative(1.0),
         };
@@ -220,14 +217,14 @@ fn advanced_dynamic_marker(
 
         // 2. Line: The visual connector between the plot data and the badge
         let line = MarkerLine {
-            color: theme.palette().primary,
+            color: lerp_color,
             width: 1.into(),
             gap: 4.into(),
         };
 
         // 3. Badge: The container/box surrounding the text
         let badge = MarkerBadge {
-            background: theme.palette().primary,
+            background: lerp_color,
             border: Border::default().rounded(4.),
             shadow: Shadow::default(),
         };
@@ -238,7 +235,7 @@ fn advanced_dynamic_marker(
     }
 }
 
-fn simple_tick_result(_theme: Theme) -> impl Fn(TickContext<f64>) -> TickResult + 'static {
+fn simple_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
     move |ctx: TickContext<f64>| {
         let text = format!("{:.2}", ctx.tick.value);
         let label = ctx.label(text);
@@ -252,7 +249,7 @@ fn simple_tick_result(_theme: Theme) -> impl Fn(TickContext<f64>) -> TickResult 
     }
 }
 
-fn advanced_tick_result(theme: Theme) -> impl Fn(TickContext<f64>) -> TickResult + 'static {
+fn advanced_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
     move |ctx: TickContext<f64>| {
         // The library categorizes ticks by "levels". Level 0 is a Major tick.
         let is_major_tick = ctx.tick.level == 0;
@@ -262,8 +259,8 @@ fn advanced_tick_result(theme: Theme) -> impl Fn(TickContext<f64>) -> TickResult
         // Example: Create a color gradient based on the tick's position on the axis.
         // ctx.normalized_position gives us a value between 0.0 (start) and 1.0 (end).
         let lerp_color = color_lerped(
-            &theme.palette().danger,
-            &theme.palette().warning,
+            &ctx.theme.palette().danger,
+            &ctx.theme.palette().warning,
             ctx.normalized_position,
         );
 
@@ -283,7 +280,7 @@ fn advanced_tick_result(theme: Theme) -> impl Fn(TickContext<f64>) -> TickResult
         };
 
         let grid_line = GridLine {
-            color: theme.extended_palette().background.neutral.color,
+            color: ctx.theme.extended_palette().background.neutral.color,
             width: 1.into(),
             dashed: Some(DashStyle::new(6., 2.)),
         };
