@@ -17,10 +17,8 @@ use iced_aksel::{
 // A comprehensive example demonstrating how to customize Axis visualization dynamically.
 //
 // This showcase contrasts two approaches to rendering Markers and Ticks:
-// * **Simple:** Inheriting default styles and selectively overriding properties (e.g., changing badge color based on data thresholds).
-// * **Advanced:** Constructing visual elements from scratch for granular control (e.g., creating gradient ticks or custom label formatting).
-//
-// It also demonstrates axis label rendering management features like `skip_overlapping_labels`.
+// 1. **Simple:** Inheriting default styles and selectively overriding properties.
+// 2. **Advanced:** Constructing visual elements from scratch for granular control.
 
 pub fn main() -> iced::Result {
     iced::application(AxesShowcase::new, AxesShowcase::update, AxesShowcase::view)
@@ -30,12 +28,15 @@ pub fn main() -> iced::Result {
         .run()
 }
 
+// -----------------------------------------------------------------------------
+// Application State & Messages
+// -----------------------------------------------------------------------------
+
 struct AxesShowcase {
     theme: Theme,
-
+    // The Chart State holds the data and the configuration of the axes.
     state: State<&'static str, f64>,
-
-    // Settings
+    // Toggles
     skip_label_overlapping: bool,
 }
 
@@ -46,17 +47,20 @@ pub enum Message {
 }
 
 impl AxesShowcase {
+    // Unique identifiers for our axes
     const X: &'static str = "x";
     const Y: &'static str = "y";
 
     fn new() -> (Self, iced::Task<Message>) {
         let theme = Theme::Dark;
+        // We initialize the chart state immediately
+        let initial_state = configure_chart_axes(true);
+
         (
             Self {
-                state: axes_setup(true), // <-- OBS: Inside this function is where the magic starts
+                state: initial_state,
                 theme,
-
-                skip_label_overlapping: false,
+                skip_label_overlapping: true,
             },
             iced::Task::none(),
         )
@@ -66,38 +70,47 @@ impl AxesShowcase {
         match message {
             Message::ThemeChanged(theme) => {
                 self.theme = theme;
-                self.state = axes_setup(self.skip_label_overlapping);
+                // We recreate the axis configuration when the theme changes
+                // to ensure colors match the new theme palette.
+                self.state = configure_chart_axes(self.skip_label_overlapping);
             }
             Message::SkipOverlappingToggle(status) => {
                 self.skip_label_overlapping = status;
-                self.state = axes_setup(self.skip_label_overlapping);
+                // Re-run setup to apply the new overlap setting
+                self.state = configure_chart_axes(self.skip_label_overlapping);
             }
         }
         iced::Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
-        // Theme Section
-        let theme_title = text("Theme:");
-        let theme_picker = pick_list(Theme::ALL, Some(&self.theme), Message::ThemeChanged);
+        // 1. Controls Section
+        let controls = row![
+            row![
+                text("Theme:"),
+                pick_list(Theme::ALL, Some(&self.theme), Message::ThemeChanged)
+            ]
+            .spacing(10)
+            .align_y(iced::Alignment::Center),
+            row![
+                text("Skip Overlapping Labels:"),
+                checkbox(self.skip_label_overlapping).on_toggle(Message::SkipOverlappingToggle)
+            ]
+            .spacing(10)
+            .align_y(iced::Alignment::Center),
+        ]
+        .spacing(30);
 
-        let theme_section = row![theme_title, theme_picker,].spacing(16.);
+        // 2. Chart Section
+        // We wrap the chart in a container for visual framing
+        let content = column![
+            controls,
+            panel("Custom Axis Rendering", Chart::new(&self.state))
+        ]
+        .spacing(20)
+        .padding(20);
 
-        // Skip overlapping labels settings
-        let skip_overlapping_title = text("Skip Overlapping Labels:");
-        let skip_overlapping_checkbox =
-            checkbox(self.skip_label_overlapping).on_toggle(Message::SkipOverlappingToggle);
-
-        let skip_overlapping_section =
-            row![skip_overlapping_title, skip_overlapping_checkbox,].spacing(16.);
-
-        // Chart Section
-        let chart_panel = panel("Axes Showcase", Chart::new(&self.state));
-
-        column![theme_section, skip_overlapping_section, chart_panel,]
-            .spacing(20)
-            .padding(20)
-            .into()
+        content.into()
     }
 
     fn theme(&self) -> Theme {
@@ -105,9 +118,191 @@ impl AxesShowcase {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Chart Configuration Logic
+// -----------------------------------------------------------------------------
+
+/// Sets up the Axis definitions, Scales, and custom Renderers.
+fn configure_chart_axes(skip_overlapping_labels: bool) -> State<&'static str, f64> {
+    let mut state = State::new();
+
+    // --- X-Axis Configuration (The "Simple" Approach) ---
+    // We use a standard Linear scale.
+    let x_scale = Linear::new(0., 100.);
+
+    let mut x_axis = Axis::new(x_scale, axis::Position::Bottom)
+        // Renderers allow us to hijack the drawing process of specific elements
+        .with_marker_renderer(simple_dynamic_marker())
+        .with_tick_renderer(simple_tick_result())
+        .without_grid(); // Clean look, no vertical grid lines
+
+    // --- Y-Axis Configuration (The "Advanced" Approach) ---
+    let y_scale = Linear::new(0., 100.);
+
+    let mut y_axis = Axis::new(y_scale, axis::Position::Left)
+        // We set a minimum gap (in pixels) between labels to prevent clutter
+        .skip_overlapping_labels(6.)
+        .with_marker_renderer(advanced_dynamic_marker())
+        .with_tick_renderer(advanced_tick_result());
+
+    // Apply the toggle setting from the UI
+    if skip_overlapping_labels {
+        x_axis.set_skip_overlapping_labels(6.);
+        y_axis.set_skip_overlapping_labels(6.);
+    }
+
+    state.set_axis(AxesShowcase::X, x_axis);
+    state.set_axis(AxesShowcase::Y, y_axis);
+
+    state
+}
+
+// -----------------------------------------------------------------------------
+// Renderers: The logic for how things look
+// -----------------------------------------------------------------------------
+
+/// A "Simple" marker renderer.
+/// Strategy: Ask the context for the default marker, then just change the color.
+fn simple_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
+    move |ctx: MarkerContext<f64>| {
+        // Logic: Color changes if value is in the lower or upper half
+        let relative_color = if ctx.normalized_position <= 0.5 {
+            ctx.theme.palette().warning
+        } else {
+            ctx.theme.palette().danger
+        };
+
+        // 1. Generate the default marker with standard formatting
+        let default_marker = ctx.marker(format!("{:.2}", ctx.value));
+
+        // 2. Update only the fields we care about
+        Some(Marker {
+            line: MarkerLine {
+                color: relative_color,
+                ..default_marker.line
+            },
+            badge: MarkerBadge {
+                background: relative_color,
+                ..default_marker.badge
+            },
+            ..default_marker
+        })
+    }
+}
+
+/// A "Simple" tick renderer.
+/// Strategy: Standard text formatting, standard lines.
+fn simple_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
+    move |ctx: TickContext<f64>| {
+        let text = format!("{:.2}", ctx.tick.value);
+
+        TickResult {
+            label: Some(ctx.label(text)),
+            tick_line: Some(ctx.tickline()),
+            grid_line: Some(ctx.gridline()),
+            label_priority: None,
+        }
+    }
+}
+
+/// An "Advanced" marker renderer.
+/// Strategy: Build every component (Label, Line, Badge) manually for pixel-perfect control.
+fn advanced_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
+    move |ctx: MarkerContext<f64>| {
+        // Interpolate color based on position (0.0 to 1.0)
+        let lerp_color = color_lerped(
+            &ctx.theme.palette().danger,
+            &ctx.theme.palette().warning,
+            ctx.normalized_position,
+        );
+
+        // 1. Custom Label Styling
+        let label = Label::from_style(
+            format!("{:.2}", ctx.value),
+            LabelStyle {
+                size: 12.into(),
+                color: ctx.theme.palette().text,
+                padding: 4.into(),
+                line_height: LineHeight::Relative(1.0),
+            },
+        );
+
+        // 2. Custom Line styling (thinner, with a gap)
+        let line = MarkerLine {
+            color: lerp_color,
+            width: 1.into(),
+            gap: 4.into(),
+        };
+
+        // 3. Custom Badge styling
+        let badge = MarkerBadge {
+            background: lerp_color,
+            border: Border::default().rounded(4.),
+            shadow: Shadow::default(),
+        };
+
+        Some(Marker { label, badge, line })
+    }
+}
+
+/// An "Advanced" tick renderer.
+/// Strategy: Hide labels for minor ticks, apply gradients to major ticks.
+fn advanced_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
+    move |ctx: TickContext<f64>| {
+        let is_major_tick = ctx.tick.level == 0;
+
+        // Gradient logic
+        let lerp_color = color_lerped(
+            &ctx.theme.palette().danger,
+            &ctx.theme.palette().warning,
+            ctx.normalized_position,
+        );
+
+        // Define the visual elements
+        let tick_line = TickLine {
+            color: lerp_color,
+            width: 1.into(),
+            length: 4.into(),
+        };
+
+        let grid_line = GridLine {
+            color: ctx.theme.extended_palette().background.neutral.color,
+            width: 1.into(),
+            dashed: Some(DashStyle::new(6., 2.)),
+        };
+
+        // Conditional Rendering:
+        // We only generate a Label if this is a Major tick.
+        let label = if is_major_tick {
+            Some(Label::from_style(
+                format!("{:.2}", ctx.tick.value),
+                LabelStyle {
+                    color: lerp_color,
+                    padding: 4.into(),
+                    size: 12.into(),
+                    line_height: LineHeight::Relative(1.0),
+                },
+            ))
+        } else {
+            None
+        };
+
+        TickResult {
+            label,
+            tick_line: Some(tick_line),
+            grid_line: Some(grid_line),
+            label_priority: None,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
 fn panel<'a>(title: &'a str, chart: Chart<'a, &'static str, f64, Message>) -> Element<'a, Message> {
     column![
-        text(title).size(16).font(Font::MONOSPACE),
+        text(title).size(14).font(Font::MONOSPACE),
         container(chart)
             .width(Length::Fill)
             .height(Length::Fill)
@@ -125,190 +320,8 @@ fn panel<'a>(title: &'a str, chart: Chart<'a, &'static str, f64, Message>) -> El
     .into()
 }
 
-fn axes_setup(skip_overlapping_labels: bool) -> State<&'static str, f64> {
-    // Prepare the general state
-    let mut state = State::new();
-
-    // ----- X-Axis -----
-
-    // X-Axis basic settings
-    let x_placement = axis::Position::Bottom;
-    let x_scale = Linear::new(0., 100.);
-
-    // X-Axis dynamic settings
-    let mut x_axis = Axis::new(x_scale, x_placement)
-        .with_marker_renderer(simple_dynamic_marker())
-        .with_tick_renderer(simple_tick_result());
-
-    if skip_overlapping_labels {
-        x_axis.set_skip_overlapping_labels(6.) // <-- Automatically hides labels that would collide
-    }
-
-    // ----- Y-Axis -----
-    let y_placement = axis::Position::Left;
-    let y_scale = Linear::new(0., 100.);
-
-    // For the Y-Axis, we use the "Advanced" renderers to show full manual control
-    let y_axis = if skip_overlapping_labels {
-        Axis::new(y_scale, y_placement)
-            .skip_overlapping_labels(6.)
-            .with_marker_renderer(advanced_dynamic_marker())
-            .with_tick_renderer(advanced_tick_result())
-    } else {
-        Axis::new(y_scale, y_placement)
-            .with_marker_renderer(advanced_dynamic_marker())
-            .with_tick_renderer(advanced_tick_result())
-    };
-
-    state.set_axis(AxesShowcase::X, x_axis);
-    state.set_axis(AxesShowcase::Y, y_axis);
-
-    state
-}
-fn simple_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
-    move |ctx: MarkerContext<f64>| {
-        // Example: Change color based on data thresholds
-        let badge_color = if ctx.value <= 50.0 {
-            ctx.theme.palette().warning
-        } else {
-            ctx.theme.palette().danger
-        };
-
-        // --- THE EASY WAY ---
-        // We use `ctx.marker(String)` to generate a fully populated default Marker.
-        // This allows us to use Rust's struct update syntax (default) to
-        // only override the specific fields we want to change.
-
-        let default_marker = ctx.marker(format!("{:.2}", ctx.value));
-
-        let marker = Marker {
-            badge: MarkerBadge {
-                background: badge_color, // Override only the background color
-                ..default_marker.badge   // Keep the rest (border, shadow, radius) default
-            },
-            ..default_marker // Keep the label and line styles default
-        };
-
-        Some(marker)
-    }
-}
-
-fn advanced_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
-    move |ctx: MarkerContext<f64>| {
-        // --- THE MANUAL WAY ---
-        // For full control, we define every aspect of the marker manually.
-        // A marker consists of 3 parts: Label, Badge, and Line.
-
-        let lerp_color = color_lerped(
-            &ctx.theme.palette().danger,
-            &ctx.theme.palette().warning,
-            ctx.normalized_position,
-        );
-
-        // 1. Label: The text content and its font styling
-        let label_text = format!("{:.2}", ctx.value);
-        let label_style = LabelStyle {
-            size: 12.into(),
-            color: ctx.theme.palette().text,
-            padding: 4.into(),
-            line_height: LineHeight::Relative(1.0),
-        };
-        let label = Label::from_style(label_text, label_style);
-
-        // 2. Line: The visual connector between the plot data and the badge
-        let line = MarkerLine {
-            color: lerp_color,
-            width: 1.into(),
-            gap: 4.into(),
-        };
-
-        // 3. Badge: The container/box surrounding the text
-        let badge = MarkerBadge {
-            background: lerp_color,
-            border: Border::default().rounded(4.),
-            shadow: Shadow::default(),
-        };
-
-        let marker = Marker { label, badge, line };
-
-        Some(marker)
-    }
-}
-
-fn simple_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
-    move |ctx: TickContext<f64>| {
-        let text = format!("{:.2}", ctx.tick.value);
-        let label = ctx.label(text);
-
-        TickResult {
-            label: Some(label),
-            tick_line: Some(ctx.tickline()),
-            grid_line: Some(ctx.gridline()),
-            label_priority: None,
-        }
-    }
-}
-
-fn advanced_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
-    move |ctx: TickContext<f64>| {
-        // The library categorizes ticks by "levels". Level 0 is a Major tick.
-        let is_major_tick = ctx.tick.level == 0;
-
-        let label_text = format!("{:.2}", ctx.tick.value);
-
-        // Example: Create a color gradient based on the tick's position on the axis.
-        // ctx.normalized_position gives us a value between 0.0 (start) and 1.0 (end).
-        let lerp_color = color_lerped(
-            &ctx.theme.palette().danger,
-            &ctx.theme.palette().warning,
-            ctx.normalized_position,
-        );
-
-        let label_style = LabelStyle {
-            color: lerp_color,
-            padding: 4.into(),
-            size: 12.into(),
-            line_height: LineHeight::Relative(1.0),
-        };
-
-        let label = Label::from_style(label_text, label_style);
-
-        let tick_line = TickLine {
-            color: lerp_color,
-            width: 1.into(),
-            length: 4.into(),
-        };
-
-        let grid_line = GridLine {
-            color: ctx.theme.extended_palette().background.neutral.color,
-            width: 1.into(),
-            dashed: Some(DashStyle::new(6., 2.)),
-        };
-
-        // Conditional Rendering:
-        // We only return a Label if it is a Major tick.
-        // However, we still return tick_lines and grid_lines for minor ticks.
-        if is_major_tick {
-            TickResult {
-                label: Some(label),
-                tick_line: Some(tick_line),
-                grid_line: Some(grid_line),
-                label_priority: None,
-            }
-        } else {
-            TickResult {
-                label: None, // <-- Hides the text for minor ticks
-                tick_line: Some(tick_line),
-                grid_line: Some(grid_line),
-                label_priority: None,
-            }
-        }
-    }
-}
-
 fn color_lerped(start: &Color, end: &Color, v: f32) -> Color {
     let t = v.clamp(0.0, 1.0);
-
     Color {
         r: start.r + (end.r - start.r) * t,
         g: start.g + (end.g - start.g) * t,

@@ -40,6 +40,7 @@ mod marker;
 mod position;
 mod tick;
 
+use crate::style::SpineStyle;
 pub use grid::*;
 pub use label::*;
 pub use marker::*;
@@ -435,6 +436,8 @@ impl<D: Float, Theme> Axis<D, Theme> {
             }
         }
 
+        self.draw_spine(renderer, &bounds, &style.spine, viewport);
+
         if self.invisible {
             return;
         }
@@ -490,6 +493,74 @@ impl<D: Float, Theme> Axis<D, Theme> {
                 style.text_offset,
             );
         }
+    }
+
+    /// Renders the axis spine (the continuous line along the axis) as a Quad in a separate layer.
+    fn draw_spine<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        bounds: &Rectangle,
+        style: &SpineStyle,
+        viewport: &Rectangle,
+    ) where
+        Renderer: plot::Renderer,
+    {
+        if style.width.0 <= 0.0 {
+            return;
+        }
+
+        let width = style.width.0;
+        let color = style.color;
+
+        let spine_rect = match self.position {
+            Position::Top => {
+                // Spine at bottom edge of top axis
+                Rectangle {
+                    x: bounds.x,
+                    y: bounds.y + bounds.height - width,
+                    width: bounds.width,
+                    height: width,
+                }
+            }
+            Position::Bottom => {
+                // Spine at top edge of bottom axis
+                Rectangle {
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: width,
+                }
+            }
+            Position::Left => {
+                // Spine at right edge of left axis
+                Rectangle {
+                    x: bounds.x + bounds.width - width,
+                    y: bounds.y,
+                    width: width,
+                    height: bounds.height,
+                }
+            }
+            Position::Right => {
+                // Spine at left edge of right axis
+                Rectangle {
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: width,
+                    height: bounds.height,
+                }
+            }
+        };
+
+        // Render spine in a separate layer to ensure it's always on top
+        renderer.start_layer(*viewport);
+        renderer.fill_quad(
+            Quad {
+                bounds: spine_rect,
+                ..Default::default()
+            },
+            color,
+        );
+        renderer.end_layer();
     }
 
     /// Draws the interactive marker badge and line.
@@ -821,8 +892,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             color: label.color,
         })
     }
-
-    /// Renders a single tick mark into the mesh buffer.
+    /// Renders a single tick mark into the mesh buffer using linear tessellators.
     fn draw_tick_line(
         &self,
         line: TickLine,
@@ -830,57 +900,60 @@ impl<D: Float, Theme> Axis<D, Theme> {
         mesh_buffer: &mut MeshBuffer,
         pos_norm: f32,
     ) {
-        let (x0, y0, x1, y1) = match self.position {
+        let width = line.width.0;
+        let length = line.length.0;
+        let color = line.color;
+
+        match self.position {
             Position::Bottom => {
-                let x = bounds.width.mul_add(pos_norm, bounds.x).round();
-                (x, bounds.y, x + line.width.0, bounds.y + line.length.0)
+                let x = bounds.width.mul_add(pos_norm, bounds.x);
+                draw_vertical_line(
+                    mesh_buffer,
+                    x,
+                    bounds.y,
+                    bounds.y + length,
+                    width,
+                    color,
+                    true,
+                );
             }
             Position::Top => {
-                let x = bounds.width.mul_add(pos_norm, bounds.x).round();
-                (
+                let x = bounds.width.mul_add(pos_norm, bounds.x);
+                draw_vertical_line(
+                    mesh_buffer,
                     x,
-                    bounds.y + bounds.height - line.length.0,
-                    x + line.width.0,
+                    bounds.y + bounds.height - length,
                     bounds.y + bounds.height,
-                )
+                    width,
+                    color,
+                    true,
+                );
             }
             Position::Right => {
-                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y).round();
-                (bounds.x, y, bounds.x + line.length.0, y + line.width.0)
+                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
+                draw_horizontal_line(
+                    mesh_buffer,
+                    bounds.x,
+                    bounds.x + length,
+                    y,
+                    width,
+                    color,
+                    true,
+                );
             }
             Position::Left => {
-                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y).round();
-                (
-                    bounds.x + bounds.width - line.length.0,
-                    y,
+                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
+                draw_horizontal_line(
+                    mesh_buffer,
+                    bounds.x + bounds.width - length,
                     bounds.x + bounds.width,
-                    y + line.width.0,
-                )
+                    y,
+                    width,
+                    color,
+                    true,
+                );
             }
-        };
-
-        let color = color::pack(line.color);
-        mesh_buffer.add(
-            &[0, 1, 2, 2, 1, 3],
-            &[
-                SolidVertex2D {
-                    position: [x0, y0],
-                    color,
-                },
-                SolidVertex2D {
-                    position: [x1, y0],
-                    color,
-                },
-                SolidVertex2D {
-                    position: [x0, y1],
-                    color,
-                },
-                SolidVertex2D {
-                    position: [x1, y1],
-                    color,
-                },
-            ],
-        );
+        }
     }
 
     /// Renders a single grid line into the mesh buffer.
