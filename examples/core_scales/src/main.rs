@@ -3,14 +3,14 @@ use iced::{
     alignment::Horizontal,
     widget::{column, container, text},
 };
-use iced_aksel::axis::Label;
 use iced_aksel::{
     Axis, Chart, Measure, PlotPoint, State, Stroke,
-    axis::{self, TickContext, TickResult},
+    axis::{self, Label, TickContext, TickResult},
     plot::{Plot, PlotData},
     scale::{Linear, Logarithmic},
     shape::{Ellipse, Polyline},
 };
+
 // -----------------------------------------------------------------------------
 // Application Entry
 // -----------------------------------------------------------------------------
@@ -47,8 +47,11 @@ impl ScalesExample {
     const AXIS_Y_LOG: &'static str = "y_log";
 
     pub fn new() -> (Self, iced::Task<Message>) {
+        // Range: 0 to 100 on X
         let x_min = 0.0;
-        let x_max = 5.0;
+        let x_max = 100.0;
+
+        // Range: 1 to 100,000 on Y
         let y_min = 1.0;
         let y_max = 100_000.0;
 
@@ -66,7 +69,7 @@ impl ScalesExample {
         chart_state.set_axis(
             Self::AXIS_Y_LIN,
             Axis::new(Linear::new(y_min, y_max), axis::Position::Left)
-                .with_tick_renderer(linear_axis_tick_renderer) // Custom colored renderer
+                .with_tick_renderer(linear_axis_tick_renderer)
                 .skip_overlapping_labels(6.0),
         );
 
@@ -74,23 +77,23 @@ impl ScalesExample {
         chart_state.set_axis(
             Self::AXIS_Y_LOG,
             Axis::new(Logarithmic::new(10.0, y_min, y_max), axis::Position::Left)
-                .with_tick_renderer(log_axis_tick_renderer) // Custom colored renderer
+                .with_tick_renderer(log_axis_tick_renderer)
                 .skip_overlapping_labels(6.0),
         );
 
-        // Prepare data
-        let (points, markers) = generate_exponential_data();
+        // Prepare data (Linear growth)
+        let (points, markers) = generate_linear_data();
 
         (
             Self {
                 chart_state,
-                // Assign Blue to Linear
+                // Assign Blue to Linear Axis representation
                 linear_representation: StyleableData {
                     line: points.clone(),
                     markers: markers.clone(),
                     color: |t| t.palette().primary,
                 },
-                // Assign Red to Log
+                // Assign Red to Log Axis representation
                 log_representation: StyleableData {
                     line: points,
                     markers,
@@ -114,10 +117,10 @@ impl ScalesExample {
             // Draw Red line against Log Axis
             .plot_data(&self.log_representation, Self::AXIS_X, Self::AXIS_Y_LOG);
 
-        // Layout construction with lead bindings as requested
+        // Layout construction
         let header = column![
             text("Multi-Axis Comparison").size(24),
-            text("Both lines represent the exact same data (y = 10^x).")
+            text("Both lines represent the exact same linear data (y = 1000x).")
                 .size(14)
                 .color(Color::from_rgb(0.5, 0.5, 0.5)),
         ]
@@ -177,20 +180,26 @@ impl PlotData<f64> for StyleableData {
     }
 }
 
-fn generate_exponential_data() -> (Vec<PlotPoint<f64>>, Vec<PlotPoint<f64>>) {
-    let line = (0..=50)
+fn generate_linear_data() -> (Vec<PlotPoint<f64>>, Vec<PlotPoint<f64>>) {
+    // Generate linear data: y = 1000 * x
+    // We start x at 1.0 to ensure y >= 1000.0, avoiding Log(0) issues on the log axis.
+
+    let line = (1..=100)
         .map(|i| {
-            let x = i as f64 / 10.0;
-            let y = 10.0f64.powf(x);
+            let x = i as f64;
+            let y = 1000.0 * x;
             PlotPoint::new(x, y)
         })
         .collect();
 
-    let markers = (0..=5)
+    let markers = (0..=10)
         .map(|i| {
-            let x = i as f64;
-            let y = 10.0f64.powf(x);
-            PlotPoint::new(x, y)
+            let x = (i * 10) as f64;
+            // Handle 0 explicitly for safety, though the loop above skips it.
+            // If x is 0, we can't plot it on log, so we plot min value or skip.
+            let safe_x = if x < 1.0 { 1.0 } else { x };
+            let y = 1000.0 * safe_x;
+            PlotPoint::new(safe_x, y)
         })
         .collect();
 
@@ -207,7 +216,7 @@ fn x_axis_tick_renderer(ctx: TickContext<f64, Theme>) -> TickResult {
     }
 
     TickResult {
-        label: Some(ctx.label(format!("{:.1}", ctx.tick.value))),
+        label: Some(ctx.label(format!("{:.0}", ctx.tick.value))),
         tick_line: Some(ctx.tickline()),
         ..Default::default()
     }
@@ -219,11 +228,11 @@ fn linear_axis_tick_renderer(ctx: TickContext<f64, Theme>) -> TickResult {
         return TickResult::default();
     }
 
-    // Initialize values from context (ease of use)
+    // Initialize values from context
     let mut label = ctx.label(format!("{:.0}", ctx.tick.value));
     let mut tick_line = ctx.tickline();
 
-    // Overwrite colors
+    // Overwrite colors (Primary Blue)
     tick_line.color = ctx.theme.palette().primary;
     label.color = ctx.theme.palette().primary;
 
@@ -236,21 +245,29 @@ fn linear_axis_tick_renderer(ctx: TickContext<f64, Theme>) -> TickResult {
 
 // Red ticks for Log Scale
 fn log_axis_tick_renderer(ctx: TickContext<f64, Theme>) -> TickResult {
-    // Show more detail on logs to see the compression
+    // 1. Early exit for details too small to matter
     if ctx.tick.level > 1 {
         return TickResult::default();
     }
 
-    // Initialize values from context (ease of use)
-    let mut label = ctx.label(format!("{:.0}", ctx.tick.value));
+    // 2. Prepare the line (We need this for both Level 0 and Level 1)
     let mut tick_line = ctx.tickline();
-
-    // Overwrite colors
     tick_line.color = ctx.theme.palette().danger;
-    label.color = ctx.theme.palette().danger;
+
+    // 3. Prepare the label (ONLY for Level 0)
+    let label = if ctx.tick.level == 0 {
+        let mut label = ctx.label(format!("{:.0}", ctx.tick.value));
+        label.color = ctx.theme.palette().danger;
+        Some(label)
+    } else {
+        // Optional: You can make minor tick lines shorter or thinner here if you want
+        tick_line.width = 1.into();
+        tick_line.length = 4.into();
+        None
+    };
 
     TickResult {
-        label: Some(label),
+        label,
         tick_line: Some(tick_line),
         ..Default::default()
     }
