@@ -198,6 +198,7 @@ type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -
 /// let mut state: State<&str, f64> = State::new();
 /// state.set_axis("x_axis", Axis::new(Linear::new(0.0, 100.0), axis::Position::Bottom));
 /// state.set_axis("y_axis", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
+///
 /// let data = MyData;
 ///
 /// let chart = Chart::new(&state)
