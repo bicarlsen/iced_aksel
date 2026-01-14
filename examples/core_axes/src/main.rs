@@ -1,3 +1,11 @@
+//! # Axes Styling Showcase
+//!
+//! A comprehensive example demonstrating how to customize Axis visualization dynamically.
+//!
+//! This showcase contrasts two approaches to rendering Markers and Ticks:
+//! 1. **Simple:** Inheriting default styles and selectively overriding properties.
+//! 2. **Advanced:** Constructing visual elements from scratch for granular control.
+
 use iced::widget::checkbox;
 use iced::widget::text::LineHeight;
 use iced::{
@@ -14,14 +22,6 @@ use iced_aksel::{
     scale::Linear,
 };
 
-// # Axes Styling Showcase
-//
-// A comprehensive example demonstrating how to customize Axis visualization dynamically.
-//
-// This showcase contrasts two approaches to rendering Markers and Ticks:
-// 1. **Simple:** Inheriting default styles and selectively overriding properties.
-// 2. **Advanced:** Constructing visual elements from scratch for granular control.
-
 pub fn main() -> iced::Result {
     iced::application(AxesShowcase::new, AxesShowcase::update, AxesShowcase::view)
         .title("Axes Styling Showcase")
@@ -34,17 +34,22 @@ pub fn main() -> iced::Result {
 // Application State & Messages
 // -----------------------------------------------------------------------------
 
+/// Our application
 struct AxesShowcase {
+    /// The theme of the application
     theme: Theme,
-    // The Chart State holds the data and the configuration of the axes.
+    /// The Chart State holds the data and the configuration of the axes.
     state: State<&'static str, f64>,
-    // Toggles
+    /// Toggles
     skip_label_overlapping: bool,
 }
 
+/// The message enum for the application
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// The theme was changed
     ThemeChanged(Theme),
+    /// Skip-overlapping checkbox was toggled
     SkipOverlappingToggle(bool),
 }
 
@@ -53,19 +58,15 @@ impl AxesShowcase {
     const X: &'static str = "x";
     const Y: &'static str = "y";
 
-    fn new() -> (Self, iced::Task<Message>) {
-        let theme = Theme::Dark;
+    fn new() -> Self {
         // We initialize the chart state immediately
         let initial_state = configure_chart_axes(true);
 
-        (
-            Self {
-                state: initial_state,
-                theme,
-                skip_label_overlapping: true,
-            },
-            iced::Task::none(),
-        )
+        Self {
+            state: initial_state,
+            theme: Theme::Dark,
+            skip_label_overlapping: true,
+        }
     }
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
