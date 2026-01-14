@@ -1,3 +1,8 @@
+//! # Scales showcase
+//!
+//! Showcases linear and logarithmic scales (With mulitple scales on the Y-axis)
+//!
+
 use iced::{
     Color, Length, Theme,
     alignment::Horizontal,
@@ -15,7 +20,7 @@ use iced_aksel::{
 // Application Entry
 // -----------------------------------------------------------------------------
 
-pub fn main() -> iced::Result {
+fn main() -> iced::Result {
     iced::application(
         ScalesExample::new,
         ScalesExample::update,
@@ -30,7 +35,7 @@ pub fn main() -> iced::Result {
 // Application State
 // -----------------------------------------------------------------------------
 
-pub struct ScalesExample {
+struct ScalesExample {
     chart_state: State<&'static str, f64>,
 
     // We wrap the data to give them distinct colors
@@ -39,14 +44,14 @@ pub struct ScalesExample {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {}
+enum Message {}
 
 impl ScalesExample {
     const AXIS_X: &'static str = "x";
     const AXIS_Y_LIN: &'static str = "y_linear";
     const AXIS_Y_LOG: &'static str = "y_log";
 
-    pub fn new() -> (Self, iced::Task<Message>) {
+    fn new() -> (Self, iced::Task<Message>) {
         // Range: 0 to 100 on X
         let x_min = 0.0;
         let x_max = 100.0;
@@ -102,11 +107,11 @@ impl ScalesExample {
         )
     }
 
-    pub fn update(&mut self, _message: Message) -> iced::Task<Message> {
+    fn update(&mut self, _message: Message) -> iced::Task<Message> {
         iced::Task::none()
     }
 
-    pub fn view(&self) -> iced::Element<'_, Message> {
+    fn view(&self) -> iced::Element<'_, Message> {
         // We create the chart and attach the same data twice,
         // mapping it to different Y-axes.
         let chart = Chart::new(&self.chart_state)

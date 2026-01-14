@@ -1,3 +1,8 @@
+//! # Quick-start template/showcase
+//!
+//! Showcases a simple use-case of various parts of the library.
+//!
+
 use iced::{
     Element, Length, Theme, mouse,
     widget::{column, container, text},
@@ -13,7 +18,7 @@ use iced_aksel::{
 // -----------------------------------------------------------------------------
 // 1. Application Entry
 // -----------------------------------------------------------------------------
-pub fn main() -> iced::Result {
+fn main() -> iced::Result {
     iced::application(
         ChartPlayground::new,
         ChartPlayground::update,

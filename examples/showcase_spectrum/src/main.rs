@@ -18,8 +18,8 @@ use iced_aksel::{
     scale, shape,
 };
 
-pub mod audio;
-pub mod math;
+mod audio;
+mod math;
 
 type AxisId = &'static str;
 

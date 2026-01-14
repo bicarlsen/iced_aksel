@@ -1,3 +1,11 @@
+//! # Advanced dashboard showcase
+//!
+//! Showcases more advanced use of the shape API to create a comprehensive dashboard with a Gauge,
+//! Barchart and line-chart.
+//!
+//! Also, has fancy animations!
+//!
+
 use iced::{
     Alignment, Border, Color, Element, Length, Padding, Subscription, Task, Theme, font, keyboard,
     time::Instant,
@@ -15,7 +23,7 @@ use line::LineChart;
 
 use crate::line::LineSeries;
 
-pub fn main() -> iced::Result {
+fn main() -> iced::Result {
     ExampleApp::run()
 }
 

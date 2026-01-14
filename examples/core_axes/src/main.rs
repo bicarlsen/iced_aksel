@@ -22,7 +22,7 @@ use iced_aksel::{
     scale::Linear,
 };
 
-pub fn main() -> iced::Result {
+fn main() -> iced::Result {
     iced::application(AxesShowcase::new, AxesShowcase::update, AxesShowcase::view)
         .title("Axes Styling Showcase")
         .theme(AxesShowcase::theme)
