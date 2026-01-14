@@ -18,7 +18,6 @@ use iced_core::{Color, Point, Vector};
 /// This acts as a **direct writer**. It skips general-purpose geometry math and instead uses
 /// specific, optimized formulas. For example, it knows that a rectangle is always made of
 /// exactly two triangles, so it calculates and writes those six points directly to memory.
-#[derive(Default)]
 pub struct ManualTessellator;
 
 impl ManualTessellator {
@@ -27,8 +26,9 @@ impl ManualTessellator {
     // =========================================================================
 
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_fill_rect(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         x_min: f32,
         y_min: f32,
@@ -43,7 +43,7 @@ impl ManualTessellator {
     #[inline]
     #[allow(clippy::too_many_arguments)]
     pub fn draw_stroke_rect(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         x_min: f32,
         y_min: f32,
@@ -68,7 +68,7 @@ impl ManualTessellator {
     #[inline]
     #[allow(clippy::too_many_arguments)]
     pub fn draw_fill_circle(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         center_x: f32,
         center_y: f32,
@@ -85,7 +85,7 @@ impl ManualTessellator {
     #[inline]
     #[allow(clippy::too_many_arguments)]
     pub fn draw_stroke_circle(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         center_x: f32,
         center_y: f32,
@@ -115,7 +115,7 @@ impl ManualTessellator {
 
     #[inline]
     pub fn draw_line_segment(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         start: Point,
         end: Point,
@@ -127,7 +127,7 @@ impl ManualTessellator {
 
     #[inline]
     pub fn draw_arrowhead(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         tip: Point,
         direction: Vector, // CHANGED: Point -> Vector
@@ -151,7 +151,7 @@ impl ManualTessellator {
 
     #[inline]
     pub fn draw_fill_triangle(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         p1: Point,
         p2: Point,
@@ -163,7 +163,7 @@ impl ManualTessellator {
 
     #[inline]
     pub fn draw_stroke_triangle(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         outer: [Point; 3],
         inner: [Point; 3],
@@ -173,13 +173,13 @@ impl ManualTessellator {
     }
 
     #[inline]
-    pub fn draw_fan(&mut self, buffer: &mut MeshBuffer, points: &[Point], color: Color) {
+    pub fn draw_fan(&self, buffer: &mut MeshBuffer, points: &[Point], color: Color) {
         polygon::draw_fan(buffer, points, color);
     }
 
     #[inline]
     pub fn draw_ring(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         outer_points: &[Point],
         inner_points: &[Point],
@@ -195,7 +195,7 @@ impl ManualTessellator {
     #[inline]
     #[allow(clippy::too_many_arguments)]
     pub fn draw_arc_strip(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         center_x: f32,
         center_y: f32,
@@ -225,7 +225,7 @@ impl ManualTessellator {
 
     #[inline]
     pub fn draw_mesh(
-        &mut self,
+        &self,
         buffer: &mut MeshBuffer,
         vertices: &[Point],
         indices: &[u32],

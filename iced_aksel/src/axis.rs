@@ -306,7 +306,9 @@ impl<D: Float, Theme> Axis<D, Theme> {
     }
 
     // TODO: Slight refactor to make it more readable
+    // And to make it have less arguments
     /// Draws the axis, including ticks, grid lines, labels, and the interactive marker.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn draw<Renderer>(
         &self,
         renderer: &mut Renderer,
@@ -471,7 +473,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                 Rectangle {
                     x: bounds.x + bounds.width - width,
                     y: bounds.y,
-                    width: width,
+                    width,
                     height: bounds.height,
                 }
             }
@@ -480,7 +482,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                 Rectangle {
                     x: bounds.x,
                     y: bounds.y,
-                    width: width,
+                    width,
                     height: bounds.height,
                 }
             }
@@ -505,7 +507,6 @@ impl<D: Float, Theme> Axis<D, Theme> {
     ///
     /// # Arguments
     /// * `normalized_position` - A value in the range 0.0..=1.0 that matches the axis orientation
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_marker_overlay<Renderer>(
         &self,
         renderer: &mut Renderer,
@@ -521,8 +522,8 @@ impl<D: Float, Theme> Axis<D, Theme> {
 
         // Convert normalized position (0.0..=1.0) to screen coordinates
         let pos = match orientation {
-            Orientation::Horizontal => bounds.x + bounds.width * normalized_position,
-            Orientation::Vertical => bounds.y + bounds.height * (1.0 - normalized_position),
+            Orientation::Horizontal => bounds.width.mul_add(normalized_position, bounds.x),
+            Orientation::Vertical => bounds.height.mul_add(1.0 - normalized_position, bounds.y),
         };
         let paragraph = Plain::<Renderer::Paragraph>::new(Text {
             content: marker.label.content,
@@ -682,6 +683,8 @@ impl<D: Float, Theme> Axis<D, Theme> {
     }
 
     /// Lays out and renders axis labels, resolving overlaps if the policy requires it.
+    // TODO: refactor arguments
+    #[allow(clippy::too_many_arguments)]
     fn layout_labels<Renderer>(
         &self,
         renderer: &mut Renderer,

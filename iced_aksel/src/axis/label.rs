@@ -41,7 +41,7 @@ pub struct Label {
 impl Label {
     /// Create a label directly from a String and LabelStyle. This is generally used as a shorthand
     /// builder.
-    pub fn from_style(content: String, style: LabelStyle) -> Self {
+    pub const fn from_style(content: String, style: LabelStyle) -> Self {
         Self {
             content,
             font: None,

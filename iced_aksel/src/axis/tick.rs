@@ -136,7 +136,7 @@ impl<D: Float, Theme> TickContext<'_, D, Theme> {
 
     /// Creates a new [`Label`] with applied styling and supplied content. Only one [`Label`] can be returned in the
     /// [`TickResult`]
-    pub fn label(&self, content: String) -> super::Label {
+    pub const fn label(&self, content: String) -> super::Label {
         super::Label::from_style(content, self.style.label)
     }
 

@@ -50,7 +50,7 @@ pub struct LyonAdapter<'a, C> {
 }
 
 impl<'a, C> LyonAdapter<'a, C> {
-    pub fn new(mesh: &'a mut Indexed<SolidVertex2D>, constructor: C) -> Self {
+    pub const fn new(mesh: &'a mut Indexed<SolidVertex2D>, constructor: C) -> Self {
         Self { mesh, constructor }
     }
 }

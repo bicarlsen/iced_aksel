@@ -30,7 +30,7 @@ pub fn draw_arc_strip(
     let step_angle = total_sweep / segments as f32;
 
     for i in 0..=segments {
-        let theta = start_angle + (i as f32 * step_angle);
+        let theta = (i as f32).mul_add(step_angle, start_angle);
         let (sin, cos) = theta.sin_cos();
 
         // Inner Vertex

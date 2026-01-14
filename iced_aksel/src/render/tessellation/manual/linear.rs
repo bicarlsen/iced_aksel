@@ -49,7 +49,7 @@ pub fn draw_line_segment(
     let dy = end.y - start.y;
 
     // Compute length for normalization
-    let length_sq = dx * dx + dy * dy;
+    let length_sq = dx.mul_add(dx, dy * dy);
     if length_sq < 0.0001 {
         return;
     } // Prevent division by zero
@@ -161,7 +161,7 @@ pub fn draw_dashed_line_segment(
 
     let dx = end.x - start.x;
     let dy = end.y - start.y;
-    let length = (dx * dx + dy * dy).sqrt();
+    let length = dx.hypot(dy);
 
     if length < 0.0001 {
         return;
@@ -172,16 +172,17 @@ pub fn draw_dashed_line_segment(
 
     let mut current_dist = 0.0;
 
+    #[allow(clippy::while_float)]
     while current_dist < length {
         let segment_end_dist = (current_dist + dash_length).min(length);
 
         let seg_start = Point::new(
-            start.x + dir_x * current_dist,
-            start.y + dir_y * current_dist,
+            dir_x.mul_add(current_dist, start.x),
+            dir_y.mul_add(current_dist, start.y),
         );
         let seg_end = Point::new(
-            start.x + dir_x * segment_end_dist,
-            start.y + dir_y * segment_end_dist,
+            dir_x.mul_add(segment_end_dist, start.x),
+            dir_y.mul_add(segment_end_dist, start.y),
         );
 
         draw_line_segment(buffer, seg_start, seg_end, width, color);
@@ -335,6 +336,7 @@ pub fn draw_horizontal_dashed_line(
 
     // We can manually push vertices here for maximum speed,
     // rather than calling draw_horizontal_line repeatedly.
+    #[allow(clippy::while_float)]
     while current_x < end {
         let seg_end_x = (current_x + dash_length).min(end);
 
@@ -410,6 +412,7 @@ pub fn draw_vertical_dashed_line(
 
     let packed_color = pack(color);
 
+    #[allow(clippy::while_float)]
     while current_y < end {
         let seg_end_y = (current_y + dash_length).min(end);
 

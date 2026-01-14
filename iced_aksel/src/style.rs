@@ -22,8 +22,6 @@
 use iced_core::text::LineHeight;
 use iced_core::{Border, Color, Padding, Pixels, Shadow, Theme};
 
-
-
 /// Global style of a `Chart`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Style {
@@ -44,7 +42,7 @@ impl DashStyle {
     /// Creates a new `DashStyle` from line_length and gap_length.
     ///
     /// This will draw a line in a pattern of line->gap->line->gap etc. based on inputs here.
-    pub fn new(line_length: f32, gap_length: f32) -> Self {
+    pub const fn new(line_length: f32, gap_length: f32) -> Self {
         Self {
             line_length,
             gap_length,

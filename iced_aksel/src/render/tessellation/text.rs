@@ -434,6 +434,8 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
             }
         }
     }
+
+    drop(lock); // To avoid clippy lint
 }
 
 /// Transforms local glyph geometry to world/screen space and pushes it to the mesh buffer.

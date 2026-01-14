@@ -64,7 +64,7 @@ impl Default for Tessellator {
     fn default() -> Self {
         Self {
             complex: ComplexTessellator::default(),
-            manual: manual::ManualTessellator::default(),
+            manual: manual::ManualTessellator,
             scratch_geometry: VertexBuffers::new(),
             glyph_cache: TextTessellationCache::new(),
             quality: 1.0,
@@ -104,7 +104,7 @@ impl Tessellator {
     }
 
     /// Returns the current quality multiplier.
-    pub fn quality(&self) -> f32 {
+    pub const fn quality(&self) -> f32 {
         self.quality
     }
 
@@ -213,6 +213,7 @@ impl Tessellator {
     /// # Performance
     /// This method automatically adjusts the number of segments (vertices) used to approximate the curve
     /// based on the radius and the current [`quality`](Self::quality) setting.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_circle<D>(
         &mut self,
         buffer: &mut MeshBuffer,
@@ -413,6 +414,7 @@ impl Tessellator {
     ///
     /// * `vertices`: The number of sides (must be >= 3).
     /// * `rotation`: Rotation in degrees. 0.0 aligns the first vertex to the North.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_polygon<D>(
         &mut self,
         buffer: &mut MeshBuffer,
@@ -484,7 +486,9 @@ impl Tessellator {
 
         let direction_vector = raw_end - raw_start;
         // Avoid NaN math on degenerate lines
-        if (direction_vector.x * direction_vector.x + direction_vector.y * direction_vector.y)
+        if direction_vector
+            .x
+            .mul_add(direction_vector.x, direction_vector.y * direction_vector.y)
             < 1e-12
         {
             return;
@@ -532,10 +536,10 @@ impl Tessellator {
         let has_end_arrow = arrows.1 && !extensions.1;
 
         if has_start_arrow {
-            draw_start = draw_start + direction * arrow_len;
+            draw_start += direction * arrow_len;
         }
         if has_end_arrow {
-            draw_end = draw_end - direction * arrow_len;
+            draw_end -= direction * arrow_len;
         }
 
         // 3. Draw Line Body
@@ -660,6 +664,7 @@ impl Tessellator {
     /// Draws a quadratic or cubic Bézier curve.
     ///
     /// * `control_2`: If `None`, draws a Quadratic curve. If `Some`, draws a Cubic curve.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_bezier<D>(
         &mut self,
         buffer: &mut MeshBuffer,
@@ -919,7 +924,6 @@ impl Tessellator {
                     outer.for_each_cubic_bezier(&mut |seg| {
                         builder.cubic_bezier_to(seg.ctrl1, seg.ctrl2, seg.to);
                     });
-                    builder.close();
                 } else {
                     // Donut Sector
                     // 1. Move to Inner Start
@@ -963,8 +967,9 @@ impl Tessellator {
                     inner.for_each_cubic_bezier(&mut |seg| {
                         builder.cubic_bezier_to(seg.ctrl1, seg.ctrl2, seg.to);
                     });
-                    builder.close();
                 }
+
+                builder.close();
             }
 
             let tolerance = 0.2 / self.quality.max(0.1);

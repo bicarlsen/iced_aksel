@@ -33,7 +33,7 @@ impl Bounds {
 /// If the vector length is near zero, returns a zero vector.
 #[inline]
 pub fn normalize(v: Vector) -> Vector {
-    let len_sq = v.x * v.x + v.y * v.y;
+    let len_sq = v.x.mul_add(v.x, v.y * v.y);
     if len_sq < 1e-8 {
         Vector::new(0.0, 0.0)
     } else {
@@ -63,7 +63,7 @@ pub fn is_convex(points: &[Point]) -> bool {
         let dy2 = p3.y - p2.y;
 
         // 2D Cross Product (Z component)
-        let cross_z = dx1 * dy2 - dy1 * dx2;
+        let cross_z = dx1.mul_add(dy2, -(dy1 * dx2));
 
         if cross_z.abs() < 1e-5 {
             continue;
@@ -91,7 +91,7 @@ pub fn generate_ring(center: Point, radius: f32, vertices: u16, rotation: f32) -
     let step = std::f32::consts::TAU / vertices as f32;
 
     for i in 0..vertices {
-        let theta = start_angle + (i as f32 * step);
+        let theta = (i as f32).mul_add(step, start_angle);
         let (sin, cos) = theta.sin_cos();
         // Point + Vector (implicitly constructed)
         points.push(Point::new(
@@ -120,7 +120,7 @@ pub fn compute_inset_vertex(prev: Point, curr: Point, next: Point, distance: f32
 
     // 3. Calculate the sine of the angle between the two vectors.
     // If this is close to 0, the lines are parallel or the angle is 180.
-    let corner_sin = (v1.x * v2.y - v1.y * v2.x).abs();
+    let corner_sin = v1.x.mul_add(v2.y, -(v1.y * v2.x)).abs();
 
     // SAFETY CHECK 1: Parallel lines (Angle ~ 0 or 180)
     // Just shift perpendicularly, don't try to compute a corner.
@@ -130,7 +130,7 @@ pub fn compute_inset_vertex(prev: Point, curr: Point, next: Point, distance: f32
 
     // 4. Calculate the "Miter" vector (the direction of the corner bisection)
     let combined = v1 - v2;
-    let len_sq = combined.x * combined.x + combined.y * combined.y;
+    let len_sq = combined.x.mul_add(combined.x, combined.y * combined.y);
     let len = len_sq.sqrt();
 
     // SAFETY CHECK 2: Degenerate geometry (points on top of each other)
@@ -152,7 +152,7 @@ pub fn compute_inset_vertex(prev: Point, curr: Point, next: Point, distance: f32
     let miter = combined * clamped_len;
 
     // 7. Apply offset based on winding order (Convexity check)
-    let cross = v1.x * v2.y - v1.y * v2.x;
+    let cross = v1.x.mul_add(v2.y, -(v1.y * v2.x));
     if cross < 0.0 {
         curr - miter
     } else {
@@ -268,12 +268,12 @@ pub fn clip_infinite_line(
 
     Some((
         Point::new(
-            line_start.x + delta_x * t_entry,
-            line_start.y + delta_y * t_entry,
+            delta_x.mul_add(t_entry, line_start.x),
+            delta_y.mul_add(t_entry, line_start.y),
         ),
         Point::new(
-            line_start.x + delta_x * t_exit,
-            line_start.y + delta_y * t_exit,
+            delta_x.mul_add(t_exit, line_start.x),
+            delta_y.mul_add(t_exit, line_start.y),
         ),
     ))
 }
@@ -327,7 +327,13 @@ pub fn clip_segment(start: Point, end: Point, bounds: Bounds) -> Option<(Point, 
     }
 
     Some((
-        Point::new(start.x + delta_x * t_enter, start.y + delta_y * t_enter),
-        Point::new(start.x + delta_x * t_exit, start.y + delta_y * t_exit),
+        Point::new(
+            delta_x.mul_add(t_enter, start.x),
+            delta_y.mul_add(t_enter, start.y),
+        ),
+        Point::new(
+            delta_x.mul_add(t_exit, start.x),
+            delta_y.mul_add(t_exit, start.y),
+        ),
     ))
 }
