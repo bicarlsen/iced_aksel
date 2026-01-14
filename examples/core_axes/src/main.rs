@@ -4,7 +4,9 @@ use iced::{
     Border, Color, Element, Font, Length, Padding, Shadow, Theme,
     widget::{column, container, pick_list, row, text},
 };
-use iced_aksel::axis::{Marker, MarkerBadge, MarkerContext, MarkerLine, TickContext};
+use iced_aksel::axis::{
+    Marker, MarkerBadge, MarkerContext, MarkerLine, MarkerPosition, TickContext,
+};
 use iced_aksel::style::{DashStyle, LabelStyle};
 use iced_aksel::{
     Axis, Chart, State,
@@ -105,7 +107,12 @@ impl AxesShowcase {
         // We wrap the chart in a container for visual framing
         let content = column![
             controls,
-            panel("Custom Axis Rendering", Chart::new(&self.state))
+            panel(
+                "Custom Axis Rendering",
+                Chart::new(&self.state)
+                    .marker(&Self::X, MarkerPosition::Cursor, simple_dynamic_marker)
+                    .marker(&Self::Y, MarkerPosition::Cursor, advanced_dynamic_marker),
+            )
         ]
         .spacing(20)
         .padding(20);
@@ -132,7 +139,6 @@ fn configure_chart_axes(skip_overlapping_labels: bool) -> State<&'static str, f6
 
     let mut x_axis = Axis::new(x_scale, axis::Position::Bottom)
         // Renderers allow us to hijack the drawing process of specific elements
-        .with_marker_renderer(simple_dynamic_marker())
         .with_tick_renderer(simple_tick_result())
         .without_grid(); // Clean look, no vertical grid lines
 
@@ -142,7 +148,6 @@ fn configure_chart_axes(skip_overlapping_labels: bool) -> State<&'static str, f6
     let mut y_axis = Axis::new(y_scale, axis::Position::Left)
         // We set a minimum gap (in pixels) between labels to prevent clutter
         .skip_overlapping_labels(6.)
-        .with_marker_renderer(advanced_dynamic_marker())
         .with_tick_renderer(advanced_tick_result());
 
     // Apply the toggle setting from the UI
@@ -155,94 +160,6 @@ fn configure_chart_axes(skip_overlapping_labels: bool) -> State<&'static str, f6
     state.set_axis(AxesShowcase::Y, y_axis);
 
     state
-}
-
-// -----------------------------------------------------------------------------
-// Renderers: The logic for how things look
-// -----------------------------------------------------------------------------
-
-/// A "Simple" marker renderer.
-/// Strategy: Ask the context for the default marker, then just change the color.
-fn simple_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
-    move |ctx: MarkerContext<f64>| {
-        // Logic: Color changes if value is in the lower or upper half
-        let relative_color = if ctx.normalized_position <= 0.5 {
-            ctx.theme.palette().warning
-        } else {
-            ctx.theme.palette().danger
-        };
-
-        // 1. Generate the default marker with standard formatting
-        let default_marker = ctx.marker(format!("{:.2}", ctx.value));
-
-        // 2. Update only the fields we care about
-        Some(Marker {
-            line: MarkerLine {
-                color: relative_color,
-                ..default_marker.line
-            },
-            badge: MarkerBadge {
-                background: relative_color,
-                ..default_marker.badge
-            },
-            ..default_marker
-        })
-    }
-}
-
-/// A "Simple" tick renderer.
-/// Strategy: Standard text formatting, standard lines.
-fn simple_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
-    move |ctx: TickContext<f64>| {
-        let text = format!("{:.2}", ctx.tick.value);
-
-        TickResult {
-            label: Some(ctx.label(text)),
-            tick_line: Some(ctx.tickline()),
-            grid_line: Some(ctx.gridline()),
-            label_priority: None,
-        }
-    }
-}
-
-/// An "Advanced" marker renderer.
-/// Strategy: Build every component (Label, Line, Badge) manually for pixel-perfect control.
-fn advanced_dynamic_marker() -> impl Fn(MarkerContext<f64>) -> Option<Marker> + 'static {
-    move |ctx: MarkerContext<f64>| {
-        // Interpolate color based on position (0.0 to 1.0)
-        let lerp_color = color_lerped(
-            &ctx.theme.palette().danger,
-            &ctx.theme.palette().warning,
-            ctx.normalized_position,
-        );
-
-        // 1. Custom Label Styling
-        let label = Label::from_style(
-            format!("{:.2}", ctx.value),
-            LabelStyle {
-                size: 12.into(),
-                color: ctx.theme.palette().text,
-                padding: 4.into(),
-                line_height: LineHeight::Relative(1.0),
-            },
-        );
-
-        // 2. Custom Line styling (thinner, with a gap)
-        let line = MarkerLine {
-            color: lerp_color,
-            width: 1.into(),
-            gap: 4.into(),
-        };
-
-        // 3. Custom Badge styling
-        let badge = MarkerBadge {
-            background: lerp_color,
-            border: Border::default().rounded(4.),
-            shadow: Shadow::default(),
-        };
-
-        Some(Marker { label, badge, line })
-    }
 }
 
 /// An "Advanced" tick renderer.
@@ -318,6 +235,91 @@ fn panel<'a>(title: &'a str, chart: Chart<'a, &'static str, f64, Message>) -> El
     .spacing(10)
     .width(Length::Fill)
     .into()
+}
+
+fn simple_dynamic_marker(ctx: MarkerContext<f64>) -> Option<Marker> {
+    if !ctx.cursor_on_plot && !ctx.cursor_on_axis {
+        // Never render markers if cursor isn't on plot or axis
+        return None;
+    }
+
+    // Example: Change color based on data thresholds
+    let badge_color = if ctx.value <= 50.0 {
+        ctx.theme.palette().warning
+    } else {
+        ctx.theme.palette().danger
+    };
+
+    // --- THE EASY WAY ---
+    // We use `ctx.marker(String)` to generate a fully populated default Marker.
+    // This allows us to use Rust's struct update syntax (default) to
+    // only override the specific fields we want to change.
+
+    let default_marker = ctx.marker(format!("{:.2}", ctx.value));
+
+    Some(Marker {
+        badge: MarkerBadge {
+            background: badge_color, // Override only the background color
+            ..default_marker.badge   // Keep the rest (border, shadow, radius) default
+        },
+        ..default_marker // Keep the label and line styles default
+    })
+}
+
+fn advanced_dynamic_marker(ctx: MarkerContext<f64>) -> Option<Marker> {
+    // --- THE MANUAL WAY ---
+    // For full control, we define every aspect of the marker manually.
+    // A marker consists of 3 parts: Label, Badge, and Line.
+    if !ctx.cursor_on_plot && !ctx.cursor_on_axis {
+        // Never render markers if cursor isn't on plot or axis
+        return None;
+    }
+
+    let lerp_color = color_lerped(
+        &ctx.theme.palette().danger,
+        &ctx.theme.palette().warning,
+        ctx.normalized_position,
+    );
+
+    // 1. Label: The text content and its font styling
+    let label_text = format!("{:.2}", ctx.value);
+    let label_style = LabelStyle {
+        size: 12.into(),
+        color: ctx.theme.palette().text,
+        padding: 4.into(),
+        line_height: LineHeight::Relative(1.0),
+    };
+    let label = Label::from_style(label_text, label_style);
+
+    // 2. Line: The visual connector between the plot data and the badge
+    let line = MarkerLine {
+        color: lerp_color,
+        width: 1.into(),
+        gap: 4.into(),
+    };
+
+    // 3. Badge: The container/box surrounding the text
+    let badge = MarkerBadge {
+        background: lerp_color,
+        border: Border::default().rounded(4.),
+        shadow: Shadow::default(),
+    };
+
+    Some(Marker { label, badge, line })
+}
+
+fn simple_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
+    move |ctx: TickContext<f64>| {
+        let text = format!("{:.2}", ctx.tick.value);
+        let label = ctx.label(text);
+
+        TickResult {
+            label: Some(label),
+            tick_line: Some(ctx.tickline()),
+            grid_line: Some(ctx.gridline()),
+            label_priority: None,
+        }
+    }
 }
 
 fn color_lerped(start: &Color, end: &Color, v: f32) -> Color {

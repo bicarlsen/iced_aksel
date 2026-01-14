@@ -1,6 +1,103 @@
+use aksel::Float;
 use iced_core::{Border, Color, Pixels, Rectangle, Shadow};
 
-use crate::style::{BadgeStyle, MarkerLineStyle, MarkerStyle};
+use crate::{
+    axis::Orientation,
+    style::{AxisStyle, BadgeStyle, MarkerLineStyle, MarkerStyle},
+};
+
+/// The position of a marker
+///
+/// Used when setting markers for an axis on a chart via. [`crate::Chart::marker`] or
+/// [`crate::Chart::marker_maybe`]
+///
+/// ```rust,no_run
+/// # use iced_aksel::{Chart, MarkerPosition};
+/// Chart::new(&self.state)
+///     // Set marker to follow cursor
+///     .marker("axis_id", MarkerPosition::Cursor, |ctx| { Some(ctx.marker()) })
+///     // Set marker at domain value 100.0
+///     .marker("axis_id", MarkerPosition::Value(100.0), |ctx| { Some(ctx.marker()) })
+///     // Set marker in the middle of the axis
+///     .marker("axis_id", MarkerPosition::Normalized(0.5), |ctx| { Some(ctx.marker()) })
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum MarkerPosition<D> {
+    /// A specific value of the domain. The marker will not render if the value is outside of the
+    /// axis-bounds
+    Value(D),
+    /// A normalized value (percentage) of the axis
+    Normalized(f32),
+    /// Follow the cursor
+    Cursor,
+}
+
+/// A boxed function that renders a marker given context, returning `Some(Marker)` if rendering should occur.
+pub type MarkerRendererFn<D, Theme> = Box<dyn Fn(MarkerContext<D, Theme>) -> Option<Marker>>;
+
+/// A request to render a marker on a specific axis at a given position.
+///
+/// Created via [`crate::Chart::marker`] or [`crate::Chart::marker_maybe`] and processed during rendering.
+pub struct MarkerRequest<'a, AxisId, D, Theme = iced_core::Theme> {
+    pub(crate) position: MarkerPosition<D>,
+    pub(crate) axis_id: &'a AxisId,
+    pub(crate) renderer: MarkerRendererFn<D, Theme>,
+}
+
+impl<AxisId: std::hash::Hash + Eq + Clone, D: Float, Theme> MarkerRequest<'_, AxisId, D, Theme> {
+    pub(crate) fn create_marker(
+        &self,
+        axis: &super::Axis<D, Theme>,
+        axis_bounds: &Rectangle,
+        plot_bounds: &Rectangle,
+        cursor: iced_core::mouse::Cursor,
+        style: &AxisStyle,
+        theme: &Theme,
+    ) -> Option<(Marker, f32)> {
+        let (&domain_min, &domain_max) = axis.domain();
+
+        let mut style = *style;
+        if let Some(style_override) = axis.style_override.as_ref() {
+            style_override.borrow_mut()(&mut style)
+        };
+
+        let cursor_on_plot = cursor.position_over(*plot_bounds);
+        let cursor_on_axis = cursor.position_over(*axis_bounds);
+
+        let (value, normalized_position) = match self.position {
+            MarkerPosition::Value(v) if (domain_min..=domain_max).contains(&v) => {
+                (v, axis.normalize(&v))
+            }
+            MarkerPosition::Normalized(n) if ((0.)..=1.).contains(&n) => (axis.denormalize(n), n),
+            MarkerPosition::Cursor => {
+                let point = cursor_on_plot.or(cursor_on_axis)?;
+
+                let pos = match axis.orientation() {
+                    Orientation::Horizontal => point.x,
+                    Orientation::Vertical => point.y,
+                };
+
+                let normalized = axis.screen_to_normalized(pos, axis_bounds);
+                let value = axis.denormalize(normalized);
+                (value, normalized)
+            }
+            _ => return None, // We can't render - Outside of bounds
+        };
+
+        let ctx = MarkerContext {
+            value,
+            normalized_position,
+            scale_domain: (domain_min, domain_max),
+            style: &style.marker,
+            axis_bounds,
+            cursor_on_plot: cursor_on_plot.is_some(),
+            cursor_on_axis: cursor_on_axis.is_some(),
+            theme,
+        };
+
+        (self.renderer)(ctx).zip(Some(normalized_position))
+    }
+}
 
 /// Context provided to marker renderers for creating styled markers.
 ///
@@ -14,6 +111,10 @@ pub struct MarkerContext<'a, D, Theme = iced_core::Theme> {
     pub axis_bounds: &'a Rectangle,
     /// The domain (min, max) of the scale
     pub scale_domain: (D, D),
+    /// Whether the cursor is within the chart bounds
+    pub cursor_on_plot: bool,
+    /// Whether the cursor is within the axis bounds
+    pub cursor_on_axis: bool,
     /// The theme of the application
     pub theme: &'a Theme,
     /// The resolved style for the marker.
