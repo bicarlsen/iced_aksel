@@ -1,5 +1,5 @@
 use iced::{
-    Element, Length, Theme, keyboard, mouse,
+    Element, Length, Theme, mouse,
     widget::{column, container, text},
 };
 use iced_aksel::{

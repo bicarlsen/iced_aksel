@@ -5,7 +5,7 @@ use iced::{
 };
 use iced_aksel::{
     Axis, Chart, Measure, PlotPoint, State, Stroke,
-    axis::{self, Label, TickContext, TickResult},
+    axis::{self, TickContext, TickResult},
     plot::{Plot, PlotData},
     scale::{Linear, Logarithmic},
     shape::{Ellipse, Polyline},

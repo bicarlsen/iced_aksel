@@ -144,7 +144,8 @@ pub fn draw_arrowhead(
 }
 
 /// Draws a generic dashed line between two points.
-pub fn draw_dashed_line(
+#[allow(unused)]
+pub fn draw_dashed_line_segment(
     buffer: &mut MeshBuffer,
     start: Point,
     end: Point,

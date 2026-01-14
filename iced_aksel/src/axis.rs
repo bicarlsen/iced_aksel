@@ -19,7 +19,6 @@ use iced_core::{
     text::{Wrapping, paragraph::Plain},
     widget::text::Alignment,
 };
-use iced_graphics::{color, mesh::SolidVertex2D};
 
 use crate::{
     plot,
