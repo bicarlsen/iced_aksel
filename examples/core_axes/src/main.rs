@@ -325,9 +325,9 @@ fn simple_tick_result() -> impl Fn(TickContext<f64>) -> TickResult + 'static {
 fn color_lerped(start: &Color, end: &Color, v: f32) -> Color {
     let t = v.clamp(0.0, 1.0);
     Color {
-        r: start.r + (end.r - start.r) * t,
-        g: start.g + (end.g - start.g) * t,
-        b: start.b + (end.b - start.b) * t,
-        a: start.a + (end.a - start.a) * t,
+        r: (end.r - start.r).mul_add(t, start.r),
+        g: (end.g - start.g).mul_add(t, start.g),
+        b: (end.b - start.b).mul_add(t, start.b),
+        a: (end.a - start.a).mul_add(t, start.a),
     }
 }

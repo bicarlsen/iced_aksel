@@ -113,13 +113,11 @@ impl ChartPlayground {
                 if let (Some(x_ax), Some(y_ax)) = (
                     self.chart_state.axis_opt(&Self::X),
                     self.chart_state.axis_opt(&Self::Y),
+                ) && let (Some(x), Some(y)) = (
+                    x_ax.denormalize_opt(cursor_norm.x),
+                    y_ax.denormalize_opt(1.0 - cursor_norm.y), // Invert Y
                 ) {
-                    if let (Some(x), Some(y)) = (
-                        x_ax.denormalize_opt(cursor_norm.x),
-                        y_ax.denormalize_opt(1.0 - cursor_norm.y), // Invert Y
-                    ) {
-                        self.cursor = Some(PlotPoint::new(x, y));
-                    }
+                    self.cursor = Some(PlotPoint::new(x, y));
                 }
             }
             Message::Unhovered => self.cursor = None,
