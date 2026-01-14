@@ -69,16 +69,14 @@ impl ScalesExample {
         chart_state.set_axis(
             Self::AXIS_Y_LIN,
             Axis::new(Linear::new(y_min, y_max), axis::Position::Left)
-                .with_tick_renderer(linear_axis_tick_renderer)
-                .skip_overlapping_labels(6.0),
+                .with_tick_renderer(linear_axis_tick_renderer),
         );
 
         // 3. Setup Left Log Axis (Red) - Added to the same side!
         chart_state.set_axis(
             Self::AXIS_Y_LOG,
             Axis::new(Logarithmic::new(10.0, y_min, y_max), axis::Position::Left)
-                .with_tick_renderer(log_axis_tick_renderer)
-                .skip_overlapping_labels(6.0),
+                .with_tick_renderer(log_axis_tick_renderer),
         );
 
         // Prepare data (Linear growth)
