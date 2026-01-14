@@ -6,6 +6,7 @@ use crate::style::{DashStyle, GridLineStyle};
 ///
 /// Grid lines are drawn perpendicular to the axis at each tick position.
 ///
+/// Will usually be used in ['TickResult']
 /// # Example
 ///
 /// ```rust

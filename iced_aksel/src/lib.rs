@@ -321,7 +321,7 @@ where
         self
     }
 
-    /// Sets the font used to render the Axes labels and cursor
+    /// Sets the font used to render the `Axis` labels and [`Marker`]
     pub const fn axes_font(mut self, font: Font) -> Self {
         self.axis_font = Some(font);
         self
