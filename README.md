@@ -32,7 +32,7 @@ application logic.
 
 - 🖌️**Canvas-like API** – Implement `PlotData` to add any shape primitive
   (`shape::Line`, `shape::Ellipse`, `shape::Rectangle`, etc.) to the plot - Or
-  create your own shape primitives with the `Shape` trait!
+  create your own shape primitives with the `Shape` trait (Very WIP)!
 
 - 📏 **Internal Transformation** - Handles all the math headaches associated
   with calculating screen- vs. plot-coordinates.
