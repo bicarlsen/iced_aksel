@@ -136,19 +136,19 @@ impl<D: Float, Theme> TickContext<'_, D, Theme> {
         TickLine::from(self.style.tick)
     }
 
-    /// Creates a new [`GridLine`] with applied styling. Only one [`GridLine`] can be returned in the
+    /// Creates a new [`super::GridLine`] with applied styling. Only one [`super::GridLine`] can be returned in the
     /// [`TickResult`]
     pub fn gridline(&self) -> super::GridLine {
         super::GridLine::from(self.style.grid)
     }
 
-    /// Creates a new [`Label`] with applied styling and supplied content. Only one [`Label`] can be returned in the
+    /// Creates a new [`super::Label`] with applied styling and supplied content. Only one [`super::Label`] can be returned in the
     /// [`TickResult`]
     pub const fn label(&self, content: String) -> super::Label {
         super::Label::from_style(content, self.style.label)
     }
 
-    /// Creates a new [`Label`] with applied styling. Only one [`Label`] can be returned in the
+    /// Creates a new [`super::Label`] with applied styling. Only one [`super::Label`] can be returned in the
     /// [`TickResult`]
     pub fn label_empty(&self) -> super::Label {
         super::Label::from_style("".to_string(), self.style.label)

@@ -322,7 +322,7 @@ where
         self
     }
 
-    /// Sets the font used to render the `Axis` labels and [`Marker`]
+    /// Sets the font used to render the [`Axis`] labels and [`axis::Marker`]
     pub const fn axes_font(mut self, font: Font) -> Self {
         self.axis_font = Some(font);
         self
