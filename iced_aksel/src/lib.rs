@@ -1112,6 +1112,7 @@ where
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
+        renderer.start_layer(layout.bounds());
         let style = theme.style(&self.class);
         let bounds = layout.bounds();
         let plot_bounds = self.get_plot_layout(layout).bounds();
@@ -1242,6 +1243,7 @@ where
             renderer.fill_text(text, position.into(), color, bounds);
             renderer.end_layer();
         }
+        renderer.end_layer()
     }
 }
 
