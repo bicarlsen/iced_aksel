@@ -120,7 +120,7 @@ impl ChartPlayground {
                     self.chart_state.axis_opt(&Self::Y),
                 ) && let (Some(x), Some(y)) = (
                     x_ax.denormalize_opt(cursor_norm.x),
-                    y_ax.denormalize_opt(1.0 - cursor_norm.y), // Invert Y
+                    y_ax.denormalize_opt(cursor_norm.y),
                 ) {
                     self.cursor = Some(PlotPoint::new(x, y));
                 }
