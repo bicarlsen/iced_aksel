@@ -332,6 +332,8 @@ where
     ///
     /// The data will be plotted using the coordinate system defined by the two specified axes.
     /// Multiple layers can be added to a single chart, potentially using different axes.
+    ///
+    /// ***OBS***: It's important to note that the axis ID's **must** be present in [`State`]
     pub fn plot_data<T: plot::PlotData<Domain, Renderer, Theme>>(
         mut self,
         items: &'a T,
