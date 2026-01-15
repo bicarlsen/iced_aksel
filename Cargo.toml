@@ -3,7 +3,7 @@ members = ["iced_aksel", "examples/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 description = "A data-driven charting library for Iced"
 authors = ["Mads Ahlquist Jensen <madsaj10@outlook.com>", "Dennis Mellquist"]

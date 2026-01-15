@@ -322,7 +322,7 @@ where
         self
     }
 
-    /// Sets the font used to render the `Axis` labels and [`Marker`]
+    /// Sets the font used to render the [`Axis`] labels and [`axis::Marker`]
     pub const fn axes_font(mut self, font: Font) -> Self {
         self.axis_font = Some(font);
         self
@@ -1114,6 +1114,7 @@ where
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
+        renderer.start_layer(layout.bounds());
         let style = theme.style(&self.class);
         let bounds = layout.bounds();
         let plot_bounds = self.get_plot_layout(layout).bounds();
@@ -1244,6 +1245,7 @@ where
             renderer.fill_text(text, position.into(), color, bounds);
             renderer.end_layer();
         }
+        renderer.end_layer()
     }
 }
 
