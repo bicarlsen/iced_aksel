@@ -53,7 +53,7 @@ Add the following to your `Cargo.toml`:
 ```toml
 [dependencies]
 iced = { version = "0.14" }
-iced_aksel = { version = "0.1" }
+iced_aksel = { version = "0.2" }
 ```
 
 ## 🌟 Quick Start
