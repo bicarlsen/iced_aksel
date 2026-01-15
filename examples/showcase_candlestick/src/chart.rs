@@ -488,6 +488,7 @@ impl CandlestickChart {
                 }
             })
             .skip_overlapping_labels(8.0)
+            .with_thickness(70.0)
     }
 
     /// Factory for creating the Volume Y-axis.
