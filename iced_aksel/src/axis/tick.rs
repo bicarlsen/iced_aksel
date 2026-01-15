@@ -155,7 +155,7 @@ impl<D: Float, Theme> TickContext<'_, D, Theme> {
     }
     /// Creates a new [`LabelBadge`] with applied styling. Only one [`LabelBadge`] can be returned in the
     /// [`TickResult`]
-    pub fn label_badge(&self) -> super::LabelBadge {
+    pub const fn label_badge(&self) -> super::LabelBadge {
         self.style.label_badge
     }
 }
