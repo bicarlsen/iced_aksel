@@ -55,6 +55,7 @@
                 sqlite
                 wasm-bindgen-cli
                 wasm-pack
+                nodejs
 
                 # Libraries
                 m4 # REQUIRED for GMP/MPFR build
