@@ -4,10 +4,11 @@ use super::{Action, render};
 use iced_core::mouse;
 
 /// Internal chart memory
-pub struct Memory<AxisId> {
+pub struct Memory<AxisId, Renderer> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
     pub tessellators: RefCell<render::Tessellator>,
+    pub primitive_renderer: RefCell<render::primitive::PrimitiveRenderer<Renderer>>,
 }
 
 impl<AxisId> Memory<AxisId> {

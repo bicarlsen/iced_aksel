@@ -31,21 +31,42 @@ pub struct DragDelta {
     pub y: f32,
 }
 
+pub enum Backend {
+    Mesh,
+    Path,
+}
+
 /// Renderer requirements for plotting.
 ///
 /// This trait is automatically implemented for any renderer that satisfies the requirements.
 pub trait Renderer:
     iced_core::Renderer
-    + iced_graphics::mesh::Renderer
     + iced_core::text::Renderer<Font = iced_core::Font>
+    + iced_graphics::geometry::Renderer
+    + iced_graphics::mesh::Renderer
 {
+    fn backend(&self) -> Backend;
 }
 
-impl<T> Renderer for T where
-    T: iced_core::Renderer
-        + iced_graphics::mesh::Renderer
-        + iced_core::text::Renderer<Font = iced_core::Font>
-{
+impl Renderer for iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_tiny_skia::Renderer> {
+    fn backend(&self) -> Backend {
+        match self {
+            Self::Primary(_) => Backend::Mesh,
+            Self::Secondary(_) => Backend::Path,
+        }
+    }
+}
+
+impl Renderer for iced_wgpu::Renderer {
+    fn backend(&self) -> Backend {
+        Backend::Mesh
+    }
+}
+
+impl Renderer for iced_tiny_skia::Renderer {
+    fn backend(&self) -> Backend {
+        Backend::Path
+    }
 }
 
 /// Trait for drawable data on a plot.
@@ -93,7 +114,7 @@ pub struct Context<'a, D: Float, Renderer: self::Renderer = iced_renderer::Rende
     clip_bounds: &'a iced_core::Rectangle,
     renderer: &'a mut Renderer,
     tessellators: &'a mut Tessellator,
-    mesh_buffer: &'a mut MeshBuffer,
+    buffer: &'a mut Buffer,
 }
 
 impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
@@ -106,16 +127,18 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
     /// Renders a mesh-based shape (lines, polygons, etc.).
     ///
     /// Used internally by shapes to add geometry to the mesh buffer.
-    pub fn render_mesh<F>(&mut self, f: F)
+    pub fn render<F>(&mut self, f: F)
     where
-        F: FnOnce(&Transform<'a, D, f32, f32>, &mut MeshBuffer, &mut Tessellator),
+        F: FnOnce(&Transform<'a, D, f32, f32>, &mut Buffer, &mut Tessellator),
     {
         // Draw mesh
-        f(self.transform, self.mesh_buffer, self.tessellators);
+        f(self.transform, self.buffer, self.tessellators);
 
-        // If buffer exceeds limit, render the mesh
-        if self.mesh_buffer.vertices_count() >= self.mesh_buffer.limit() {
-            self.mesh_buffer.render(self.renderer, self.clip_bounds);
+        // If mesh buffer and exceeds limit, render the mesh
+        if let Buffer::Mesh(buffer) = self.buffer
+            && buffer.vertices_count() >= buffer.limit()
+        {
+            buffer.render(self.renderer, self.clip_bounds);
         }
     }
 }

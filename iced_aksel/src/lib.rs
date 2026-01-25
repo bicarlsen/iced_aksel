@@ -797,7 +797,7 @@ where
         layout: Layout<'_>,
         style: &style::Style,
         plot: Rectangle,
-        mesh: &mut render::MeshBuffer,
+        mesh: &mut plot::Buffer,
     ) {
         // Track the "inner-most" spine properties for each side
         let mut left: Option<(f32, Color)> = None;
@@ -927,7 +927,7 @@ where
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId>::new())
+        tree::State::new(Memory::<AxisId, Renderer>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -1128,8 +1128,8 @@ where
         // Pass the global quality setting to the tessellator
         tessellators.set_quality(self.quality);
 
-        // Create a new mesh buffer for this frame
-        let mut mesh_buffer = render::MeshBuffer::new(100_000);
+        // Create a new buffer for this frame
+        let mut buffer = renderer.construct_buffer();
 
         let screen_rect = ScreenRect {
             x: plot_bounds.x,
@@ -1149,16 +1149,16 @@ where
                 &style,
                 axis_layout,
                 &plot_bounds,
-                &mut mesh_buffer,
+                &buffer,
                 &bounds,
             );
         }
 
         // 2. Draw Spine Corners (Self-contained logic)
-        self.draw_spine_corners(layout, &style, plot_bounds, &mut mesh_buffer);
+        self.draw_spine_corners(layout, &style, plot_bounds, &mut buffer);
 
         // Flush the mesh buffer (draws all the lines/ticks aggregated so far)
-        mesh_buffer.render(renderer, &bounds);
+        buffer.render(renderer, &bounds);
 
         // 3. Render data layers
         for layer in &self.layers {
@@ -1171,7 +1171,7 @@ where
                 &mut tessellators,
                 renderer,
                 &plot_bounds,
-                &mut mesh_buffer,
+                &mut buffer,
                 &transform,
             );
 
@@ -1180,7 +1180,7 @@ where
         }
 
         // Flush the mesh buffer once more
-        mesh_buffer.render(renderer, &bounds);
+        buffer.render(renderer, &bounds);
 
         // 4. Render markers
         for marker_request in &self.markers {
@@ -1212,7 +1212,9 @@ where
         }
 
         // 5. Draw Debug Overlay (if enabled)
-        if self.debug {
+        if self.debug
+            && let plot::Buffer::Mesh(mesh_buffer) = buffer
+        {
             renderer.start_layer(bounds);
 
             let v_count = mesh_buffer.total_vertices();
