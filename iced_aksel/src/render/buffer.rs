@@ -11,7 +11,12 @@
 //! than making 10,000 calls of 1 triangle each.
 
 use iced_core::{Rectangle, Transformation};
+use iced_graphics::geometry::{Fill, Frame, Path};
 use iced_graphics::mesh::{self, SolidVertex2D};
+
+const PRE_ALLOC_PATHS: usize = 5000;
+const PRE_ALLOC_VERTICES: usize = 10_000;
+const PRE_ALLOC_INDICES: usize = 20_000;
 
 /// A simplified container for GPU vertex and index data.
 ///
@@ -81,7 +86,7 @@ impl MeshBuffer {
     /// Flushes the pending geometry to the `iced` renderer.
     ///
     /// This consumes the current internal buffer and resets it.
-    pub(crate) fn render<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
+    pub(crate) fn flush<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
     where
         R: mesh::Renderer,
     {
@@ -109,13 +114,8 @@ impl MeshBuffer {
     ///
     /// This is used by the `ManualTessellator` (for circles/rects) to push data directly.
     pub fn add(&mut self, indices: &[u32], vertices: &[SolidVertex2D]) {
-        let mesh = self.buffer.get_or_insert_with(|| mesh::Indexed {
-            vertices: Vec::with_capacity(vertices.len()),
-            indices: Vec::with_capacity(indices.len()),
-        });
-
+        let mesh = self.get_mesh_mut();
         let start_offset = mesh.vertices.len() as u32;
-
         mesh.vertices.extend_from_slice(vertices);
         // We must offset the new indices because they refer to the start of *their*
         // list, but we are appending them to the *end* of our global list.
@@ -130,8 +130,62 @@ impl MeshBuffer {
     pub(crate) fn get_mesh_mut(&mut self) -> &mut mesh::Indexed<SolidVertex2D> {
         self.buffer.get_or_insert_with(|| mesh::Indexed {
             // Pre-allocate a reasonable chunk of memory (10k vertices) to reduce re-allocations
-            vertices: Vec::with_capacity(10_000),
-            indices: Vec::with_capacity(20_000),
+            vertices: Vec::with_capacity(PRE_ALLOC_VERTICES),
+            indices: Vec::with_capacity(PRE_ALLOC_INDICES),
         })
+    }
+}
+
+pub struct PathBuffer {
+    paths: Option<Vec<(Path, Fill)>>,
+    paths_limit: usize,
+}
+
+impl PathBuffer {
+    pub const fn new(paths_limit: usize) -> Self {
+        Self {
+            paths: None,
+            paths_limit,
+        }
+    }
+
+    pub const fn paths_count(&self) -> usize {
+        if let Some(buffer) = &self.paths {
+            return buffer.len();
+        };
+        0
+    }
+
+    pub const fn limit(&self) -> usize {
+        self.paths_limit
+    }
+
+    pub(crate) fn flush<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
+    where
+        R: iced_graphics::geometry::Renderer,
+    {
+        if let Some(paths) = self.paths.take() {
+            if paths.is_empty() {
+                return;
+            }
+
+            // TODO: This might be a bit of a performance hog - Maybe there is a better way?
+            let mut frame = Frame::with_bounds(renderer, *clip_bounds);
+            paths
+                .into_iter()
+                .for_each(|(path, fill)| frame.fill(&path, fill));
+
+            renderer.draw_geometry(frame.into_geometry());
+        }
+    }
+
+    pub fn add(&mut self, path: Path, fill: Fill) {
+        let paths = self.get_paths_mut();
+        paths.push((path, fill));
+    }
+
+    pub fn get_paths_mut(&mut self) -> &mut Vec<(Path, Fill)> {
+        self.paths
+            .get_or_insert_with(|| Vec::with_capacity(PRE_ALLOC_PATHS))
     }
 }
