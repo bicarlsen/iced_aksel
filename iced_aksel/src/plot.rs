@@ -4,7 +4,7 @@
 //! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
 
 use crate::{
-    render::{MeshBuffer, Tessellator},
+    render::{MeshBuffer, Tessellator, primitive::Buffer},
     shape::Shape,
 };
 
@@ -124,21 +124,21 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
         self.renderer.default_font()
     }
 
-    /// Renders a mesh-based shape (lines, polygons, etc.).
+    /// Renders a shape (lines, polygons, etc.).
     ///
-    /// Used internally by shapes to add geometry to the mesh buffer.
+    /// Used internally by shapes to add geometry to the buffer.
     pub fn render<F>(&mut self, f: F)
     where
-        F: FnOnce(&Transform<'a, D, f32, f32>, &mut Buffer, &mut Tessellator),
+        F: FnOnce(&Transform<'a, D, f32, f32>, &mut Buffer),
     {
         // Draw mesh
-        f(self.transform, self.buffer, self.tessellators);
+        f(self.transform, self.buffer);
 
         // If mesh buffer and exceeds limit, render the mesh
         if let Buffer::Mesh(buffer) = self.buffer
             && buffer.vertices_count() >= buffer.limit()
         {
-            buffer.render(self.renderer, self.clip_bounds);
+            buffer.flush(self.renderer, self.clip_bounds);
         }
     }
 }
@@ -224,7 +224,7 @@ where
 {
     fn drop(&mut self) {
         self.context
-            .mesh_buffer
-            .render(self.context.renderer, self.context.clip_bounds);
+            .buffer
+            .flush(self.context.renderer, self.context.clip_bounds);
     }
 }

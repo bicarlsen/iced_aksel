@@ -7,7 +7,9 @@ use iced_core::{
     alignment::{Horizontal, Vertical},
     text::{LineHeight, Wrapping},
 };
+use iced_graphics::mesh::SolidVertex2D;
 
+// Describes a **shared** primitive interface between the Mesh and Path backends.
 pub enum Primitive<D> {
     Rectangle {
         min: Point,
@@ -95,19 +97,24 @@ pub enum Primitive<D> {
     },
 }
 
+impl<D> Primitive<D> {
+    pub fn render_mesh(self, buf: &mut MeshBuffer) {
+        todo!("Render primitive as mesh")
+    }
+
+    pub fn render_path(self, buf: &mut PathBuffer) {
+        todo!("Render primitive as path")
+    }
+}
+
 pub enum Buffer {
     Path(PathBuffer),
     Mesh(MeshBuffer),
 }
 
-pub struct PrimitiveRenderer {
-    buffer: Buffer,
-    quality: f32,
-}
-
-impl PrimitiveRenderer {
+impl Buffer {
     pub fn flush<R: crate::plot::Renderer>(&mut self, renderer: &mut R, clip_bounds: &Rectangle) {
-        match &mut self.buffer {
+        match self {
             Buffer::Path(buf) => {
                 buf.flush(renderer, clip_bounds);
             }
@@ -117,13 +124,13 @@ impl PrimitiveRenderer {
         }
     }
 
-    pub fn add<D>(&mut self, primitive: Primitive<D>) {
-        match &mut self.buffer {
-            Buffer::Path(buf) => {
-                todo!("Render primitive as path");
-            }
+    pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
+        match self {
             Buffer::Mesh(buf) => {
-                todo!("Render primitive as mesh")
+                primitive.render_mesh(buf);
+            }
+            Buffer::Path(buf) => {
+                primitive.render_path(buf);
             }
         }
     }
