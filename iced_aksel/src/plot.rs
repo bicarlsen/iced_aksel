@@ -3,7 +3,9 @@
 //! This module provides the core plotting infrastructure for rendering data on charts.
 //! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
 
-use crate::shape::Shape;
+use std::ops::Deref;
+
+use crate::{render::primitive::Primitive, shape::Shape};
 
 use aksel::{Float, PlotRect, Transform};
 use iced_core::Font;
@@ -50,8 +52,8 @@ pub trait Renderer:
 impl Renderer for iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_tiny_skia::Renderer> {
     fn backend(&self) -> Backend {
         match self {
-            Self::Primary(_) => Backend::Mesh,
-            Self::Secondary(_) => Backend::Path,
+            Self::Primary(wgpu) => wgpu.backend(),
+            Self::Secondary(tiny_skia) => tiny_skia.backend(),
         }
     }
 }
@@ -112,33 +114,30 @@ pub struct Context<'a, D: Float, Renderer: self::Renderer = iced_renderer::Rende
     transform: &'a Transform<'a, D, f32, f32>,
     clip_bounds: &'a iced_core::Rectangle,
     renderer: &'a mut Renderer,
-    tessellators: &'a mut Tessellator,
     buffer: &'a mut Buffer,
+}
+
+impl<'a, D: Float, Renderer: self::Renderer> Deref for Context<'a, D, Renderer> {
+    type Target = Transform<'a, D, f32, f32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.transform
+    }
 }
 
 impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
     /// Returns the default font of the underlying renderer
     #[inline(always)]
-    pub fn default_font(&mut self) -> Font {
+    pub fn default_font(&self) -> Font {
         self.renderer.default_font()
     }
 
-    /// Renders a shape (lines, polygons, etc.).
-    ///
-    /// Used internally by shapes to add geometry to the buffer.
-    pub fn render<F>(&mut self, f: F)
-    where
-        F: FnOnce(&Transform<'a, D, f32, f32>, &mut Buffer),
-    {
-        // Draw mesh
-        f(self.transform, self.buffer);
+    pub fn buffer(&mut self) -> &mut Buffer {
+        self.buffer
+    }
 
-        // If mesh buffer and exceeds limit, render the mesh
-        if let Buffer::Mesh(buffer) = self.buffer
-            && buffer.vertices_count() >= buffer.limit()
-        {
-            buffer.flush(self.renderer, self.clip_bounds);
-        }
+    pub fn add_primitive(&mut self, primitive: Primitive<D>) {
+        self.buffer.add_primitive(primitive);
     }
 }
 
@@ -159,18 +158,16 @@ where
     ///
     /// This is typically called internally by the Chart widget.
     pub const fn new(
-        tessellators: &'a mut Tessellator,
         renderer: &'a mut R,
         clip_bounds: &'a iced_core::Rectangle,
-        mesh_buffer: &'a mut MeshBuffer,
+        buffer: &'a mut Buffer,
         transform: &'a Transform<'a, D, f32, f32>,
     ) -> Self {
         let context = Context {
             transform,
             clip_bounds,
             renderer,
-            tessellators,
-            mesh_buffer,
+            buffer,
         };
         Self { context }
     }
@@ -212,7 +209,14 @@ where
     /// # }
     /// ```
     pub fn add_shape<S: Shape<D, R>>(&mut self, shape: S) {
-        shape.render(&mut self.context)
+        shape.render(&mut self.context);
+
+        // If mesh buffer and exceeds limit, render the mesh
+        if let Buffer::Mesh(buffer) = self.context.buffer
+            && buffer.vertices_count() >= buffer.limit()
+        {
+            buffer.flush(self.context.renderer, self.context.clip_bounds);
+        }
     }
 }
 

@@ -1,9 +1,5 @@
-use crate::{
-    Shape, Stroke,
-    plot::{self},
-    render::{MeshBuffer, Tessellator},
-};
-use aksel::{Float, PlotPoint, Transform};
+use crate::{Shape, Stroke, plot, render::primitive::Primitive};
+use aksel::{Float, PlotPoint};
 use iced_core::Point;
 
 /// A primitive representing a smooth Bézier curve.
@@ -50,9 +46,35 @@ pub struct Bezier<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Bezier<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            start,
+            control_1,
+            control_2,
+            end,
+            stroke,
+        } = self;
+
+        let stroke = match stroke {
+            Some(s) => s,
+            None => return, // Invisible
+        };
+
+        let start = Point::new(ctx.x_to_screen(&start.x), ctx.y_to_screen(&start.y));
+        let end = Point::new(ctx.x_to_screen(&end.x), ctx.y_to_screen(&end.y));
+        let control_1 = Point::new(ctx.x_to_screen(&control_1.x), ctx.y_to_screen(&control_1.y));
+        let control_2 = control_2.map(|p| Point::new(ctx.x_to_screen(&p.x), ctx.y_to_screen(&p.y)));
+
+        // Resolve thickness against X-axis
+        let width = stroke.thickness.resolve_x(ctx);
+
+        ctx.add_primitive(Primitive::BezierCurve {
+            start,
+            end,
+            control_1,
+            control_2,
+            stroke,
+            width,
+        });
     }
 }
 
@@ -92,39 +114,5 @@ impl<D: Float> Bezier<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        let stroke = match self.stroke {
-            Some(s) => s,
-            None => return, // Invisible
-        };
-
-        let start = Point::new(
-            transform.x_to_screen(&self.start.x),
-            transform.y_to_screen(&self.start.y),
-        );
-        let end = Point::new(
-            transform.x_to_screen(&self.end.x),
-            transform.y_to_screen(&self.end.y),
-        );
-        let ctrl1 = Point::new(
-            transform.x_to_screen(&self.control_1.x),
-            transform.y_to_screen(&self.control_1.y),
-        );
-
-        let ctrl2 = self
-            .control_2
-            .map(|p| Point::new(transform.x_to_screen(&p.x), transform.y_to_screen(&p.y)));
-
-        // Resolve thickness against X-axis
-        let width_pixels = stroke.thickness.resolve_x(transform);
-
-        tess.draw_bezier(buffer, start, ctrl1, ctrl2, end, &stroke, width_pixels);
     }
 }

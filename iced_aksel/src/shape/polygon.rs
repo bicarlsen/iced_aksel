@@ -1,7 +1,7 @@
 use crate::{
     Measure, Shape, Stroke,
     plot::{self},
-    render::{MeshBuffer, Tessellator},
+    render::{MeshBuffer, Tessellator, primitive::Primitive},
 };
 use aksel::{Float, PlotPoint, Transform};
 use iced_core::{Color, Point};
@@ -34,9 +34,47 @@ pub struct Polygon<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Polygon<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            center,
+            radius,
+            vertices,
+            rotation,
+            fill,
+            stroke,
+        } = self;
+
+        if vertices < 3 {
+            return;
+        }
+
+        let center = Point::new(ctx.x_to_screen(&center.x), ctx.y_to_screen(&center.y));
+
+        // For Polygons, we treat radius isotropically. We take the minimum scale
+        // to ensure the polygon is not distorted if axes have different scales.
+        let radius_x = radius.resolve_x(ctx);
+        let radius_y = radius.resolve_y(ctx);
+        let radius = radius_x.min(radius_y);
+
+        if radius < 0.5 {
+            return;
+        }
+
+        let stroke = stroke.map(|s| {
+            // Isotropic stroke width using the same logic (minimum scale)
+            let width_x = s.thickness.resolve_x(ctx);
+            let width_y = s.thickness.resolve_y(ctx);
+            let width_pixels = width_x.min(width_y);
+            (s, width_pixels)
+        });
+
+        ctx.add_primitive(Primitive::Polygon {
+            center,
+            radius,
+            vertices,
+            rotation,
+            fill,
+            stroke,
+        });
     }
 }
 
@@ -72,49 +110,5 @@ impl<D: Float> Polygon<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        if self.vertices < 3 {
-            return;
-        }
-
-        let center_point = Point::new(
-            transform.x_to_screen(&self.center.x),
-            transform.y_to_screen(&self.center.y),
-        );
-
-        // For Polygons, we treat radius isotropically. We take the minimum scale
-        // to ensure the polygon is not distorted if axes have different scales.
-        let radius_pixels_x = self.radius.resolve_x(transform);
-        let radius_pixels_y = self.radius.resolve_y(transform);
-        let radius_pixels = radius_pixels_x.min(radius_pixels_y);
-
-        if radius_pixels < 0.5 {
-            return;
-        }
-
-        let stroke_info = self.stroke.as_ref().map(|s| {
-            // Isotropic stroke width using the same logic (minimum scale)
-            let width_x = s.thickness.resolve_x(transform);
-            let width_y = s.thickness.resolve_y(transform);
-            let width_pixels = width_x.min(width_y);
-            (s, width_pixels)
-        });
-
-        tess.draw_polygon(
-            buffer,
-            center_point,
-            radius_pixels,
-            self.vertices,
-            self.rotation,
-            self.fill,
-            stroke_info,
-        );
     }
 }

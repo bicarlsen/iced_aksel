@@ -1,9 +1,5 @@
-use crate::{
-    Shape, Stroke,
-    plot::{self},
-    render::{MeshBuffer, Tessellator},
-};
-use aksel::{Float, PlotPoint, Transform};
+use crate::{Shape, Stroke, plot, render::primitive::Primitive};
+use aksel::{Float, PlotPointTransform};
 use iced_core::Point;
 
 /// A primitive representing a connected series of line segments.
@@ -41,9 +37,49 @@ pub struct Polyline<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Polyline<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            points,
+            stroke,
+            extend_start,
+            extend_end,
+            arrow_start,
+            arrow_end,
+            arrow_size,
+        } = self;
+
+        if points.len() < 2 {
+            return;
+        }
+
+        let stroke = match stroke {
+            Some(s) => s,
+            None => return, // Invisible
+        };
+
+        // Resolve stroke thickness against X axis
+        let width = stroke.thickness.resolve_x(ctx);
+
+        let screen_bounds = ctx.screen_bounds();
+        let clip_bounds = iced_core::Rectangle {
+            x: screen_bounds.x,
+            y: screen_bounds.y,
+            width: screen_bounds.width,
+            height: screen_bounds.height,
+        };
+
+        let points = points
+            .into_iter()
+            .map(|p| Point::new(ctx.x_to_screen(&p.x), ctx.y_to_screen(&p.y)))
+            .collect();
+
+        ctx.add_primitive(Primitive::PolyLine {
+            points,
+            stroke,
+            width,
+            clip_bounds,
+            extensions: (extend_start, extend_end),
+            arrows: (arrow_start, arrow_end, arrow_size),
+        });
     }
 }
 
@@ -97,47 +133,5 @@ impl<D: Float> Polyline<D> {
     pub const fn arrow_size(mut self, size: f32) -> Self {
         self.arrow_size = size;
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        if self.points.len() < 2 {
-            return;
-        }
-
-        let stroke = match self.stroke {
-            Some(s) => s,
-            None => return, // Invisible
-        };
-
-        // Resolve stroke thickness against X axis
-        let width_pixels = stroke.thickness.resolve_x(transform);
-
-        let screen_bounds = transform.screen_bounds();
-        let clipping_rect = iced_core::Rectangle {
-            x: screen_bounds.x,
-            y: screen_bounds.y,
-            width: screen_bounds.width,
-            height: screen_bounds.height,
-        };
-
-        let screen_points_iterator = self
-            .points
-            .iter()
-            .map(|p| Point::new(transform.x_to_screen(&p.x), transform.y_to_screen(&p.y)));
-
-        tess.draw_polyline(
-            buffer,
-            screen_points_iterator,
-            &stroke,
-            width_pixels,
-            clipping_rect,
-            (self.extend_start, self.extend_end),
-            (self.arrow_start, self.arrow_end, self.arrow_size),
-        );
     }
 }

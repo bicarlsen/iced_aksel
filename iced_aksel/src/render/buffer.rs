@@ -10,8 +10,8 @@
 //! because talking to the GPU is expensive. Sending 10,000 triangles in one call is much faster
 //! than making 10,000 calls of 1 triangle each.
 
-use crate::render::tessellation::Tessellator;
 use crate::render::primitive::Primitive;
+use crate::render::tessellation::Tessellator;
 use iced_core::{Rectangle, Transformation};
 use iced_graphics::geometry::{Fill, Frame, Path};
 use iced_graphics::mesh::{self, SolidVertex2D};
@@ -67,7 +67,7 @@ impl MeshData {
 /// flushing it to the renderer when it exceeds its capacity or when the frame ends.
 pub struct MeshBuffer {
     /// The raw mesh data storage.
-    data: MeshData,
+    pub(crate) data: MeshData,
 
     /// The mesh-tessellation cache/builder.
     tessellator: Tessellator,
@@ -157,7 +157,12 @@ impl MeshBuffer {
     /// Renders a primitive into this mesh buffer using the tessellator.
     pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
         match primitive {
-            Primitive::Rectangle { min, max, fill, stroke } => {
+            Primitive::Rectangle {
+                min,
+                max,
+                fill,
+                stroke,
+            } => {
                 self.tessellator.draw_rectangle(
                     &mut self.data,
                     min.x,
@@ -168,8 +173,13 @@ impl MeshBuffer {
                     stroke,
                 );
             }
-            Primitive::Circle { center, radius, fill, stroke } => {
-                self.tessellator.draw_circle(
+            Primitive::Ellipse {
+                center,
+                radius,
+                fill,
+                stroke,
+            } => {
+                self.tessellator.draw_ellipse(
                     &mut self.data,
                     center.x,
                     center.y,
@@ -179,7 +189,11 @@ impl MeshBuffer {
                     stroke,
                 );
             }
-            Primitive::Triangle { points, fill, stroke } => {
+            Primitive::Triangle {
+                points,
+                fill,
+                stroke,
+            } => {
                 self.tessellator.draw_triangle(
                     &mut self.data,
                     points[0],
@@ -189,7 +203,14 @@ impl MeshBuffer {
                     stroke,
                 );
             }
-            Primitive::Polygon { center, radius, vertices, rotation, fill, stroke } => {
+            Primitive::Polygon {
+                center,
+                radius,
+                vertices,
+                rotation,
+                fill,
+                stroke,
+            } => {
                 self.tessellator.draw_polygon(
                     &mut self.data,
                     center,
@@ -200,7 +221,15 @@ impl MeshBuffer {
                     stroke,
                 );
             }
-            Primitive::Line { start, end, width, stroke, clip_bounds, extensions, arrows } => {
+            Primitive::Line {
+                start,
+                end,
+                width,
+                stroke,
+                clip_bounds,
+                extensions,
+                arrows,
+            } => {
                 self.tessellator.draw_line(
                     &mut self.data,
                     start,
@@ -212,7 +241,14 @@ impl MeshBuffer {
                     arrows,
                 );
             }
-            Primitive::PolyLine { points, stroke, width, clip_bounds, extensions, arrows } => {
+            Primitive::PolyLine {
+                points,
+                stroke,
+                width,
+                clip_bounds,
+                extensions,
+                arrows,
+            } => {
                 self.tessellator.draw_polyline(
                     &mut self.data,
                     points,
@@ -223,7 +259,14 @@ impl MeshBuffer {
                     arrows,
                 );
             }
-            Primitive::BezierCurve { start, end, control_1, control_2, stroke, width } => {
+            Primitive::BezierCurve {
+                start,
+                end,
+                control_1,
+                control_2,
+                stroke,
+                width,
+            } => {
                 self.tessellator.draw_bezier(
                     &mut self.data,
                     start,
@@ -234,16 +277,24 @@ impl MeshBuffer {
                     width,
                 );
             }
-            Primitive::Spline { points, stroke, width, tension } => {
-                self.tessellator.draw_spline(
-                    &mut self.data,
-                    points,
-                    stroke,
-                    width,
-                    tension,
-                );
+            Primitive::Spline {
+                points,
+                stroke,
+                width,
+                tension,
+            } => {
+                self.tessellator
+                    .draw_spline(&mut self.data, points, stroke, width, tension);
             }
-            Primitive::Arc { center, radius_inner, radius_outer, start_angle, end_angle, fill, stroke } => {
+            Primitive::Arc {
+                center,
+                radius_inner,
+                radius_outer,
+                start_angle,
+                end_angle,
+                fill,
+                stroke,
+            } => {
                 self.tessellator.draw_arc(
                     &mut self.data,
                     center.x,
@@ -256,15 +307,28 @@ impl MeshBuffer {
                     stroke,
                 );
             }
-            Primitive::Area { points, fill, stroke } => {
-                self.tessellator.draw_area(
-                    &mut self.data,
-                    &points,
-                    fill,
-                    stroke,
-                );
+            Primitive::Area {
+                points,
+                fill,
+                stroke,
+            } => {
+                self.tessellator
+                    .draw_area(&mut self.data, &points, fill, stroke);
             }
-            Primitive::Text { font, content, position, size, rotation, horizontal_alignment, vertical_alignment, fill, quality, line_height, bounds, wrapping } => {
+            Primitive::Text {
+                font,
+                content,
+                position,
+                size,
+                rotation,
+                horizontal_alignment,
+                vertical_alignment,
+                fill,
+                quality,
+                line_height,
+                bounds,
+                wrapping,
+            } => {
                 self.tessellator.draw_text(
                     &mut self.data,
                     crate::render::text::Text {

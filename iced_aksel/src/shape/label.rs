@@ -1,5 +1,6 @@
 use crate::Quality;
 use crate::render::Text;
+use crate::render::primitive::Primitive;
 use crate::{Measure, Shape, plot};
 use aksel::{Float, PlotPoint};
 use iced_core::{
@@ -97,6 +98,8 @@ pub struct Label<D> {
     /// Quality preset to render at
     pub quality: Quality,
     /// Letter spacing for the text
+    ///
+    /// TODO: Unused - Add this to rendering implementation!
     pub letter_spacing: f32,
     /// Font override - Defaults to the default font of the application
     pub font: Option<Font>,
@@ -110,36 +113,47 @@ pub struct Label<D> {
 
 impl<D: Float + Debug, R: plot::Renderer> Shape<D, R> for Label<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        let font = self.font.unwrap_or_else(|| ctx.default_font());
-        ctx.render_mesh(move |transform, mesh_buffer, tessellator| {
-            // 1. Resolve Position to Screen Coordinates
-            let screen_position = transform.chart_to_screen(&self.position);
+        let Self {
+            content,
+            position,
+            size,
+            rotation,
+            horizontal_alignment,
+            vertical_alignment,
+            fill,
+            quality,
+            letter_spacing,
+            font,
+            line_height,
+            bounds,
+            wrapping,
+        } = self;
 
-            // 2. Resolve Size (Screen Pixels vs Plot Units)
-            let font_size_in_pixels = self.size.resolve_y(transform);
-            let line_height = font_size_in_pixels + self.line_height;
+        let font = font.unwrap_or_else(|| ctx.default_font());
+        // 1. Resolve Position to Screen Coordinates
+        let screen_position = ctx.chart_to_screen(&position);
 
-            // 3. Resolve bounds
-            let bounds = self.bounds.resolve(transform, &self.position);
+        // 2. Resolve Size (Screen Pixels vs Plot Units)
+        let font_size_in_pixels = size.resolve_y(ctx);
+        let line_height = font_size_in_pixels + line_height;
 
-            // 4. Draw
-            tessellator.draw_text(
-                mesh_buffer,
-                Text {
-                    content: &self.content,
-                    position: Point::new(screen_position.x, screen_position.y),
-                    size: font_size_in_pixels.into(),
-                    rotation: self.rotation,
-                    horizontal_alignment: self.horizontal_alignment,
-                    vertical_alignment: self.vertical_alignment,
-                    fill: self.fill,
-                    quality: self.quality,
-                    font,
-                    line_height: line_height.into(),
-                    bounds,
-                    wrapping: self.wrapping,
-                },
-            );
+        // 3. Resolve bounds
+        let bounds = bounds.resolve(ctx, &position);
+
+        // 4. Draw
+        ctx.add_primitive(Primitive::Text {
+            content,
+            position: Point::new(screen_position.x, screen_position.y),
+            size: font_size_in_pixels.into(),
+            rotation,
+            horizontal_alignment,
+            vertical_alignment,
+            fill,
+            quality,
+            font,
+            line_height: line_height.into(),
+            bounds,
+            wrapping,
         });
     }
 }

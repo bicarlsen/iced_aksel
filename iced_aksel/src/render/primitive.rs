@@ -7,7 +7,6 @@ use iced_core::{
     alignment::{Horizontal, Vertical},
     text::{LineHeight, Wrapping},
 };
-use iced_graphics::mesh::SolidVertex2D;
 
 // Describes a **shared** primitive interface between the Mesh and Path backends.
 pub enum Primitive<D> {
@@ -17,7 +16,7 @@ pub enum Primitive<D> {
         fill: Option<Color>,
         stroke: Option<(Stroke<D>, f32, f32)>,
     },
-    Circle {
+    Ellipse {
         center: Point,
         radius: Point,
         fill: Option<Color>,

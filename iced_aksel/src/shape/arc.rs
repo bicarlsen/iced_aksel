@@ -1,10 +1,13 @@
 use crate::{
     Measure, Shape, Stroke,
     plot::{self},
-    render::{MeshBuffer, Tessellator},
+    render::{
+        MeshBuffer, Tessellator,
+        primitive::{self, Primitive},
+    },
 };
 use aksel::{Float, PlotPoint, Transform};
-use iced_core::Color;
+use iced_core::{Color, Point};
 
 /// A primitive representing a sector of a circle or a ring.
 ///
@@ -43,9 +46,52 @@ pub struct Arc<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Arc<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            center,
+            radius,
+            inner_radius,
+            start_angle,
+            end_angle,
+            fill,
+            stroke,
+        } = self;
+
+        let center = Point::new(ctx.x_to_screen(&center.x), ctx.y_to_screen(&center.y));
+
+        // Calculate isotropic radii by taking the minimum scale of X and Y dimensions
+        let radius_outer = {
+            let x = radius.resolve_x(ctx);
+            let y = radius.resolve_y(ctx);
+            x.min(y)
+        };
+
+        let radius_inner = {
+            let x = inner_radius.resolve_x(ctx);
+            let y = inner_radius.resolve_y(ctx);
+            x.min(y)
+        };
+
+        let stroke = stroke.and_then(|stroke| {
+            let width_x = stroke.thickness.resolve_x(ctx);
+            let width_y = stroke.thickness.resolve_y(ctx);
+            let width_pixels = width_x.min(width_y);
+
+            if width_pixels < 0.1 {
+                None
+            } else {
+                Some((stroke, width_pixels))
+            }
+        });
+
+        ctx.add_primitive(Primitive::Arc {
+            center,
+            radius_inner,
+            radius_outer,
+            start_angle,
+            end_angle,
+            stroke,
+            fill,
+        });
     }
 }
 
@@ -92,52 +138,5 @@ impl<D: Float> Arc<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        let center_x = transform.x_to_screen(&self.center.x);
-        let center_y = transform.y_to_screen(&self.center.y);
-
-        // Calculate isotropic radii by taking the minimum scale of X and Y dimensions
-        let outer_radius_pixels = {
-            let x = self.radius.resolve_x(transform);
-            let y = self.radius.resolve_y(transform);
-            x.min(y)
-        };
-
-        let inner_radius_pixels = {
-            let x = self.inner_radius.resolve_x(transform);
-            let y = self.inner_radius.resolve_y(transform);
-            x.min(y)
-        };
-
-        let stroke_info = self.stroke.as_ref().and_then(|stroke| {
-            let width_x = stroke.thickness.resolve_x(transform);
-            let width_y = stroke.thickness.resolve_y(transform);
-            let width_pixels = width_x.min(width_y);
-
-            if width_pixels < 0.1 {
-                None
-            } else {
-                Some((stroke, width_pixels))
-            }
-        });
-
-        tess.draw_arc(
-            buffer,
-            center_x,
-            center_y,
-            inner_radius_pixels,
-            outer_radius_pixels,
-            self.start_angle,
-            self.end_angle,
-            self.fill,
-            stroke_info,
-        );
     }
 }

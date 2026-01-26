@@ -912,11 +912,12 @@ impl<D: Float, Theme> Axis<D, Theme> {
         let length = line.length.0;
         let color = line.color;
 
+        // TODO: Remove meshbuffer dependency - Switch to using primitives
         match self.position {
             Position::Bottom => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
                 draw_vertical_line(
-                    mesh_buffer,
+                    &mut mesh_buffer.data,
                     x,
                     bounds.y,
                     bounds.y + length,
@@ -928,7 +929,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             Position::Top => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
                 draw_vertical_line(
-                    mesh_buffer,
+                    &mut mesh_buffer.data,
                     x,
                     bounds.y + bounds.height - length,
                     bounds.y + bounds.height,
@@ -940,7 +941,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             Position::Right => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
                 draw_horizontal_line(
-                    mesh_buffer,
+                    &mut mesh_buffer.data,
                     bounds.x,
                     bounds.x + length,
                     y,
@@ -952,7 +953,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             Position::Left => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
                 draw_horizontal_line(
-                    mesh_buffer,
+                    &mut mesh_buffer.data,
                     bounds.x + bounds.width - length,
                     bounds.x + bounds.width,
                     y,
@@ -977,6 +978,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         let width = line.width.0;
         let color = line.color;
 
+        // TODO: Remove meshbuffer dependency - Switch to using primitives
         match orientation {
             Orientation::Horizontal => {
                 let x = axis_bounds.width.mul_add(pos_norm, axis_bounds.x);
@@ -986,7 +988,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                 }) = line.dashed
                 {
                     draw_vertical_dashed_line(
-                        mesh_buffer,
+                        &mut mesh_buffer.data,
                         x,
                         plot_bounds.y,
                         plot_bounds.y + plot_bounds.height,
@@ -998,7 +1000,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     );
                 } else {
                     draw_vertical_line(
-                        mesh_buffer,
+                        &mut mesh_buffer.data,
                         x,
                         plot_bounds.y,
                         plot_bounds.y + plot_bounds.height,
@@ -1016,7 +1018,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                 }) = line.dashed
                 {
                     draw_horizontal_dashed_line(
-                        mesh_buffer,
+                        &mut mesh_buffer.data,
                         plot_bounds.x,
                         plot_bounds.x + plot_bounds.width,
                         y,
@@ -1028,7 +1030,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     );
                 } else {
                     draw_horizontal_line(
-                        mesh_buffer,
+                        &mut mesh_buffer.data,
                         plot_bounds.x,
                         plot_bounds.x + plot_bounds.width,
                         y,

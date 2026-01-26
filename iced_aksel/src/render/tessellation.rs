@@ -20,11 +20,7 @@ pub mod manual;
 pub mod math;
 pub mod text;
 
-use crate::{
-    Stroke,
-    render::text::Text,
-    stroke::StrokeStyle,
-};
+use crate::{Stroke, render::text::Text, stroke::StrokeStyle};
 use complex::{ComplexTessellator, DashedPolyline, LyonAdapter, SolidVertexConstructor};
 use iced_core::{Color, Point, Rectangle};
 use iced_graphics::color::pack;
@@ -205,7 +201,7 @@ impl Tessellator {
         }
     }
 
-    /// Draws a circle or ellipse.
+    /// Draws an ellipse.
     ///
     /// * `center_x`, `center_y`: The center coordinates in screen space.
     /// * `radius_x`, `radius_y`: The radii. If equal, draws a circle. If different, draws an ellipse.
@@ -214,7 +210,7 @@ impl Tessellator {
     /// This method automatically adjusts the number of segments (vertices) used to approximate the curve
     /// based on the radius and the current [`quality`](Self::quality) setting.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_circle<D>(
+    pub fn draw_ellipse<D>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         center_x: f32,

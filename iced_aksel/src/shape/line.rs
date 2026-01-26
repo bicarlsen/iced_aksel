@@ -1,7 +1,7 @@
 use crate::{
     Float, Shape, Stroke, Transform,
     plot::{self},
-    render::{MeshBuffer, Tessellator},
+    render::{MeshBuffer, Tessellator, primitive::Primitive},
 };
 use aksel::PlotPoint;
 use iced_core::Point;
@@ -46,9 +46,45 @@ pub struct Line<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Line<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            p1,
+            p2,
+            stroke,
+            extend_start,
+            extend_end,
+            arrow_start,
+            arrow_end,
+            arrow_size,
+        } = self;
+
+        let stroke = match stroke {
+            Some(s) => s,
+            None => return, // Invisible if no stroke is defined
+        };
+
+        let start = Point::new(ctx.x_to_screen(&p1.x), ctx.y_to_screen(&p1.y));
+        let end = Point::new(ctx.x_to_screen(&p2.x), ctx.y_to_screen(&p2.y));
+
+        // We resolve stroke thickness using the X-axis for consistency.
+        let width = stroke.thickness.resolve_x(ctx);
+
+        let screen_bounds = ctx.screen_bounds();
+        let clip_bounds = iced_core::Rectangle {
+            x: screen_bounds.x,
+            y: screen_bounds.y,
+            width: screen_bounds.width,
+            height: screen_bounds.height,
+        };
+
+        ctx.add_primitive(Primitive::Line {
+            start,
+            end,
+            width,
+            stroke,
+            clip_bounds,
+            extensions: (extend_start, extend_end),
+            arrows: (arrow_start, arrow_end, arrow_size),
+        });
     }
 }
 
@@ -117,49 +153,5 @@ impl<D: Float> Line<D> {
     pub const fn arrow_size(mut self, multiplier: f32) -> Self {
         self.arrow_size = multiplier;
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        let stroke = match self.stroke {
-            Some(s) => s,
-            None => return, // Invisible if no stroke is defined
-        };
-
-        let raw_start_point = Point::new(
-            transform.x_to_screen(&self.p1.x),
-            transform.y_to_screen(&self.p1.y),
-        );
-
-        let raw_end_point = Point::new(
-            transform.x_to_screen(&self.p2.x),
-            transform.y_to_screen(&self.p2.y),
-        );
-
-        // We resolve stroke thickness using the X-axis for consistency.
-        let stroke_width_pixels = stroke.thickness.resolve_x(transform);
-
-        let screen_bounds = transform.screen_bounds();
-        let clipping_rect = iced_core::Rectangle {
-            x: screen_bounds.x,
-            y: screen_bounds.y,
-            width: screen_bounds.width,
-            height: screen_bounds.height,
-        };
-
-        tess.draw_line(
-            buffer,
-            raw_start_point,
-            raw_end_point,
-            &stroke,
-            stroke_width_pixels,
-            clipping_rect,
-            (self.extend_start, self.extend_end),
-            (self.arrow_start, self.arrow_end, self.arrow_size),
-        );
     }
 }
