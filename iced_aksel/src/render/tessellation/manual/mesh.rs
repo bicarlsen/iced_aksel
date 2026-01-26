@@ -2,7 +2,7 @@
 //!
 //! Allows direct writing of pre-calculated vertex and index buffers (e.g., from Earcut).
 
-use crate::render::MeshBuffer;
+use crate::render::buffer::MeshData;
 use iced_core::{Color, Point};
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
@@ -11,7 +11,7 @@ use iced_graphics::{color::pack, mesh::SolidVertex2D};
 /// * `vertices`: List of point coordinates.
 /// * `indices`: List of indices into the vertex list (triplets).
 #[inline]
-pub fn draw_raw_mesh(buffer: &mut MeshBuffer, vertices: &[Point], indices: &[u32], color: Color) {
+pub fn draw_raw_mesh(buffer: &mut MeshData, vertices: &[Point], indices: &[u32], color: Color) {
     let packed_color = pack(color);
     let mesh = buffer.get_mesh_mut();
     let index_offset = mesh.vertices.len() as u32;

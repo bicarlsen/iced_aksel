@@ -2,7 +2,7 @@
 //!
 //! This module handles shapes that can be trivially defined by a bounding box or center/radius.
 
-use crate::render::MeshBuffer;
+use crate::render::buffer::MeshData;
 use iced_core::Color;
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
@@ -11,7 +11,7 @@ use iced_graphics::{color::pack, mesh::SolidVertex2D};
 /// Uses 4 vertices and 2 triangles (Quad).
 #[inline]
 pub fn draw_fill_rect(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     mut x_min: f32,
     mut y_min: f32,
     mut x_max: f32,
@@ -64,7 +64,7 @@ pub fn draw_fill_rect(
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_stroke_rect(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x_min: f32,
     y_min: f32,
     x_max: f32,
@@ -135,7 +135,7 @@ pub fn draw_stroke_rect(
 /// A center vertex is created, and surrounding vertices are generated via trigonometry.
 #[inline]
 pub fn draw_fill_circle(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     center_x: f32,
     center_y: f32,
     radius_x: f32,
@@ -182,7 +182,7 @@ pub fn draw_fill_circle(
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_stroke_circle(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     center_x: f32,
     center_y: f32,
     radius_x_inner: f32,

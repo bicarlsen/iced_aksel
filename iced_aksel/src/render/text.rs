@@ -6,9 +6,9 @@ use iced_core::{
 };
 
 /// A Text to draw on the screen
-pub struct Text<'a> {
+pub struct Text {
     pub font: Font,
-    pub content: &'a str,
+    pub content: String,
     pub position: Point,
     pub size: Pixels,
     pub rotation: f32,

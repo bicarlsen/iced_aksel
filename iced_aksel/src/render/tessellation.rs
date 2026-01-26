@@ -22,7 +22,7 @@ pub mod text;
 
 use crate::{
     Stroke,
-    render::{MeshBuffer, text::Text},
+    render::text::Text,
     stroke::StrokeStyle,
 };
 use complex::{ComplexTessellator, DashedPolyline, LyonAdapter, SolidVertexConstructor};
@@ -126,13 +126,13 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_rectangle<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         x_min: f32,
         y_min: f32,
         x_max: f32,
         y_max: f32,
         fill: Option<Color>,
-        stroke: Option<(&Stroke<D>, f32, f32)>,
+        stroke: Option<(Stroke<D>, f32, f32)>,
     ) {
         let width = x_max - x_min;
         let height = y_max - y_min;
@@ -216,13 +216,13 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_circle<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         center_x: f32,
         center_y: f32,
         radius_x: f32,
         radius_y: f32,
         fill: Option<Color>,
-        stroke: Option<(&Stroke<D>, f32)>,
+        stroke: Option<(Stroke<D>, f32)>,
     ) {
         let max_radius = radius_x.max(radius_y);
 
@@ -315,12 +315,12 @@ impl Tessellator {
     /// math consistency. You do not need to provide points in clockwise/counter-clockwise order.
     pub fn draw_triangle<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         p1: Point,
         p2: Point,
         p3: Point,
         fill: Option<Color>,
-        stroke: Option<(&Stroke<D>, f32)>,
+        stroke: Option<(Stroke<D>, f32)>,
     ) {
         // Compute cross product to check winding order (Clockwise vs Counter-Clockwise)
         let cross_product = (p2.x - p1.x).mul_add(p3.y - p1.y, -((p2.y - p1.y) * (p3.x - p1.x)));
@@ -417,13 +417,13 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_polygon<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         center: Point,
         radius: f32,
         vertices: u16,
         rotation: f32,
         fill: Option<Color>,
-        stroke: Option<(&Stroke<D>, f32)>,
+        stroke: Option<(Stroke<D>, f32)>,
     ) {
         if vertices < 3 || radius < 0.5 {
             return;
@@ -471,10 +471,10 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_line<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         raw_start: Point,
         raw_end: Point,
-        stroke: &Stroke<D>,
+        stroke: Stroke<D>,
         width: f32,
         clip_bounds: Rectangle,
         extensions: (bool, bool),
@@ -577,9 +577,9 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_polyline<I, D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         points: I,
-        stroke: &Stroke<D>,
+        stroke: Stroke<D>,
         width: f32,
         clip_bounds: Rectangle,
         extensions: (bool, bool),
@@ -667,12 +667,12 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_bezier<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         start: Point,
         control_1: Point,
         control_2: Option<Point>,
         end: Point,
-        stroke: &Stroke<D>,
+        stroke: Stroke<D>,
         width: f32,
     ) {
         if width < 0.1 {
@@ -714,9 +714,9 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_spline<I, D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         points: I,
-        stroke: &Stroke<D>,
+        stroke: Stroke<D>,
         width: f32,
         tension: f32,
     ) where
@@ -787,7 +787,7 @@ impl Tessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_arc<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         center_x: f32,
         center_y: f32,
         radius_inner: f32,
@@ -795,7 +795,7 @@ impl Tessellator {
         start_angle: f32,
         end_angle: f32,
         fill: Option<Color>,
-        stroke: Option<(&Stroke<D>, f32)>,
+        stroke: Option<(Stroke<D>, f32)>,
     ) {
         if radius_outer < 0.5 {
             return;
@@ -987,10 +987,10 @@ impl Tessellator {
     /// * **Concave Polygons:** Automatically detected and triangulated using Earcut.
     pub fn draw_area<D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         points: &[Point],
         fill: Option<Color>,
-        stroke: Option<(&Stroke<D>, f32)>,
+        stroke: Option<(Stroke<D>, f32)>,
     ) {
         if points.len() < 3 {
             return;
@@ -1051,9 +1051,9 @@ impl Tessellator {
     /// advanced path stroking engine.
     fn stroke_polyline<I, D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         points: I,
-        stroke: &Stroke<D>,
+        stroke: Stroke<D>,
         resolved_width: f32,
         close_path: bool,
     ) where
@@ -1095,9 +1095,9 @@ impl Tessellator {
 
     fn stroke_path<Iter, D>(
         &mut self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut crate::render::buffer::MeshData,
         path: Iter,
-        stroke: &Stroke<D>,
+        stroke: Stroke<D>,
         resolved_width: f32,
         tolerance: f32,
     ) where
@@ -1130,7 +1130,7 @@ impl Tessellator {
     ///
     /// **Internal Refactor:** This method now bundles the rendering context and request
     /// parameters into structs to improve maintainability.
-    pub fn draw_text(&mut self, mesh_buffer: &mut MeshBuffer, text: Text) {
+    pub fn draw_text(&mut self, mesh_buffer: &mut crate::render::buffer::MeshData, text: Text) {
         // Construct the context to hold heavy resources (caches, buffers)
         let ctx = &mut TextRenderContext {
             mesh_buffer,

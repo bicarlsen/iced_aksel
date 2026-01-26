@@ -2,7 +2,7 @@
 //!
 //! Handles expanding thin mathematical lines into thick, renderable triangles.
 
-use crate::render::MeshBuffer;
+use crate::render::buffer::MeshData;
 use iced_core::{Color, Point, Vector};
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
@@ -34,7 +34,7 @@ fn maybe_snap(coord: f32, width: f32, snap: bool) -> f32 {
 /// the line width into a rectangle (2 triangles).
 #[inline]
 pub fn draw_line_segment(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     start: Point,
     end: Point,
     width: f32,
@@ -99,7 +99,7 @@ pub fn draw_line_segment(
 /// The arrowhead is constructed as a simple isosceles triangle.
 #[inline]
 pub fn draw_arrowhead(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     tip: Point,
     direction: Vector, // Must be normalized Vector
     line_width: f32,
@@ -146,7 +146,7 @@ pub fn draw_arrowhead(
 /// Draws a generic dashed line between two points.
 #[allow(unused)]
 pub fn draw_dashed_line_segment(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     start: Point,
     end: Point,
     width: f32,
@@ -198,7 +198,7 @@ pub fn draw_dashed_line_segment(
 /// Draws a perfectly horizontal line.
 #[inline]
 pub fn draw_horizontal_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x_start: f32,
     x_end: f32,
     y: f32,
@@ -251,7 +251,7 @@ pub fn draw_horizontal_line(
 /// Draws a perfectly vertical line.
 #[inline]
 pub fn draw_vertical_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x: f32,
     y_start: f32,
     y_end: f32,
@@ -302,7 +302,7 @@ pub fn draw_vertical_line(
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_horizontal_dashed_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x_start: f32,
     x_end: f32,
     y: f32,
@@ -380,7 +380,7 @@ pub fn draw_horizontal_dashed_line(
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_vertical_dashed_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x: f32,
     y_start: f32,
     y_end: f32,

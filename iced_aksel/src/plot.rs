@@ -3,13 +3,12 @@
 //! This module provides the core plotting infrastructure for rendering data on charts.
 //! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
 
-use crate::{
-    render::{MeshBuffer, Tessellator, primitive::Buffer},
-    shape::Shape,
-};
+use crate::shape::Shape;
 
 use aksel::{Float, PlotRect, Transform};
 use iced_core::Font;
+
+pub use crate::render::{Buffer, MeshBuffer, Tessellator};
 
 /// Normalized drag delta for panning operations.
 ///

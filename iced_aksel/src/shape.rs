@@ -95,5 +95,5 @@ where
     Renderer: plot::Renderer,
 {
     /// Renders this shape into the plot context as a mesh
-    fn render(self, ctx: &mut plot::Context<'_, D, Renderer>)
+    fn render(self, ctx: &mut plot::Context<'_, D, Renderer>);
 }

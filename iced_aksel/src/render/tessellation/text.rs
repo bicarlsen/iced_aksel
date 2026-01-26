@@ -9,7 +9,7 @@
 //! * **Dynamic LOD:** The engine automatically adjusts the triangle count based on the size of the text on screen.
 //! * **Memory Safety:** Uses an LRU (Least Recently Used) cache to prevent unbounded memory growth.
 
-use crate::render::{MeshBuffer, Text};
+use crate::render::Text;
 use core::f32;
 use iced_core::{
     Color, Point,
@@ -168,7 +168,7 @@ impl Default for TextTessellationCache {
 /// to rendering functions.
 pub struct TextRenderContext<'a> {
     /// The final destination for the mesh data.
-    pub mesh_buffer: &'a mut MeshBuffer,
+    pub mesh_buffer: &'a mut crate::render::buffer::MeshData,
     /// The Lyon tessellator instance (reused to avoid allocation).
     pub tessellator: &'a mut FillTessellator,
     /// The LRU cache for glyph geometry.
@@ -279,9 +279,9 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
     text_buffer.set_wrap(font_system, iced_graphics::text::to_wrap(req.wrapping));
     text_buffer.set_text(
         font_system,
-        req.content,
+        &req.content,
         &iced_graphics::text::to_attributes(req.font),
-        iced_graphics::text::to_shaping(iced_core::text::Shaping::Auto, req.content),
+        iced_graphics::text::to_shaping(iced_core::text::Shaping::Auto, &req.content),
         None,
     );
 
@@ -440,7 +440,7 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
 
 /// Transforms local glyph geometry to world/screen space and pushes it to the mesh buffer.
 fn flush_character_to_mesh(
-    target_buffer: &mut MeshBuffer,
+    target_buffer: &mut crate::render::buffer::MeshData,
     source_geometry: &VertexBuffers<Point, u16>,
     screen_origin: Point,
     rotation_radians: f32,

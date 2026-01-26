@@ -10,6 +10,8 @@
 //! because talking to the GPU is expensive. Sending 10,000 triangles in one call is much faster
 //! than making 10,000 calls of 1 triangle each.
 
+use crate::render::tessellation::Tessellator;
+use crate::render::primitive::Primitive;
 use iced_core::{Rectangle, Transformation};
 use iced_graphics::geometry::{Fill, Frame, Path};
 use iced_graphics::mesh::{self, SolidVertex2D};
@@ -18,98 +20,21 @@ const PRE_ALLOC_PATHS: usize = 5000;
 const PRE_ALLOC_VERTICES: usize = 10_000;
 const PRE_ALLOC_INDICES: usize = 20_000;
 
-/// A simplified container for GPU vertex and index data.
+/// Raw mesh data storage.
 ///
-/// It manages the lifecycle of `iced_graphics::mesh::Indexed`, automatically
-/// flushing it to the renderer when it exceeds its capacity or when the frame ends.
-#[derive(Default)]
-pub struct MeshBuffer {
+/// This struct holds the actual vertex and index buffers, separated from the
+/// tessellation logic. This allows the tessellator to operate on the data
+/// without borrowing conflicts.
+pub struct MeshData {
     /// The actual data awaiting upload to the GPU.
     buffer: Option<mesh::Indexed<SolidVertex2D>>,
-
-    /// A soft limit for vertices per batch.
-    /// If exceeded, the `Context` (in `plot.rs`) will trigger a flush.
-    vertex_limit: usize,
 
     // Statistics for the debug overlay
     total_vertices: usize,
     total_indices: usize,
 }
 
-impl MeshBuffer {
-    /// Creates a new buffer with a specific soft limit.
-    ///
-    /// * `vertex_limit`: A good default is usually ~65k to 100k, as this fits
-    ///   nicely into standard 16-bit index buffers (though Iced uses u32).
-    pub const fn new(vertex_limit: usize) -> Self {
-        Self {
-            buffer: None,
-            vertex_limit,
-            total_vertices: 0,
-            total_indices: 0,
-        }
-    }
-
-    /// Returns the number of vertices currently sitting in the pending buffer.
-    pub const fn vertices_count(&self) -> usize {
-        if let Some(buffer) = &self.buffer {
-            return buffer.vertices.len();
-        };
-        0
-    }
-
-    /// Returns the total vertices processed this frame (flushed + pending).
-    pub const fn total_vertices(&self) -> usize {
-        let current = if let Some(b) = &self.buffer {
-            b.vertices.len()
-        } else {
-            0
-        };
-        self.total_vertices + current
-    }
-
-    /// Returns the total indices processed this frame (flushed + pending).
-    pub const fn total_indices(&self) -> usize {
-        let current = if let Some(b) = &self.buffer {
-            b.indices.len()
-        } else {
-            0
-        };
-        self.total_indices + current
-    }
-
-    /// Returns the soft limit configured for this buffer.
-    pub const fn limit(&self) -> usize {
-        self.vertex_limit
-    }
-
-    /// Flushes the pending geometry to the `iced` renderer.
-    ///
-    /// This consumes the current internal buffer and resets it.
-    pub(crate) fn flush<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
-    where
-        R: mesh::Renderer,
-    {
-        // We `take()` the buffer, effectively clearing it from `self`.
-        if let Some(buffer) = self.buffer.take() {
-            if buffer.indices.is_empty() {
-                return;
-            }
-
-            let v_count = buffer.vertices.len();
-            let i_count = buffer.indices.len();
-
-            self.total_vertices += v_count;
-            self.total_indices += i_count;
-
-            renderer.draw_mesh(mesh::Mesh::Solid {
-                buffers: buffer,
-                transformation: Transformation::IDENTITY,
-                clip_bounds: *clip_bounds,
-            });
-        }
-    }
-
+impl MeshData {
     /// Appends raw geometry (indices and vertices) to the buffer.
     ///
     /// This is used by the `ManualTessellator` (for circles/rects) to push data directly.
@@ -133,6 +58,232 @@ impl MeshBuffer {
             vertices: Vec::with_capacity(PRE_ALLOC_VERTICES),
             indices: Vec::with_capacity(PRE_ALLOC_INDICES),
         })
+    }
+}
+
+/// A simplified container for GPU vertex and index data.
+///
+/// It manages the lifecycle of `iced_graphics::mesh::Indexed`, automatically
+/// flushing it to the renderer when it exceeds its capacity or when the frame ends.
+pub struct MeshBuffer {
+    /// The raw mesh data storage.
+    data: MeshData,
+
+    /// The mesh-tessellation cache/builder.
+    tessellator: Tessellator,
+
+    /// A soft limit for vertices per batch.
+    /// If exceeded, the `Context` (in `plot.rs`) will trigger a flush.
+    vertex_limit: usize,
+}
+
+impl MeshBuffer {
+    /// Creates a new buffer with a specific soft limit.
+    ///
+    /// * `vertex_limit`: A good default is usually ~65k to 100k, as this fits
+    ///   nicely into standard 16-bit index buffers (though Iced uses u32).
+    pub fn new(vertex_limit: usize) -> Self {
+        Self {
+            data: MeshData {
+                buffer: None,
+                total_vertices: 0,
+                total_indices: 0,
+            },
+            tessellator: Tessellator::new(),
+            vertex_limit,
+        }
+    }
+
+    /// Returns the number of vertices currently sitting in the pending buffer.
+    pub fn vertices_count(&self) -> usize {
+        if let Some(buffer) = &self.data.buffer {
+            return buffer.vertices.len();
+        }
+        0
+    }
+
+    /// Returns the total vertices processed this frame (flushed + pending).
+    pub fn total_vertices(&self) -> usize {
+        let current = if let Some(b) = &self.data.buffer {
+            b.vertices.len()
+        } else {
+            0
+        };
+        self.data.total_vertices + current
+    }
+
+    /// Returns the total indices processed this frame (flushed + pending).
+    pub fn total_indices(&self) -> usize {
+        let current = if let Some(b) = &self.data.buffer {
+            b.indices.len()
+        } else {
+            0
+        };
+        self.data.total_indices + current
+    }
+
+    /// Returns the soft limit configured for this buffer.
+    pub const fn limit(&self) -> usize {
+        self.vertex_limit
+    }
+
+    /// Flushes the pending geometry to the `iced` renderer.
+    ///
+    /// This consumes the current internal buffer and resets it.
+    pub(crate) fn flush<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
+    where
+        R: mesh::Renderer,
+    {
+        // We `take()` the buffer, effectively clearing it from `self`.
+        if let Some(buffer) = self.data.buffer.take() {
+            if buffer.indices.is_empty() {
+                return;
+            }
+
+            let v_count = buffer.vertices.len();
+            let i_count = buffer.indices.len();
+
+            self.data.total_vertices += v_count;
+            self.data.total_indices += i_count;
+
+            renderer.draw_mesh(mesh::Mesh::Solid {
+                buffers: buffer,
+                transformation: Transformation::IDENTITY,
+                clip_bounds: *clip_bounds,
+            });
+        }
+    }
+
+    /// Renders a primitive into this mesh buffer using the tessellator.
+    pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
+        match primitive {
+            Primitive::Rectangle { min, max, fill, stroke } => {
+                self.tessellator.draw_rectangle(
+                    &mut self.data,
+                    min.x,
+                    min.y,
+                    max.x,
+                    max.y,
+                    fill,
+                    stroke,
+                );
+            }
+            Primitive::Circle { center, radius, fill, stroke } => {
+                self.tessellator.draw_circle(
+                    &mut self.data,
+                    center.x,
+                    center.y,
+                    radius.x,
+                    radius.y,
+                    fill,
+                    stroke,
+                );
+            }
+            Primitive::Triangle { points, fill, stroke } => {
+                self.tessellator.draw_triangle(
+                    &mut self.data,
+                    points[0],
+                    points[1],
+                    points[2],
+                    fill,
+                    stroke,
+                );
+            }
+            Primitive::Polygon { center, radius, vertices, rotation, fill, stroke } => {
+                self.tessellator.draw_polygon(
+                    &mut self.data,
+                    center,
+                    radius,
+                    vertices,
+                    rotation,
+                    fill,
+                    stroke,
+                );
+            }
+            Primitive::Line { start, end, width, stroke, clip_bounds, extensions, arrows } => {
+                self.tessellator.draw_line(
+                    &mut self.data,
+                    start,
+                    end,
+                    stroke,
+                    width,
+                    clip_bounds,
+                    extensions,
+                    arrows,
+                );
+            }
+            Primitive::PolyLine { points, stroke, width, clip_bounds, extensions, arrows } => {
+                self.tessellator.draw_polyline(
+                    &mut self.data,
+                    points,
+                    stroke,
+                    width,
+                    clip_bounds,
+                    extensions,
+                    arrows,
+                );
+            }
+            Primitive::BezierCurve { start, end, control_1, control_2, stroke, width } => {
+                self.tessellator.draw_bezier(
+                    &mut self.data,
+                    start,
+                    control_1,
+                    control_2,
+                    end,
+                    stroke,
+                    width,
+                );
+            }
+            Primitive::Spline { points, stroke, width, tension } => {
+                self.tessellator.draw_spline(
+                    &mut self.data,
+                    points,
+                    stroke,
+                    width,
+                    tension,
+                );
+            }
+            Primitive::Arc { center, radius_inner, radius_outer, start_angle, end_angle, fill, stroke } => {
+                self.tessellator.draw_arc(
+                    &mut self.data,
+                    center.x,
+                    center.y,
+                    radius_inner,
+                    radius_outer,
+                    start_angle,
+                    end_angle,
+                    fill,
+                    stroke,
+                );
+            }
+            Primitive::Area { points, fill, stroke } => {
+                self.tessellator.draw_area(
+                    &mut self.data,
+                    &points,
+                    fill,
+                    stroke,
+                );
+            }
+            Primitive::Text { font, content, position, size, rotation, horizontal_alignment, vertical_alignment, fill, quality, line_height, bounds, wrapping } => {
+                self.tessellator.draw_text(
+                    &mut self.data,
+                    crate::render::text::Text {
+                        font,
+                        content,
+                        position,
+                        size,
+                        rotation,
+                        horizontal_alignment,
+                        vertical_alignment,
+                        fill,
+                        quality,
+                        line_height: line_height.to_absolute(size),
+                        bounds,
+                        wrapping,
+                    },
+                );
+            }
+        }
     }
 }
 
@@ -187,5 +338,15 @@ impl PathBuffer {
     pub fn get_paths_mut(&mut self) -> &mut Vec<(Path, Fill)> {
         self.paths
             .get_or_insert_with(|| Vec::with_capacity(PRE_ALLOC_PATHS))
+    }
+
+    /// Renders a primitive into this path buffer.
+    ///
+    /// This converts the primitive into tiny-skia compatible paths.
+    pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
+        // TODO: Implement path rendering for each primitive type
+        // For now, this is a placeholder
+        let _ = primitive;
+        todo!("Implement path rendering for tiny-skia backend")
     }
 }

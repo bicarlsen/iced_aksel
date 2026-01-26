@@ -4,7 +4,7 @@ pub mod mesh;
 pub mod polygon;
 pub mod radial;
 
-use crate::render::MeshBuffer;
+use crate::render::buffer::MeshData;
 use iced_core::{Color, Point, Vector};
 
 /// The "Fast Path" rendering engine.
@@ -12,7 +12,7 @@ use iced_core::{Color, Point, Vector};
 /// This component contains highly optimized, allocation-free algorithms for generating
 /// vertices for standard geometric primitives. Unlike generic tessellators, it uses
 /// domain-specific knowledge (e.g., "a circle is just a triangle fan") to write
-/// vertices directly to the [`MeshBuffer`].
+/// vertices directly to the [`MeshData`].
 ///
 /// # Layman's Terms
 /// This acts as a **direct writer**. It skips general-purpose geometry math and instead uses
@@ -29,7 +29,7 @@ impl ManualTessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_fill_rect(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         x_min: f32,
         y_min: f32,
         x_max: f32,
@@ -44,7 +44,7 @@ impl ManualTessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_stroke_rect(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         x_min: f32,
         y_min: f32,
         x_max: f32,
@@ -69,7 +69,7 @@ impl ManualTessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_fill_circle(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         center_x: f32,
         center_y: f32,
         radius_x: f32,
@@ -86,7 +86,7 @@ impl ManualTessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_stroke_circle(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         center_x: f32,
         center_y: f32,
         radius_x_inner: f32,
@@ -116,7 +116,7 @@ impl ManualTessellator {
     #[inline]
     pub fn draw_line_segment(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         start: Point,
         end: Point,
         width: f32,
@@ -128,7 +128,7 @@ impl ManualTessellator {
     #[inline]
     pub fn draw_arrowhead(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         tip: Point,
         direction: Vector, // CHANGED: Point -> Vector
         line_width: f32,
@@ -152,7 +152,7 @@ impl ManualTessellator {
     #[inline]
     pub fn draw_fill_triangle(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         p1: Point,
         p2: Point,
         p3: Point,
@@ -164,7 +164,7 @@ impl ManualTessellator {
     #[inline]
     pub fn draw_stroke_triangle(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         outer: [Point; 3],
         inner: [Point; 3],
         color: Color,
@@ -173,14 +173,14 @@ impl ManualTessellator {
     }
 
     #[inline]
-    pub fn draw_fan(&self, buffer: &mut MeshBuffer, points: &[Point], color: Color) {
+    pub fn draw_fan(&self, buffer: &mut MeshData, points: &[Point], color: Color) {
         polygon::draw_fan(buffer, points, color);
     }
 
     #[inline]
     pub fn draw_ring(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         outer_points: &[Point],
         inner_points: &[Point],
         color: Color,
@@ -196,7 +196,7 @@ impl ManualTessellator {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_arc_strip(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         center_x: f32,
         center_y: f32,
         radius_inner: f32,
@@ -226,7 +226,7 @@ impl ManualTessellator {
     #[inline]
     pub fn draw_mesh(
         &self,
-        buffer: &mut MeshBuffer,
+        buffer: &mut MeshData,
         vertices: &[Point],
         indices: &[u32],
         color: Color,

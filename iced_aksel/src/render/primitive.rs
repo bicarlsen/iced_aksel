@@ -97,16 +97,6 @@ pub enum Primitive<D> {
     },
 }
 
-impl<D> Primitive<D> {
-    pub fn render_mesh(self, buf: &mut MeshBuffer) {
-        todo!("Render primitive as mesh")
-    }
-
-    pub fn render_path(self, buf: &mut PathBuffer) {
-        todo!("Render primitive as path")
-    }
-}
-
 pub enum Buffer {
     Path(PathBuffer),
     Mesh(MeshBuffer),
@@ -127,10 +117,10 @@ impl Buffer {
     pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
         match self {
             Buffer::Mesh(buf) => {
-                primitive.render_mesh(buf);
+                buf.add_primitive(primitive);
             }
             Buffer::Path(buf) => {
-                primitive.render_path(buf);
+                buf.add_primitive(primitive);
             }
         }
     }

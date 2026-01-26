@@ -2,7 +2,7 @@
 //!
 //! Handles curved shapes defined by angular ranges.
 
-use crate::render::MeshBuffer;
+use crate::render::buffer::MeshData;
 use iced_core::Color;
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
@@ -12,7 +12,7 @@ use iced_graphics::{color::pack, mesh::SolidVertex2D};
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_arc_strip(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     center_x: f32,
     center_y: f32,
     radius_inner: f32,
