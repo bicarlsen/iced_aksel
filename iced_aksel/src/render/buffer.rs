@@ -12,6 +12,7 @@
 
 use crate::render::primitive::Primitive;
 use crate::render::tessellation::Tessellator;
+use aksel::Float;
 use iced_core::{Rectangle, Transformation};
 use iced_graphics::geometry::{Fill, Frame, Path};
 use iced_graphics::mesh::{self, SolidVertex2D};
@@ -155,7 +156,7 @@ impl MeshBuffer {
     }
 
     /// Renders a primitive into this mesh buffer using the tessellator.
-    pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
+    pub fn add_primitive<D: Float>(&mut self, primitive: Primitive<D>) {
         match primitive {
             Primitive::Rectangle {
                 min,
@@ -407,7 +408,7 @@ impl PathBuffer {
     /// Renders a primitive into this path buffer.
     ///
     /// This converts the primitive into tiny-skia compatible paths.
-    pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
+    pub fn add_primitive<D: Float>(&mut self, primitive: Primitive<D>) {
         // TODO: Implement path rendering for each primitive type
         // For now, this is a placeholder
         let _ = primitive;

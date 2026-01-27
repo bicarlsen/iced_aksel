@@ -1,5 +1,5 @@
 use crate::{Shape, Stroke, plot, render::primitive::Primitive};
-use aksel::{Float, PlotPointTransform};
+use aksel::{Float, PlotPoint};
 use iced_core::Point;
 
 /// A primitive representing a connected series of line segments.

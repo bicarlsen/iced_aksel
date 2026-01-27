@@ -2,6 +2,7 @@ use crate::{
     Quality, Stroke,
     render::{MeshBuffer, buffer::PathBuffer},
 };
+use aksel::Float;
 use iced_core::{
     Color, Font, Pixels, Point, Rectangle, Size,
     alignment::{Horizontal, Vertical},
@@ -9,7 +10,7 @@ use iced_core::{
 };
 
 // Describes a **shared** primitive interface between the Mesh and Path backends.
-pub enum Primitive<D> {
+pub enum Primitive<D: Float> {
     Rectangle {
         min: Point,
         max: Point,
@@ -113,7 +114,7 @@ impl Buffer {
         }
     }
 
-    pub fn add_primitive<D>(&mut self, primitive: Primitive<D>) {
+    pub fn add_primitive<D: Float>(&mut self, primitive: Primitive<D>) {
         match self {
             Buffer::Mesh(buf) => {
                 buf.add_primitive(primitive);

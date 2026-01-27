@@ -1,10 +1,6 @@
-use crate::{
-    Measure, Shape, Stroke,
-    plot::{self},
-    render::{MeshBuffer, Tessellator},
-};
-use aksel::{Float, PlotPoint, Transform};
-use iced_core::Color;
+use crate::{Measure, Shape, Stroke, plot, render::primitive::Primitive};
+use aksel::{Float, PlotPoint};
+use iced_core::{Color, Point};
 
 /// A primitive representing an axis-aligned box.
 ///
@@ -63,9 +59,58 @@ pub struct Rectangle<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Rectangle<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            geometry,
+            fill,
+            stroke,
+        } = self;
+
+        let (min, max) = match geometry {
+            Geometry::Corners { p1, p2 } => {
+                let x1 = ctx.x_to_screen(&p1.x);
+                let y1 = ctx.y_to_screen(&p1.y);
+                let x2 = ctx.x_to_screen(&p2.x);
+                let y2 = ctx.y_to_screen(&p2.y);
+
+                (
+                    Point::new(x1.min(x2), y1.min(y2)),
+                    Point::new(x1.max(x2), y1.max(y2)),
+                )
+            }
+            Geometry::Centered {
+                center,
+                width,
+                height,
+            } => {
+                let center_x = ctx.x_to_screen(&center.x);
+                let center_y = ctx.y_to_screen(&center.y);
+
+                let width_pixels = width.resolve_x(ctx);
+                let height_pixels = height.resolve_y(ctx);
+
+                let half_width = width_pixels / 2.0;
+                let half_height = height_pixels / 2.0;
+
+                (
+                    Point::new(center_x - half_width, center_y - half_height),
+                    Point::new(center_x + half_width, center_y + half_height),
+                )
+            }
+        };
+
+        let stroke = self.stroke.map(|s| {
+            let width_x = s.thickness.resolve_x(ctx);
+            let width_y = s.thickness.resolve_y(ctx);
+            // Pass tuple of (width_x, width_y) to support anisotropic strokes if needed
+            (s, width_x, width_y)
+        });
+
+        ctx.add_primitive(Primitive::Rectangle {
+            min,
+            max,
+            fill,
+            stroke,
+        });
     }
 }
 
@@ -108,66 +153,5 @@ impl<D: Float> Rectangle<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        let (x_minimum, y_minimum, x_maximum, y_maximum) = match self.geometry {
-            Geometry::Corners { p1, p2 } => {
-                let x_one = transform.x_to_screen(&p1.x);
-                let y_one = transform.y_to_screen(&p1.y);
-                let x_two = transform.x_to_screen(&p2.x);
-                let y_two = transform.y_to_screen(&p2.y);
-
-                (
-                    x_one.min(x_two),
-                    y_one.min(y_two),
-                    x_one.max(x_two),
-                    y_one.max(y_two),
-                )
-            }
-            Geometry::Centered {
-                center,
-                width,
-                height,
-            } => {
-                let center_x = transform.x_to_screen(&center.x);
-                let center_y = transform.y_to_screen(&center.y);
-
-                let width_pixels = width.resolve_x(transform);
-                let height_pixels = height.resolve_y(transform);
-
-                let half_width = width_pixels / 2.0;
-                let half_height = height_pixels / 2.0;
-
-                (
-                    center_x - half_width,
-                    center_y - half_height,
-                    center_x + half_width,
-                    center_y + half_height,
-                )
-            }
-        };
-
-        let stroke_info = self.stroke.as_ref().map(|s| {
-            let width_x = s.thickness.resolve_x(transform);
-            let width_y = s.thickness.resolve_y(transform);
-            // Pass tuple of (width_x, width_y) to support anisotropic strokes if needed
-            (s, width_x, width_y)
-        });
-
-        tess.draw_rectangle(
-            buffer,
-            x_minimum,
-            y_minimum,
-            x_maximum,
-            y_maximum,
-            self.fill,
-            stroke_info,
-        );
     }
 }

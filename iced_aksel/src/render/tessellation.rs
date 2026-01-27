@@ -21,6 +21,7 @@ pub mod math;
 pub mod text;
 
 use crate::{Stroke, render::text::Text, stroke::StrokeStyle};
+use aksel::Float;
 use complex::{ComplexTessellator, DashedPolyline, LyonAdapter, SolidVertexConstructor};
 use iced_core::{Color, Point, Rectangle};
 use iced_graphics::color::pack;
@@ -120,7 +121,7 @@ impl Tessellator {
     /// If the stroke thickness is large enough to cover the entire rectangle (e.g. thickness >= width),
     /// the engine will automatically switch to drawing a simple filled rectangle to save vertices.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_rectangle<D>(
+    pub fn draw_rectangle<D: Float>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         x_min: f32,

@@ -1,7 +1,6 @@
 use crate::{
-    Shape, Stroke,
-    plot::{self},
-    render::{MeshBuffer, Tessellator},
+    Shape, Stroke, plot,
+    render::{MeshBuffer, Tessellator, primitive::Primitive},
 };
 use aksel::{Float, PlotPoint, Transform};
 use iced_core::Point;
@@ -40,8 +39,34 @@ pub struct Spline<D> {
 
 impl<D: Float, R: plot::Renderer> Shape<D, R> for Spline<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
+        let Self {
+            points,
+            stroke,
+            tension,
+        } = self;
+
+        if points.len() < 2 {
+            return;
+        }
+
+        let stroke = match stroke {
+            Some(s) => s,
+            None => return, // Invisible
+        };
+
+        // Resolve thickness against X-axis
+        let width = stroke.thickness.resolve_x(ctx);
+
+        let points = points
+            .into_iter()
+            .map(|p| Point::new(ctx.x_to_screen(&p.x), ctx.y_to_screen(&p.y)))
+            .collect();
+
+        ctx.add_primitive(Primitive::Spline {
+            points,
+            stroke,
+            width,
+            tension,
         })
     }
 }
@@ -72,37 +97,5 @@ impl<D: Float> Spline<D> {
     pub const fn tension(mut self, tension: f32) -> Self {
         self.tension = tension;
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        if self.points.len() < 2 {
-            return;
-        }
-
-        let stroke = match self.stroke {
-            Some(s) => s,
-            None => return, // Invisible
-        };
-
-        // Resolve thickness against X-axis
-        let width_pixels = stroke.thickness.resolve_x(transform);
-
-        let screen_points_iterator = self
-            .points
-            .iter()
-            .map(|p| Point::new(transform.x_to_screen(&p.x), transform.y_to_screen(&p.y)));
-
-        tess.draw_spline(
-            buffer,
-            screen_points_iterator,
-            &stroke,
-            width_pixels,
-            self.tension,
-        );
     }
 }
