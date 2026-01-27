@@ -77,7 +77,6 @@
 //! - **[`Axis`]**: Configures scales (Linear, Log), ticks, grid lines, and labels.
 //! - **[`PlotData`]**: A trait you implement for your own data types to define how they should be rendered.
 //! - **[`Shape`]**: Visual primitives (lines, circles, rectangles) used within `PlotData::draw`.
-#![deny(missing_docs)]
 
 use aksel::ScreenRect;
 use derive_more::{Display, Error};
