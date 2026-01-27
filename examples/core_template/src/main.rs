@@ -56,9 +56,8 @@ impl TemplateApp {
         )
     }
 
-    fn update(&mut self, message: Message) -> iced::Task<Message> {
+    const fn update(&mut self, message: Message) {
         match message {}
-        iced::Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -81,5 +80,5 @@ struct MyData {}
 impl MyData {}
 
 impl PlotData<f64> for MyData {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {}
+    fn draw(&self, _plot: &mut Plot<f64>, _theme: &Theme) {}
 }
