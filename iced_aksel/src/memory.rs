@@ -1,15 +1,18 @@
 use std::cell::{RefCell, RefMut};
 
-use crate::plot::Buffer;
-
 use super::Action;
+use crate::{
+    Quality,
+    render::{RenderBuffer, Renderer},
+};
+
 use iced_core::mouse;
 
 /// Internal chart memory
 pub struct Memory<AxisId> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
-    pub buffer: Option<RefCell<Buffer>>,
+    pub buffer: Option<RefCell<RenderBuffer>>,
 }
 
 impl<AxisId> Memory<AxisId> {
@@ -21,11 +24,7 @@ impl<AxisId> Memory<AxisId> {
         }
     }
 
-    pub fn make_sure_buffer_is_initialized<R: crate::plot::Renderer>(
-        &mut self,
-        renderer: &R,
-        quality: f32,
-    ) {
+    pub fn make_sure_buffer_is_initialized<R: Renderer>(&mut self, renderer: &R, quality: Quality) {
         if let Some(buffer) = &self.buffer {
             buffer.borrow_mut().set_quality(quality);
         } else {
@@ -38,7 +37,7 @@ impl<AxisId> Memory<AxisId> {
     /// Gets the internal buffer
     ///
     /// Panics if the buffer isn't initialized
-    pub fn get_buffer(&self) -> RefMut<Buffer> {
+    pub fn get_buffer(&self) -> RefMut<RenderBuffer> {
         self.buffer
             .as_ref()
             .expect("Buffer isn't initialized")

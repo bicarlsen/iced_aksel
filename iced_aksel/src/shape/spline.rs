@@ -1,8 +1,5 @@
-use crate::{
-    Shape, Stroke, plot,
-    render::{MeshBuffer, Tessellator, primitive::Primitive},
-};
-use aksel::{Float, PlotPoint, Transform};
+use crate::{Shape, Stroke, plot, render::Primitive};
+use aksel::{Float, PlotPoint};
 use iced_core::Point;
 
 /// A primitive representing a smooth curve passing through a list of points.
@@ -37,7 +34,7 @@ pub struct Spline<D> {
     pub tension: f32,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Spline<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Spline<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             points,

@@ -1,13 +1,24 @@
-use crate::{
-    Quality, Stroke,
-    render::{MeshBuffer, buffer::PathBuffer},
-};
+use crate::{Quality, Stroke};
 use aksel::Float;
 use iced_core::{
     Color, Font, Pixels, Point, Rectangle, Size,
     alignment::{Horizontal, Vertical},
     text::{LineHeight, Wrapping},
 };
+
+enum LineExtensions {
+    Start,
+    End,
+    Both,
+    None,
+}
+
+enum LineArrows {
+    Start(f32),
+    End(f32),
+    Both(f32),
+    None,
+}
 
 // Describes a **shared** primitive interface between the Mesh and Path backends.
 pub enum Primitive<D: Float> {
@@ -42,16 +53,36 @@ pub enum Primitive<D: Float> {
         width: f32,
         stroke: Stroke<D>,
         clip_bounds: Rectangle,
-        extensions: (bool, bool),
-        arrows: (bool, bool, f32),
+        extensions: LineExtensions,
+        arrows: LineArrows,
+    },
+    HorizontalLine {
+        y: f32,
+        x_start: f32,
+        x_end: f32,
+        width: f32,
+        color: Color,
+        stroke: Stroke<D>,
+        extensions: LineExtensions,
+        arrows: LineArrows,
+    },
+    VerticalLine {
+        x: f32,
+        y_start: f32,
+        y_end: f32,
+        width: f32,
+        color: Color,
+        stroke: Stroke<D>,
+        extensions: LineExtensions,
+        arrows: LineArrows,
     },
     PolyLine {
         points: Vec<Point>,
         stroke: Stroke<D>,
         width: f32,
         clip_bounds: Rectangle,
-        extensions: (bool, bool),
-        arrows: (bool, bool, f32),
+        extensions: LineExtensions,
+        arrows: LineArrows,
     },
     BezierCurve {
         start: Point,
@@ -95,44 +126,4 @@ pub enum Primitive<D: Float> {
         bounds: Size,
         wrapping: Wrapping,
     },
-}
-
-pub enum Buffer {
-    Path(PathBuffer),
-    Mesh(MeshBuffer),
-}
-
-impl Buffer {
-    pub fn flush<R: crate::plot::Renderer>(&mut self, renderer: &mut R, clip_bounds: &Rectangle) {
-        match self {
-            Buffer::Path(buf) => {
-                buf.flush(renderer, clip_bounds);
-            }
-            Buffer::Mesh(buf) => {
-                buf.flush(renderer, clip_bounds);
-            }
-        }
-    }
-
-    pub fn add_primitive<D: Float>(&mut self, primitive: Primitive<D>) {
-        match self {
-            Buffer::Mesh(buf) => {
-                buf.add_primitive(primitive);
-            }
-            Buffer::Path(buf) => {
-                buf.add_primitive(primitive);
-            }
-        }
-    }
-
-    pub fn set_quality(&mut self, quality: f32) {
-        match self {
-            Buffer::Mesh(buf) => {
-                buf.tessellator.set_quality(quality);
-            }
-            Buffer::Path(buf) => {
-                todo!("Set quality on path-buffer")
-            }
-        }
-    }
 }

@@ -15,7 +15,7 @@ pub struct Layer<'a, AxisId, Domain, Renderer, Theme> {
     pub(crate) items: &'a dyn plot::PlotData<Domain, Renderer, Theme>,
 }
 
-impl<'a, AxisId: Hash + Eq, D: Float, R: plot::Renderer, Theme> Layer<'a, AxisId, D, R, Theme> {
+impl<'a, AxisId: Hash + Eq, D: Float, R: crate::Renderer, Theme> Layer<'a, AxisId, D, R, Theme> {
     pub const fn new<T: plot::PlotData<D, R, Theme>>(
         items: &'a T,
         horizontal_axis_id: AxisId,

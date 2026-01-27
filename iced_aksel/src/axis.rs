@@ -21,11 +21,7 @@ use iced_core::{
 };
 
 use crate::{
-    plot::{self, Buffer},
-    render::tessellation::manual::linear::{
-        draw_horizontal_dashed_line, draw_horizontal_line, draw_vertical_dashed_line,
-        draw_vertical_line,
-    },
+    render::RenderBuffer,
     style::{AxisStyle, DashStyle, Style},
 };
 
@@ -321,10 +317,10 @@ impl<D: Float, Theme> Axis<D, Theme> {
         style: &Style,
         layout: Layout<'_>,
         plot_bounds: &Rectangle,
-        buffer: &mut Buffer,
+        buffer: &mut RenderBuffer,
         viewport: &Rectangle,
     ) where
-        Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+        Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
     {
         if self.invisible && !self.render_grid {
             return;
@@ -451,7 +447,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         style: &SpineStyle,
         viewport: &Rectangle,
     ) where
-        Renderer: plot::Renderer,
+        Renderer: crate::Renderer,
     {
         if style.width.0 <= 0.0 {
             return;
@@ -527,7 +523,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         chart_bounds: &Rectangle,
         text_offset: Pixels,
     ) where
-        Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+        Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
     {
         let orientation = self.orientation();
 
@@ -706,7 +702,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         candidate_max_size: Size,
         viewport: &Rectangle,
     ) where
-        Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+        Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
     {
         let mut accepted: Vec<PlacedLabelInfo<D>> = Vec::new();
 
@@ -897,71 +893,69 @@ impl<D: Float, Theme> Axis<D, Theme> {
             color: label.color,
         })
     }
+
     /// Renders a single tick mark into the mesh buffer using linear tessellators.
     fn draw_tick_line(
         &self,
         line: TickLine,
         bounds: &Rectangle,
-        buffer: &mut Buffer,
+        buffer: &mut RenderBuffer,
         pos_norm: f32,
     ) {
         let width = line.width.0;
         let length = line.length.0;
         let color = line.color;
 
-        // TODO: Remove meshbuffer dependency - Switch to using primitives
-        let Buffer::Mesh(mesh_buffer) = buffer else {
-            return;
-        };
+        // TODO: Switch to using primitives!
 
         match self.position {
             Position::Bottom => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
-                draw_vertical_line(
-                    &mut mesh_buffer.data,
-                    x,
-                    bounds.y,
-                    bounds.y + length,
-                    width,
-                    color,
-                    true,
-                );
+                // draw_vertical_line(
+                //     &mut mesh_buffer.data,
+                //     x,
+                //     bounds.y,
+                //     bounds.y + length,
+                //     width,
+                //     color,
+                //     true,
+                // );
             }
             Position::Top => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
-                draw_vertical_line(
-                    &mut mesh_buffer.data,
-                    x,
-                    bounds.y + bounds.height - length,
-                    bounds.y + bounds.height,
-                    width,
-                    color,
-                    true,
-                );
+                // draw_vertical_line(
+                //     &mut mesh_buffer.data,
+                //     x,
+                //     bounds.y + bounds.height - length,
+                //     bounds.y + bounds.height,
+                //     width,
+                //     color,
+                //     true,
+                // );
             }
             Position::Right => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                draw_horizontal_line(
-                    &mut mesh_buffer.data,
-                    bounds.x,
-                    bounds.x + length,
-                    y,
-                    width,
-                    color,
-                    true,
-                );
+                // draw_horizontal_line(
+                //     &mut mesh_buffer.data,
+                //     bounds.x,
+                //     bounds.x + length,
+                //     y,
+                //     width,
+                //     color,
+                //     true,
+                // );
             }
             Position::Left => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                draw_horizontal_line(
-                    &mut mesh_buffer.data,
-                    bounds.x + bounds.width - length,
-                    bounds.x + bounds.width,
-                    y,
-                    width,
-                    color,
-                    true,
-                );
+                // draw_horizontal_line(
+                //     &mut mesh_buffer.data,
+                //     bounds.x + bounds.width - length,
+                //     bounds.x + bounds.width,
+                //     y,
+                //     width,
+                //     color,
+                //     true,
+                // );
             }
         }
     }
@@ -972,17 +966,14 @@ impl<D: Float, Theme> Axis<D, Theme> {
         line: GridLine,
         axis_bounds: &Rectangle,
         plot_bounds: &Rectangle,
-        buffer: &mut Buffer,
+        buffer: &mut RenderBuffer,
         pos_norm: f32,
     ) {
         let orientation = self.orientation();
         let width = line.width.0;
         let color = line.color;
 
-        // TODO: Remove meshbuffer dependency - Switch to using primitives
-        let Buffer::Mesh(mesh_buffer) = buffer else {
-            return;
-        };
+        // TODO: Switch to using primitives!
 
         match orientation {
             Orientation::Horizontal => {
@@ -992,27 +983,27 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    draw_vertical_dashed_line(
-                        &mut mesh_buffer.data,
-                        x,
-                        plot_bounds.y,
-                        plot_bounds.y + plot_bounds.height,
-                        width,
-                        color,
-                        line_length,
-                        gap_length,
-                        true,
-                    );
+                    // draw_vertical_dashed_line(
+                    //     &mut mesh_buffer.data,
+                    //     x,
+                    //     plot_bounds.y,
+                    //     plot_bounds.y + plot_bounds.height,
+                    //     width,
+                    //     color,
+                    //     line_length,
+                    //     gap_length,
+                    //     true,
+                    // );
                 } else {
-                    draw_vertical_line(
-                        &mut mesh_buffer.data,
-                        x,
-                        plot_bounds.y,
-                        plot_bounds.y + plot_bounds.height,
-                        width,
-                        color,
-                        true,
-                    );
+                    // draw_vertical_line(
+                    //     &mut mesh_buffer.data,
+                    //     x,
+                    //     plot_bounds.y,
+                    //     plot_bounds.y + plot_bounds.height,
+                    //     width,
+                    //     color,
+                    //     true,
+                    // );
                 }
             }
             Orientation::Vertical => {
@@ -1022,27 +1013,27 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    draw_horizontal_dashed_line(
-                        &mut mesh_buffer.data,
-                        plot_bounds.x,
-                        plot_bounds.x + plot_bounds.width,
-                        y,
-                        width,
-                        color,
-                        line_length,
-                        gap_length,
-                        true,
-                    );
+                    // draw_horizontal_dashed_line(
+                    //     &mut mesh_buffer.data,
+                    //     plot_bounds.x,
+                    //     plot_bounds.x + plot_bounds.width,
+                    //     y,
+                    //     width,
+                    //     color,
+                    //     line_length,
+                    //     gap_length,
+                    //     true,
+                    // );
                 } else {
-                    draw_horizontal_line(
-                        &mut mesh_buffer.data,
-                        plot_bounds.x,
-                        plot_bounds.x + plot_bounds.width,
-                        y,
-                        width,
-                        color,
-                        true,
-                    );
+                    // draw_horizontal_line(
+                    //     &mut mesh_buffer.data,
+                    //     plot_bounds.x,
+                    //     plot_bounds.x + plot_bounds.width,
+                    //     y,
+                    //     width,
+                    //     color,
+                    //     true,
+                    // );
                 }
             }
         }

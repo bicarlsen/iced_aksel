@@ -1,8 +1,5 @@
-use crate::{
-    Float, Shape, Stroke, Transform,
-    plot::{self},
-    render::{MeshBuffer, Tessellator, primitive::Primitive},
-};
+use crate::{Float, Shape, Stroke, plot, render::Primitive};
+
 use aksel::PlotPoint;
 use iced_core::Point;
 
@@ -44,7 +41,7 @@ pub struct Line<D> {
     pub arrow_size: f32,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Line<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Line<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             p1,

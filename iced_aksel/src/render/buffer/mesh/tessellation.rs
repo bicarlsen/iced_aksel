@@ -28,10 +28,7 @@ use iced_graphics::color::pack;
 use lyon_path::{LineCap, LineJoin, Path, PathEvent, iterator::FromPolyline, traits::PathIterator};
 use lyon_tessellation::{StrokeOptions, VertexBuffers};
 use math::*;
-// Removed unused std::collections::HashMap import
-
-use crate::render::tessellation::text::{TextRenderContext, TextTessellationCache};
-pub use text::Quality;
+use text::{TextRenderContext, TextTessellationCache};
 
 /// The central driver for the rendering engine.
 ///

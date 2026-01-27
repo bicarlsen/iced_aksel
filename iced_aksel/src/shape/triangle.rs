@@ -1,9 +1,5 @@
-use crate::{
-    Measure, Shape, Stroke,
-    plot::{self},
-    render::{MeshBuffer, Tessellator, primitive::Primitive},
-};
-use aksel::{Float, PlotPoint, Transform};
+use crate::{Measure, Shape, Stroke, plot, render::Primitive};
+use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point};
 
 /// A primitive representing a three-sided polygon.
@@ -48,7 +44,7 @@ pub struct Triangle<D> {
     pub stroke: Option<Stroke<D>>,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Triangle<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Triangle<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             geometry,

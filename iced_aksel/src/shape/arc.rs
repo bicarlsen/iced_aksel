@@ -1,12 +1,6 @@
-use crate::{
-    Measure, Shape, Stroke,
-    plot::{self},
-    render::{
-        MeshBuffer, Tessellator,
-        primitive::{self, Primitive},
-    },
-};
-use aksel::{Float, PlotPoint, Transform};
+use crate::{Measure, Shape, Stroke, plot, render::Primitive};
+
+use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point};
 
 /// A primitive representing a sector of a circle or a ring.
@@ -44,7 +38,7 @@ pub struct Arc<D> {
     pub stroke: Option<Stroke<D>>,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Arc<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Arc<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             center,

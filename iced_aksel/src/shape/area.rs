@@ -1,7 +1,7 @@
 use crate::{
     Shape, Stroke,
     plot::{self},
-    render::primitive::Primitive,
+    render::Primitive,
 };
 use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point};
@@ -30,7 +30,7 @@ pub struct Area<D> {
     stroke: Option<Stroke<D>>,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Area<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Area<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             points,

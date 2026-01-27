@@ -1,4 +1,4 @@
-use crate::{Shape, Stroke, plot, render::primitive::Primitive};
+use crate::{Shape, Stroke, plot, render::Primitive};
 use aksel::{Float, PlotPoint};
 use iced_core::Point;
 
@@ -35,7 +35,7 @@ pub struct Polyline<D> {
     pub arrow_size: f32,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Polyline<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Polyline<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             points,

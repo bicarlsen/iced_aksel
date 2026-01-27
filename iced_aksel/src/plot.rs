@@ -6,14 +6,12 @@
 use std::ops::Deref;
 
 use crate::{
-    render::{PathBuffer, primitive::Primitive},
+    render::{Primitive, RenderBuffer},
     shape::Shape,
 };
 
 use aksel::{Float, PlotRect, Transform};
 use iced_core::Font;
-
-pub use crate::render::{Buffer, MeshBuffer, Tessellator};
 
 /// Normalized drag delta for panning operations.
 ///
@@ -33,39 +31,6 @@ pub struct DragDelta {
     pub x: f32,
     /// Normalized vertical drag distance (0.0-1.0).
     pub y: f32,
-}
-
-/// Renderer requirements for plotting.
-///
-/// This trait is automatically implemented for any renderer that satisfies the requirements.
-pub trait Renderer:
-    iced_core::Renderer
-    + iced_core::text::Renderer<Font = iced_core::Font>
-    + iced_graphics::geometry::Renderer
-    + iced_graphics::mesh::Renderer
-{
-    fn init_buffer(&self) -> Buffer;
-}
-
-impl Renderer for iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_tiny_skia::Renderer> {
-    fn init_buffer(&self) -> Buffer {
-        match self {
-            Self::Primary(primary) => primary.init_buffer(),
-            Self::Secondary(secondary) => secondary.init_buffer(),
-        }
-    }
-}
-
-impl Renderer for iced_wgpu::Renderer {
-    fn init_buffer(&self) -> Buffer {
-        Buffer::Mesh(MeshBuffer::new(100_000))
-    }
-}
-
-impl Renderer for iced_tiny_skia::Renderer {
-    fn init_buffer(&self) -> Buffer {
-        Buffer::Path(PathBuffer::new(5000)) // TODO: Test limits
-    }
 }
 
 /// Trait for drawable data on a plot.
@@ -97,7 +62,7 @@ impl Renderer for iced_tiny_skia::Renderer {
 pub trait PlotData<D, R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
     D: Float,
-    R: Renderer,
+    R: crate::Renderer,
 {
     /// Draws this data onto the plot.
     ///
@@ -108,14 +73,14 @@ where
 /// Internal rendering context for shapes.
 ///
 /// Manages layer ordering and buffering for efficient rendering.
-pub struct Context<'a, D: Float, Renderer: self::Renderer = iced_renderer::Renderer> {
+pub struct Context<'a, D: Float, Renderer: crate::Renderer = iced_renderer::Renderer> {
     transform: &'a Transform<'a, D, f32, f32>,
     clip_bounds: &'a iced_core::Rectangle,
     renderer: &'a mut Renderer,
-    buffer: &'a mut Buffer,
+    buffer: &'a mut RenderBuffer,
 }
 
-impl<'a, D: Float, Renderer: self::Renderer> Deref for Context<'a, D, Renderer> {
+impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer> {
     type Target = Transform<'a, D, f32, f32>;
 
     fn deref(&self) -> &Self::Target {
@@ -123,14 +88,14 @@ impl<'a, D: Float, Renderer: self::Renderer> Deref for Context<'a, D, Renderer> 
     }
 }
 
-impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
+impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
     /// Returns the default font of the underlying renderer
     #[inline(always)]
     pub fn default_font(&self) -> Font {
         self.renderer.default_font()
     }
 
-    pub fn buffer(&mut self) -> &mut Buffer {
+    pub fn buffer(&mut self) -> &mut RenderBuffer {
         self.buffer
     }
 
@@ -143,14 +108,14 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
 ///
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
-pub struct Plot<'a, D: Float, R: self::Renderer = iced_renderer::Renderer> {
+pub struct Plot<'a, D: Float, R: crate::Renderer = iced_renderer::Renderer> {
     context: Context<'a, D, R>,
 }
 
 impl<'a, D, R> Plot<'a, D, R>
 where
     D: Float,
-    R: self::Renderer,
+    R: crate::Renderer,
 {
     /// Creates a new plot context.
     ///
@@ -158,7 +123,7 @@ where
     pub const fn new(
         renderer: &'a mut R,
         clip_bounds: &'a iced_core::Rectangle,
-        buffer: &'a mut Buffer,
+        buffer: &'a mut RenderBuffer,
         transform: &'a Transform<'a, D, f32, f32>,
     ) -> Self {
         let context = Context {
@@ -210,7 +175,7 @@ where
         shape.render(&mut self.context);
 
         // If mesh buffer and exceeds limit, render the mesh
-        if let Buffer::Mesh(buffer) = self.context.buffer
+        if let RenderBuffer::Mesh(buffer) = self.context.buffer
             && buffer.vertices_count() >= buffer.limit()
         {
             buffer.flush(self.context.renderer, self.context.clip_bounds);
@@ -221,7 +186,7 @@ where
 impl<'a, D, R> Drop for Plot<'a, D, R>
 where
     D: Float,
-    R: self::Renderer,
+    R: crate::Renderer,
 {
     fn drop(&mut self) {
         self.context

@@ -51,35 +51,6 @@ use std::num::NonZeroUsize;
 /// or font sizes active simultaneously.
 const CACHE_CAPACITY: usize = 2000;
 
-/// The rendering quality of the vector text.
-///
-/// This controls the error tolerance of the tessellation algorithms.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum Quality {
-    /// High triangle count, very smooth curves. (Tolerance: 0.2)
-    High,
-    #[default]
-    /// Balanced performance and visual fidelity. (Tolerance: 0.5)
-    Medium,
-    /// Low triangle count, "blocky" curves. Best for performance. (Tolerance: 1.5)
-    Low,
-    /// Custom tolerance value. Lower is better/slower.
-    Custom(f32),
-}
-
-impl Quality {
-    /// Converts the quality setting into a tessellation tolerance value.
-    /// Lower values mean higher precision (more triangles).
-    pub const fn to_tolerance(self) -> f32 {
-        match self {
-            Self::High => 0.2,
-            Self::Medium => 0.5,
-            Self::Low => 1.5,
-            Self::Custom(val) => val.max(0.001),
-        }
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Caching Infrastructure
 // -----------------------------------------------------------------------------

@@ -121,12 +121,35 @@ pub fn draw_stroke_rect(
     ]);
 
     // Connect outer loop to inner loop using a triangle strip approach
-    #[rustfmt::skip]
     mesh.indices.extend_from_slice(&[
-        start_index, start_index + 1, start_index + 4,   start_index + 1, start_index + 4, start_index + 5, // Top Edge
-        start_index + 1, start_index + 2, start_index + 5,   start_index + 2, start_index + 5, start_index + 6, // Right Edge
-        start_index + 2, start_index + 3, start_index + 6,   start_index + 3, start_index + 6, start_index + 7, // Bottom Edge
-        start_index + 3, start_index, start_index + 7,   start_index, start_index + 7, start_index + 4, // Left Edge
+        // Top Edge
+        start_index,
+        start_index + 1,
+        start_index + 4,
+        start_index + 1,
+        start_index + 4,
+        start_index + 5,
+        // Right Edge
+        start_index + 1,
+        start_index + 2,
+        start_index + 5,
+        start_index + 2,
+        start_index + 5,
+        start_index + 6,
+        // Bottom Edge
+        start_index + 2,
+        start_index + 3,
+        start_index + 6,
+        start_index + 3,
+        start_index + 6,
+        start_index + 7,
+        // Left Edge
+        start_index + 3,
+        start_index,
+        start_index + 7,
+        start_index,
+        start_index + 7,
+        start_index + 4,
     ]);
 }
 

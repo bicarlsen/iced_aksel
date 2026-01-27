@@ -93,6 +93,7 @@ use iced_core::{
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Deref;
+
 // Re-export aksel core types for convenience
 pub use aksel::{Float, Transform, scale, scale::Scale, transform, transform::PlotPoint};
 
@@ -103,30 +104,27 @@ mod memory;
 mod render;
 mod state;
 
-pub mod style;
-
 pub mod axis;
 pub mod plot;
 pub mod shape;
 pub mod stroke;
+pub mod style;
 
 pub use axis::Axis;
 pub use measure::Measure;
 pub use plot::{Plot, PlotData};
-pub use render::Quality;
+pub use render::{Quality, Renderer};
 pub use shape::Shape;
 pub use state::State;
 pub use stroke::Stroke;
 pub use style::Catalog;
 
-use crate::{plot::Buffer, render::tessellation::manual::basic::draw_fill_rect};
 use action::Action;
-use axis::{Orientation, Position};
+use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
 use layer::Layer;
 use memory::Memory;
 use plot::DragDelta;
-
-use crate::axis::{MarkerContext, MarkerPosition, MarkerRequest};
+use render::RenderBuffer;
 
 /// Default movement threshold (in pixels) to distinguish a click from a drag operation.
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
@@ -215,7 +213,7 @@ pub struct Chart<
     AxisId: Hash + Eq + Clone + Debug,
     Domain: Float,
     Theme: Catalog,
-    Renderer: plot::Renderer,
+    Renderer: crate::Renderer,
 {
     state: &'a State<AxisId, Domain, Theme>,
     layers: Vec<Layer<'a, AxisId, Domain, Renderer, Theme>>,
@@ -257,7 +255,7 @@ where
     Domain: Float,
     AxisId: Hash + Eq + Clone + Debug,
     Theme: Catalog,
-    Renderer: plot::Renderer,
+    Renderer: crate::Renderer,
 {
     /// Creates a new chart from the given state.
     ///
@@ -796,13 +794,8 @@ where
         layout: Layout<'_>,
         style: &style::Style,
         plot: Rectangle,
-        buffer: &mut plot::Buffer,
+        buffer: &mut RenderBuffer,
     ) {
-        // TODO: Remove meshbuffer dependency - Switch to primitives
-        let Buffer::Mesh(buffer) = buffer else {
-            return;
-        };
-
         // Track the "inner-most" spine properties for each side
         let mut left: Option<(f32, Color)> = None;
         let mut right: Option<(f32, Color)> = None;
@@ -863,56 +856,58 @@ where
 
         // 2. Render the corners
 
+        // TODO: Switch to rendering primitives
+
         // Bottom-Left
         if let (Some((lw, lc)), Some((bw, _))) = (left, bottom) {
-            draw_fill_rect(
-                &mut buffer.data,
-                plot.x - lw,               // x_min
-                plot.y + plot.height,      // y_min
-                plot.x,                    // x_max
-                plot.y + plot.height + bw, // y_max
-                lc,
-                true,
-            );
+            // draw_fill_rect(
+            //     &mut buffer.data,
+            //     plot.x - lw,               // x_min
+            //     plot.y + plot.height,      // y_min
+            //     plot.x,                    // x_max
+            //     plot.y + plot.height + bw, // y_max
+            //     lc,
+            //     true,
+            // );
         }
 
         // Top-Left
         if let (Some((lw, lc)), Some((tw, _))) = (left, top) {
-            draw_fill_rect(
-                &mut buffer.data,
-                plot.x - lw, // x_min
-                plot.y - tw, // y_min
-                plot.x,      // x_max
-                plot.y,      // y_max
-                lc,
-                true,
-            );
+            // draw_fill_rect(
+            //     &mut buffer.data,
+            //     plot.x - lw, // x_min
+            //     plot.y - tw, // y_min
+            //     plot.x,      // x_max
+            //     plot.y,      // y_max
+            //     lc,
+            //     true,
+            // );
         }
 
         // Bottom-Right
         if let (Some((rw, rc)), Some((bw, _))) = (right, bottom) {
-            draw_fill_rect(
-                &mut buffer.data,
-                plot.x + plot.width,       // x_min
-                plot.y + plot.height,      // y_min
-                plot.x + plot.width + rw,  // x_max
-                plot.y + plot.height + bw, // y_max
-                rc,
-                true,
-            );
+            // draw_fill_rect(
+            //     &mut buffer.data,
+            //     plot.x + plot.width,       // x_min
+            //     plot.y + plot.height,      // y_min
+            //     plot.x + plot.width + rw,  // x_max
+            //     plot.y + plot.height + bw, // y_max
+            //     rc,
+            //     true,
+            // );
         }
 
         // Top-Right
         if let (Some((rw, rc)), Some((tw, _))) = (right, top) {
-            draw_fill_rect(
-                &mut buffer.data,
-                plot.x + plot.width,      // x_min
-                plot.y - tw,              // y_min
-                plot.x + plot.width + rw, // x_max
-                plot.y,                   // y_max
-                rc,
-                true,
-            );
+            // draw_fill_rect(
+            //     &mut buffer.data,
+            //     plot.x + plot.width,      // x_min
+            //     plot.y - tw,              // y_min
+            //     plot.x + plot.width + rw, // x_max
+            //     plot.y,                   // y_max
+            //     rc,
+            //     true,
+            // );
         }
     }
 }
@@ -922,7 +917,7 @@ impl<AxisId, Domain, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
     Domain: Float,
-    Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
     Theme: Catalog,
     Message: Clone,
 {
@@ -1207,7 +1202,7 @@ where
 
         // 5. Draw Debug Overlay (if enabled)
         if self.debug
-            && let Buffer::Mesh(mesh_buffer) = &*buffer
+            && let RenderBuffer::Mesh(mesh_buffer) = &*buffer
         {
             renderer.start_layer(bounds);
 
@@ -1258,7 +1253,7 @@ where
     Domain: Float,
     Message: Clone + 'a,
     Theme: Catalog + 'a,
-    Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
 {
     fn from(plot: Chart<'a, AxisId, Domain, Message, Theme, Renderer>) -> Self {
         Element::new(plot)

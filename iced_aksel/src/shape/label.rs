@@ -1,6 +1,5 @@
 use crate::Quality;
-use crate::render::Text;
-use crate::render::primitive::Primitive;
+use crate::render::Primitive;
 use crate::{Measure, Shape, plot};
 use aksel::{Float, PlotPoint};
 use iced_core::{
@@ -111,7 +110,7 @@ pub struct Label<D> {
     pub wrapping: Wrapping,
 }
 
-impl<D: Float + Debug, R: plot::Renderer> Shape<D, R> for Label<D> {
+impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             content,
