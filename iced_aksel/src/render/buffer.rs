@@ -71,7 +71,7 @@ pub struct MeshBuffer {
     pub(crate) data: MeshData,
 
     /// The mesh-tessellation cache/builder.
-    tessellator: Tessellator,
+    pub(crate) tessellator: Tessellator,
 
     /// A soft limit for vertices per batch.
     /// If exceeded, the `Context` (in `plot.rs`) will trigger a flush.

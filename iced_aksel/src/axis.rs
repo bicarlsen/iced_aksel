@@ -21,13 +21,10 @@ use iced_core::{
 };
 
 use crate::{
-    plot,
-    render::{
-        MeshBuffer,
-        tessellation::manual::linear::{
-            draw_horizontal_dashed_line, draw_horizontal_line, draw_vertical_dashed_line,
-            draw_vertical_line,
-        },
+    plot::{self, Buffer},
+    render::tessellation::manual::linear::{
+        draw_horizontal_dashed_line, draw_horizontal_line, draw_vertical_dashed_line,
+        draw_vertical_line,
     },
     style::{AxisStyle, DashStyle, Style},
 };
@@ -324,7 +321,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         style: &Style,
         layout: Layout<'_>,
         plot_bounds: &Rectangle,
-        mesh_buffer: &mut MeshBuffer,
+        buffer: &mut Buffer,
         viewport: &Rectangle,
     ) where
         Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
@@ -377,7 +374,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             if self.render_grid
                 && let Some(line) = grid_line
             {
-                self.draw_grid_line(line, &bounds, plot_bounds, mesh_buffer, pos_norm);
+                self.draw_grid_line(line, &bounds, plot_bounds, buffer, pos_norm);
             }
 
             if self.invisible {
@@ -422,7 +419,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
 
             // Draw Tick Marks (Axis style + local config)
             if let Some(line) = tick_line {
-                self.draw_tick_line(line, &bounds, mesh_buffer, pos_norm);
+                self.draw_tick_line(line, &bounds, buffer, pos_norm);
             }
         }
 
@@ -905,7 +902,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         &self,
         line: TickLine,
         bounds: &Rectangle,
-        mesh_buffer: &mut MeshBuffer,
+        buffer: &mut Buffer,
         pos_norm: f32,
     ) {
         let width = line.width.0;
@@ -913,6 +910,10 @@ impl<D: Float, Theme> Axis<D, Theme> {
         let color = line.color;
 
         // TODO: Remove meshbuffer dependency - Switch to using primitives
+        let Buffer::Mesh(mesh_buffer) = buffer else {
+            return;
+        };
+
         match self.position {
             Position::Bottom => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
@@ -971,7 +972,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         line: GridLine,
         axis_bounds: &Rectangle,
         plot_bounds: &Rectangle,
-        mesh_buffer: &mut MeshBuffer,
+        buffer: &mut Buffer,
         pos_norm: f32,
     ) {
         let orientation = self.orientation();
@@ -979,6 +980,10 @@ impl<D: Float, Theme> Axis<D, Theme> {
         let color = line.color;
 
         // TODO: Remove meshbuffer dependency - Switch to using primitives
+        let Buffer::Mesh(mesh_buffer) = buffer else {
+            return;
+        };
+
         match orientation {
             Orientation::Horizontal => {
                 let x = axis_bounds.width.mul_add(pos_norm, axis_bounds.x);

@@ -4,7 +4,7 @@ mod text;
 
 pub mod primitive;
 
-pub use buffer::{MeshBuffer, MeshData};
+pub use buffer::{MeshBuffer, MeshData, PathBuffer};
 pub use primitive::Buffer;
 pub use tessellation::Quality;
 pub use tessellation::Tessellator;

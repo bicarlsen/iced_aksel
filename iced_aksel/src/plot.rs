@@ -5,7 +5,10 @@
 
 use std::ops::Deref;
 
-use crate::{render::primitive::Primitive, shape::Shape};
+use crate::{
+    render::{PathBuffer, primitive::Primitive},
+    shape::Shape,
+};
 
 use aksel::{Float, PlotRect, Transform};
 use iced_core::Font;
@@ -32,11 +35,6 @@ pub struct DragDelta {
     pub y: f32,
 }
 
-pub enum Backend {
-    Mesh,
-    Path,
-}
-
 /// Renderer requirements for plotting.
 ///
 /// This trait is automatically implemented for any renderer that satisfies the requirements.
@@ -46,27 +44,27 @@ pub trait Renderer:
     + iced_graphics::geometry::Renderer
     + iced_graphics::mesh::Renderer
 {
-    fn backend(&self) -> Backend;
+    fn init_buffer(&self) -> Buffer;
 }
 
 impl Renderer for iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_tiny_skia::Renderer> {
-    fn backend(&self) -> Backend {
+    fn init_buffer(&self) -> Buffer {
         match self {
-            Self::Primary(wgpu) => wgpu.backend(),
-            Self::Secondary(tiny_skia) => tiny_skia.backend(),
+            Self::Primary(primary) => primary.init_buffer(),
+            Self::Secondary(secondary) => secondary.init_buffer(),
         }
     }
 }
 
 impl Renderer for iced_wgpu::Renderer {
-    fn backend(&self) -> Backend {
-        Backend::Mesh
+    fn init_buffer(&self) -> Buffer {
+        Buffer::Mesh(MeshBuffer::new(100_000))
     }
 }
 
 impl Renderer for iced_tiny_skia::Renderer {
-    fn backend(&self) -> Backend {
-        Backend::Path
+    fn init_buffer(&self) -> Buffer {
+        Buffer::Path(PathBuffer::new(5000)) // TODO: Test limits
     }
 }
 

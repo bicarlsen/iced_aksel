@@ -120,7 +120,7 @@ pub use state::State;
 pub use stroke::Stroke;
 pub use style::Catalog;
 
-use crate::render::tessellation::manual::basic::draw_fill_rect;
+use crate::{plot::Buffer, render::tessellation::manual::basic::draw_fill_rect};
 use action::Action;
 use axis::{Orientation, Position};
 use layer::Layer;
@@ -797,8 +797,13 @@ where
         layout: Layout<'_>,
         style: &style::Style,
         plot: Rectangle,
-        mesh: &mut plot::Buffer,
+        buffer: &mut plot::Buffer,
     ) {
+        // TODO: Remove meshbuffer dependency - Switch to primitives
+        let Buffer::Mesh(buffer) = buffer else {
+            return;
+        };
+
         // Track the "inner-most" spine properties for each side
         let mut left: Option<(f32, Color)> = None;
         let mut right: Option<(f32, Color)> = None;
@@ -862,7 +867,7 @@ where
         // Bottom-Left
         if let (Some((lw, lc)), Some((bw, _))) = (left, bottom) {
             draw_fill_rect(
-                mesh,
+                &mut buffer.data,
                 plot.x - lw,               // x_min
                 plot.y + plot.height,      // y_min
                 plot.x,                    // x_max
@@ -875,7 +880,7 @@ where
         // Top-Left
         if let (Some((lw, lc)), Some((tw, _))) = (left, top) {
             draw_fill_rect(
-                mesh,
+                &mut buffer.data,
                 plot.x - lw, // x_min
                 plot.y - tw, // y_min
                 plot.x,      // x_max
@@ -888,7 +893,7 @@ where
         // Bottom-Right
         if let (Some((rw, rc)), Some((bw, _))) = (right, bottom) {
             draw_fill_rect(
-                mesh,
+                &mut buffer.data,
                 plot.x + plot.width,       // x_min
                 plot.y + plot.height,      // y_min
                 plot.x + plot.width + rw,  // x_max
@@ -901,7 +906,7 @@ where
         // Top-Right
         if let (Some((rw, rc)), Some((tw, _))) = (right, top) {
             draw_fill_rect(
-                mesh,
+                &mut buffer.data,
                 plot.x + plot.width,      // x_min
                 plot.y - tw,              // y_min
                 plot.x + plot.width + rw, // x_max
@@ -927,7 +932,7 @@ where
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId, Renderer>::new())
+        tree::State::new(Memory::<AxisId>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -1019,12 +1024,13 @@ where
         event: &Event,
         layout: layout::Layout<'_>,
         cursor: mouse::Cursor,
-        _renderer: &Renderer,
+        renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
         let memory: &mut Memory<AxisId> = tree.state.downcast_mut();
+        memory.make_sure_buffer_is_initialized(renderer, self.quality);
 
         if !self.errors.is_empty()
             && let Some(handler) = &self.on_error
@@ -1122,14 +1128,8 @@ where
         // 1. Retrieve the Memory from the Tree directly
         let memory = tree.state.downcast_ref::<Memory<AxisId>>();
 
-        // Reuse tessellators from memory to avoid re-allocating them every frame
-        let mut tessellators = memory.tessellators.borrow_mut();
-
-        // Pass the global quality setting to the tessellator
-        tessellators.set_quality(self.quality);
-
-        // Create a new buffer for this frame
-        let mut buffer = renderer.construct_buffer();
+        // Get buffer from memory
+        let mut buffer = memory.get_buffer();
 
         let screen_rect = ScreenRect {
             x: plot_bounds.x,
@@ -1149,7 +1149,7 @@ where
                 &style,
                 axis_layout,
                 &plot_bounds,
-                &buffer,
+                &mut buffer,
                 &bounds,
             );
         }
@@ -1158,7 +1158,7 @@ where
         self.draw_spine_corners(layout, &style, plot_bounds, &mut buffer);
 
         // Flush the mesh buffer (draws all the lines/ticks aggregated so far)
-        buffer.render(renderer, &bounds);
+        buffer.flush(renderer, &bounds);
 
         // 3. Render data layers
         for layer in &self.layers {
@@ -1167,20 +1167,15 @@ where
             let y_axis = self.state.axis(&layer.vertical_axis_id);
             let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-            let mut plot: Plot<Domain, Renderer> = Plot::new(
-                &mut tessellators,
-                renderer,
-                &plot_bounds,
-                &mut buffer,
-                &transform,
-            );
+            let mut plot: Plot<Domain, Renderer> =
+                Plot::new(renderer, &plot_bounds, &mut buffer, &transform);
 
             // User code draws shapes into the plot here
             layer.items.draw(&mut plot, theme);
         }
 
-        // Flush the mesh buffer once more
-        buffer.render(renderer, &bounds);
+        // Flush the mesh buffer once more to draw all data layers
+        buffer.flush(renderer, &plot_bounds);
 
         // 4. Render markers
         for marker_request in &self.markers {
@@ -1213,7 +1208,7 @@ where
 
         // 5. Draw Debug Overlay (if enabled)
         if self.debug
-            && let plot::Buffer::Mesh(mesh_buffer) = buffer
+            && let Buffer::Mesh(mesh_buffer) = &*buffer
         {
             renderer.start_layer(bounds);
 
@@ -1247,6 +1242,9 @@ where
             renderer.fill_text(text, position.into(), color, bounds);
             renderer.end_layer();
         }
+
+        buffer.flush(renderer, &bounds);
+
         renderer.end_layer()
     }
 }

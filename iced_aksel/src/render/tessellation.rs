@@ -466,7 +466,7 @@ impl Tessellator {
     /// * **Infinite Extensions:** We mathematically project the line to the screen edges (`clip_bounds`)
     ///   to convert "Infinite" into "Finite but spanning the whole screen".
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_line<D>(
+    pub fn draw_line<D: Float>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         raw_start: Point,
@@ -572,7 +572,7 @@ impl Tessellator {
     /// Supports dashed lines (via `StrokeStyle`), infinite extensions on the first/last segments,
     /// and arrowheads at the ends.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_polyline<I, D>(
+    pub fn draw_polyline<I, D: Float>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         points: I,

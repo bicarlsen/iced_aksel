@@ -124,4 +124,15 @@ impl Buffer {
             }
         }
     }
+
+    pub fn set_quality(&mut self, quality: f32) {
+        match self {
+            Buffer::Mesh(buf) => {
+                buf.tessellator.set_quality(quality);
+            }
+            Buffer::Path(buf) => {
+                todo!("Set quality on path-buffer")
+            }
+        }
+    }
 }
