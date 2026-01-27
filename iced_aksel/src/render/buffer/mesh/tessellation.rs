@@ -20,7 +20,14 @@ pub mod manual;
 pub mod math;
 pub mod text;
 
-use crate::{Stroke, render::text::Text, stroke::StrokeStyle};
+use crate::{
+    Stroke,
+    render::{
+        primitive::{LineArrows, LineExtensions},
+        text::Text,
+    },
+    stroke::StrokeStyle,
+};
 use aksel::Float;
 use complex::{ComplexTessellator, DashedPolyline, LyonAdapter, SolidVertexConstructor};
 use iced_core::{Color, Point, Rectangle};
@@ -471,14 +478,15 @@ impl Tessellator {
         stroke: Stroke<D>,
         width: f32,
         clip_bounds: Rectangle,
-        extensions: (bool, bool),
-        arrows: (bool, bool, f32),
+        extensions: LineExtensions,
+        arrows: LineArrows,
     ) {
         if width < 0.1 {
             return;
         }
 
         let direction_vector = raw_end - raw_start;
+
         // Avoid NaN math on degenerate lines
         if direction_vector
             .x
@@ -488,39 +496,35 @@ impl Tessellator {
             return;
         }
 
-        let mut draw_start = raw_start;
-        let mut draw_end = raw_end;
-        let is_infinite = extensions.0 || extensions.1;
+        let margin = width.max(1.0);
+        let bounds = Bounds::new(clip_bounds, margin);
 
-        // 1. Resolve Infinite Geometry
-        if is_infinite {
-            let margin = width.max(1.0);
-            let bounds = Bounds::new(clip_bounds, margin);
-
-            if let Some((edge_start, edge_end)) = clip_infinite_line(raw_start, raw_end, bounds) {
-                if extensions.0 {
-                    draw_start = edge_start;
-                }
-                if extensions.1 {
-                    draw_end = edge_end;
-                }
-            } else {
-                return;
+        let (draw_start, draw_end) = match extensions {
+            LineExtensions::None => {
+                let Some(points) = clip_segment(raw_start, raw_end, bounds) else {
+                    return;
+                };
+                points
             }
-        }
-
-        // 2. Resolve Finite Clipping
-        if !is_infinite {
-            let margin = width.max(1.0);
-            let bounds = Bounds::new(clip_bounds, margin);
-
-            if let Some((clipped_p1, clipped_p2)) = clip_segment(draw_start, draw_end, bounds) {
-                draw_start = clipped_p1;
-                draw_end = clipped_p2;
-            } else {
-                return;
+            LineExtensions::Start => {
+                let Some((edge_start, _)) = clip_infinite_line(raw_start, raw_end, bounds) else {
+                    return;
+                };
+                (edge_start, raw_end)
             }
-        }
+            LineExtensions::End => {
+                let Some((_, edge_end)) = clip_infinite_line(raw_start, raw_end, bounds) else {
+                    return;
+                };
+                (raw_start, edge_end)
+            }
+            LineExtensions::Both => {
+                let Some(points) = clip_infinite_line(raw_start, raw_end, bounds) else {
+                    return;
+                };
+                points
+            }
+        };
 
         // 2. Resolve Arrow Retraction
         // We shrink the draw segment so the arrow tip doesn't overlap the line.

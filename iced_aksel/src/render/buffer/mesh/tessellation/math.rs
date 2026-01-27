@@ -210,40 +210,36 @@ pub fn catmull_rom_to_bezier(
 /// Calculates the intersection of an **Infinite Line** with a bounding box.
 ///
 /// Returns `Some((entry_point, exit_point))` if the line is visible.
-pub fn clip_infinite_line(
-    line_start: Point,
-    line_end: Point,
-    bounds: Bounds,
-) -> Option<(Point, Point)> {
-    let delta_x = line_end.x - line_start.x;
-    let delta_y = line_end.y - line_start.y;
+pub fn clip_infinite_line(start: Point, end: Point, bounds: Bounds) -> Option<(Point, Point)> {
+    let delta_x = end.x - start.x;
+    let delta_y = end.y - start.y;
 
     // Check for vertical lines
     if delta_x.abs() < 1e-6 {
-        if line_start.x < bounds.min_x || line_start.x > bounds.max_x {
+        if start.x < bounds.min_x || start.x > bounds.max_x {
             return None;
         }
         return Some((
-            Point::new(line_start.x, bounds.min_y),
-            Point::new(line_start.x, bounds.max_y),
+            Point::new(start.x, bounds.min_y),
+            Point::new(start.x, bounds.max_y),
         ));
     }
     // Check for horizontal lines
     if delta_y.abs() < 1e-6 {
-        if line_start.y < bounds.min_y || line_start.y > bounds.max_y {
+        if start.y < bounds.min_y || start.y > bounds.max_y {
             return None;
         }
         return Some((
-            Point::new(bounds.min_x, line_start.y),
-            Point::new(bounds.max_x, line_start.y),
+            Point::new(bounds.min_x, start.y),
+            Point::new(bounds.max_x, start.y),
         ));
     }
 
     // Calculate intersection parameter 't' for all 4 boundaries
-    let t_at_min_x = (bounds.min_x - line_start.x) / delta_x;
-    let t_at_max_x = (bounds.max_x - line_start.x) / delta_x;
-    let t_at_min_y = (bounds.min_y - line_start.y) / delta_y;
-    let t_at_max_y = (bounds.max_y - line_start.y) / delta_y;
+    let t_at_min_x = (bounds.min_x - start.x) / delta_x;
+    let t_at_max_x = (bounds.max_x - start.x) / delta_x;
+    let t_at_min_y = (bounds.min_y - start.y) / delta_y;
+    let t_at_max_y = (bounds.max_y - start.y) / delta_y;
 
     // Find the range of 't' that is inside the X boundaries
     let (t_enter_x, t_exit_x) = if delta_x > 0.0 {
@@ -268,12 +264,12 @@ pub fn clip_infinite_line(
 
     Some((
         Point::new(
-            delta_x.mul_add(t_entry, line_start.x),
-            delta_y.mul_add(t_entry, line_start.y),
+            delta_x.mul_add(t_entry, start.x),
+            delta_y.mul_add(t_entry, start.y),
         ),
         Point::new(
-            delta_x.mul_add(t_exit, line_start.x),
-            delta_y.mul_add(t_exit, line_start.y),
+            delta_x.mul_add(t_exit, start.x),
+            delta_y.mul_add(t_exit, start.y),
         ),
     ))
 }

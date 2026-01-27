@@ -6,14 +6,14 @@ use iced_core::{
     text::{LineHeight, Wrapping},
 };
 
-enum LineExtensions {
+pub enum LineExtensions {
     Start,
     End,
     Both,
     None,
 }
 
-enum LineArrows {
+pub enum LineArrows {
     Start(f32),
     End(f32),
     Both(f32),
