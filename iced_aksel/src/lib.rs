@@ -863,8 +863,8 @@ where
         // Bottom-Left
         if let (Some((lw, lc)), Some((bw, _))) = (left, bottom) {
             buffer.add_primitive(Primitive::Rectangle {
-                min: Point::new(plot.x - lw, plot.y + plot.height),
-                max: Point::new(plot.x, plot.y + plot.height + bw),
+                xy1: Point::new(plot.x - lw, plot.y + plot.height),
+                xy2: Point::new(plot.x, plot.y + plot.height + bw),
                 fill: Some(lc),
                 stroke: None,
             });
@@ -873,8 +873,8 @@ where
         // Top-Left
         if let (Some((lw, lc)), Some((tw, _))) = (left, top) {
             buffer.add_primitive(Primitive::Rectangle {
-                min: Point::new(plot.x - lw, plot.y - tw),
-                max: Point::new(plot.x, plot.y),
+                xy1: Point::new(plot.x - lw, plot.y - tw),
+                xy2: Point::new(plot.x, plot.y),
                 fill: Some(lc),
                 stroke: None,
             });
@@ -883,8 +883,8 @@ where
         // Bottom-Right
         if let (Some((rw, rc)), Some((bw, _))) = (right, bottom) {
             buffer.add_primitive(Primitive::Rectangle {
-                min: Point::new(plot.x + plot.width, plot.y + plot.height),
-                max: Point::new(plot.x + plot.width + rw, plot.y + plot.height + bw),
+                xy1: Point::new(plot.x + plot.width, plot.y + plot.height),
+                xy2: Point::new(plot.x + plot.width + rw, plot.y + plot.height + bw),
                 fill: Some(rc),
                 stroke: None,
             });
@@ -893,8 +893,8 @@ where
         // Top-Right
         if let (Some((rw, rc)), Some((tw, _))) = (right, top) {
             buffer.add_primitive(Primitive::Rectangle {
-                min: Point::new(plot.x + plot.width, plot.y - tw),
-                max: Point::new(plot.x + plot.width + rw, plot.y),
+                xy1: Point::new(plot.x + plot.width, plot.y - tw),
+                xy2: Point::new(plot.x + plot.width + rw, plot.y),
                 fill: Some(rc),
                 stroke: None,
             });

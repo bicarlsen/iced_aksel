@@ -61,7 +61,7 @@ impl RenderBuffer {
                 buf.tessellator.set_quality(quality);
             }
             Self::Path(_buf) => {
-                todo!("Set quality on path-buffer")
+                // todo!("Set quality on path-buffer")
             }
         }
     }

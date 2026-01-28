@@ -101,8 +101,8 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Rectangle<D> {
         let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Rectangle {
-            min,
-            max,
+            xy1: min,
+            xy2: max,
             fill,
             stroke,
         });

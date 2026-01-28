@@ -150,8 +150,8 @@ impl MeshBatcher {
     pub fn add_primitive(&mut self, primitive: Primitive) {
         match primitive {
             Primitive::Rectangle {
-                min,
-                max,
+                xy1: min,
+                xy2: max,
                 fill,
                 stroke,
             } => {

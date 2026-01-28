@@ -1,6 +1,6 @@
 use super::Primitive;
 
-use iced_core::Rectangle;
+use iced_core::{Point, Rectangle, Size};
 use iced_graphics::geometry::{Fill, Frame, Path};
 
 const PRE_ALLOC_PATHS: usize = 5000;
@@ -62,9 +62,37 @@ impl PathBatcher {
     ///
     /// This converts the primitive into tiny-skia compatible paths.
     pub fn add_primitive(&mut self, primitive: Primitive) {
-        // TODO: Implement path rendering for each primitive type
-        // For now, this is a placeholder
         let _ = primitive;
-        todo!("Implement path rendering for tiny-skia backend")
+
+        match primitive {
+            Primitive::Rectangle {
+                xy1,
+                xy2,
+                fill,
+                stroke,
+            } => {
+                let left_most = xy1.x.min(xy2.x);
+                let right_most = xy1.x.max(xy2.x);
+
+                let top_most = xy1.y.min(xy2.y);
+                let bottom_most = xy1.y.max(xy2.y);
+
+                let size = Size {
+                    width: left_most - right_most,
+                    height: bottom_most - top_most,
+                };
+
+                let top_left = Point::new(left_most, top_most);
+
+                let path = Path::rectangle(top_left, size);
+
+                if let Some(color) = fill {
+                    self.add(path, color.into())
+                }
+            }
+            _ => {}
+        }
+
+        // todo!("Implement path rendering for tiny-skia backend")
     }
 }

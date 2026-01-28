@@ -21,8 +21,8 @@ pub struct LineArrows {
 // Describes a **shared** primitive interface between the Mesh and Path backends.
 pub enum Primitive {
     Rectangle {
-        min: Point,
-        max: Point,
+        xy1: Point,
+        xy2: Point,
         fill: Option<Color>,
         stroke: Option<ResolvedStroke>,
     },
