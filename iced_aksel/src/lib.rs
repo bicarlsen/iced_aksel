@@ -223,7 +223,7 @@ pub struct Chart<
     errors: Vec<Error<AxisId>>,
     drag_deadband: f32,
     padding: Padding,
-    quality: f32,
+    quality: Quality,
     markers: Vec<MarkerRequest<'a, AxisId, Domain, Theme>>,
 
     // Fonts
@@ -272,7 +272,7 @@ where
             errors: vec![],
             drag_deadband: DEFAULT_DRAG_DEADBAND,
             padding: Padding::new(0.),
-            quality: 1.0,
+            quality: Quality::Medium,
             markers: Vec::with_capacity(state.axes().len()),
 
             // Handlers and fonts default to None
@@ -314,7 +314,7 @@ where
     /// * `1.0`: Standard quality (Default).
     /// * `< 1.0`: Lower quality, higher performance.
     /// * `> 1.0`: Higher quality, smoother curves.
-    pub const fn quality(mut self, quality: f32) -> Self {
+    pub const fn quality(mut self, quality: Quality) -> Self {
         self.quality = quality;
         self
     }

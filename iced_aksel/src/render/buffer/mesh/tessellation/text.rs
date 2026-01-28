@@ -287,7 +287,7 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
     };
 
     // --- Decide pixel tolerance ---
-    let base_error_px = req.quality.to_tolerance();
+    let base_error_px = req.tolerance;
     let desired_error_px = base_error_px / ctx.quality_multiplier.max(0.1);
     let tess_tol_px = snap_to_bucket(desired_error_px);
     let tol_bucket_u16 = tol_bucket(tess_tol_px);

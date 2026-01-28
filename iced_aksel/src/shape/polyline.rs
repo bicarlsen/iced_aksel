@@ -1,4 +1,7 @@
-use crate::{Shape, Stroke, plot, render::Primitive};
+use crate::{
+    Shape, Stroke, plot,
+    render::{LineArrows, LineExtensions, Primitive},
+};
 use aksel::{Float, PlotPoint};
 use iced_core::Point;
 
@@ -23,16 +26,10 @@ pub struct Polyline<D> {
     pub points: Vec<PlotPoint<D>>,
     /// The stroke style (color, thickness, pattern)
     pub stroke: Option<Stroke<D>>,
-    /// Whether to extend the first segment infinitely backwards
-    pub extend_start: bool,
-    /// Whether to extend the last segment infinitely forwards
-    pub extend_end: bool,
-    /// Whether to draw an arrowhead at the start
-    pub arrow_start: bool,
-    /// Whether to draw an arrowhead at the end
-    pub arrow_end: bool,
-    /// Size multiplier for arrowheads (relative to stroke width)
-    pub arrow_size: f32,
+    /// Wether to extend the line infinitely
+    pub extensions: LineExtensions,
+    /// Wether to draw arrowheads on the line
+    pub arrows: LineArrows,
 }
 
 impl<D: Float, R: crate::Renderer> Shape<D, R> for Polyline<D> {
@@ -40,11 +37,8 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Polyline<D> {
         let Self {
             points,
             stroke,
-            extend_start,
-            extend_end,
-            arrow_start,
-            arrow_end,
-            arrow_size,
+            extensions,
+            arrows,
         } = self;
 
         if points.len() < 2 {
@@ -77,8 +71,8 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Polyline<D> {
             stroke,
             width,
             clip_bounds,
-            extensions: (extend_start, extend_end),
-            arrows: (arrow_start, arrow_end, arrow_size),
+            extensions,
+            arrows,
         });
     }
 }
@@ -91,11 +85,15 @@ impl<D: Float> Polyline<D> {
         Self {
             points,
             stroke: None,
-            extend_start: false,
-            extend_end: false,
-            arrow_start: false,
-            arrow_end: false,
-            arrow_size: 3.0,
+            extensions: LineExtensions {
+                start: false,
+                end: false,
+            },
+            arrows: LineArrows {
+                start: false,
+                end: false,
+                size: 3.0,
+            },
         }
     }
 
@@ -107,31 +105,31 @@ impl<D: Float> Polyline<D> {
 
     /// Extends the first segment of the polyline infinitely backwards.
     pub const fn extend_start(mut self, enable: bool) -> Self {
-        self.extend_start = enable;
+        self.extensions.start = enable;
         self
     }
 
     /// Extends the last segment of the polyline infinitely forwards.
     pub const fn extend_end(mut self, enable: bool) -> Self {
-        self.extend_end = enable;
+        self.extensions.end = enable;
         self
     }
 
     /// Adds an arrowhead at the start of the polyline.
     pub const fn arrow_start(mut self, enable: bool) -> Self {
-        self.arrow_start = enable;
+        self.arrows.start = enable;
         self
     }
 
     /// Adds an arrowhead at the end of the polyline.
     pub const fn arrow_end(mut self, enable: bool) -> Self {
-        self.arrow_end = enable;
+        self.arrows.end = enable;
         self
     }
 
     /// Sets the size multiplier for arrowheads.
     pub const fn arrow_size(mut self, size: f32) -> Self {
-        self.arrow_size = size;
+        self.arrows.size = size;
         self
     }
 }

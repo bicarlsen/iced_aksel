@@ -21,7 +21,7 @@ pub mod math;
 pub mod text;
 
 use crate::{
-    Stroke,
+    Quality, Stroke,
     render::{
         primitive::{LineArrows, LineExtensions},
         text::Text,
@@ -59,6 +59,9 @@ pub struct Tessellator {
     /// * 0.5 = High Performance (Lower vertex count for curves).
     /// * 2.0 = High Quality (Smoother curves).
     quality: f32,
+
+    /// Global text quality tolerance
+    text_tolerance: f32,
 }
 
 impl Default for Tessellator {
@@ -69,6 +72,7 @@ impl Default for Tessellator {
             scratch_geometry: VertexBuffers::new(),
             glyph_cache: TextTessellationCache::new(),
             quality: 1.0,
+            text_tolerance: 0.5,
         }
     }
 }
@@ -90,12 +94,14 @@ impl Tessellator {
     /// If the quality changes significantly, this method automatically clears the
     /// text cache. This prevents the "Sticky Cache" problem where high-quality glyphs
     /// persist even after the user requests lower quality (or vice versa).
-    pub fn set_quality(&mut self, quality: f32) {
-        let new_quality = quality.clamp(0.1, 5.0);
+    pub fn set_quality(&mut self, quality: Quality) {
+        let new_tolerance = quality.to_text_tolerance();
+
+        self.quality = quality.to_tessellation_quality();
 
         // If the quality has changed significantly (more than float error)...
-        if (self.quality - new_quality).abs() > 0.001 {
-            self.quality = new_quality;
+        if (self.text_tolerance - new_tolerance).abs() > 0.001 {
+            self.text_tolerance = new_tolerance;
 
             // ...invalidate the cache.
             // This forces the engine to regenerate geometry at the new
@@ -104,9 +110,9 @@ impl Tessellator {
         }
     }
 
-    /// Returns the current quality multiplier.
-    pub const fn quality(&self) -> f32 {
-        self.quality
+    /// Returns the globally set text-tolerance of this tessellator
+    pub fn text_tolerance(&self) -> f32 {
+        self.text_tolerance
     }
 
     /// Manually clears the text glyph cache.
@@ -496,42 +502,41 @@ impl Tessellator {
             return;
         }
 
+        let mut draw_start = raw_start;
+        let mut draw_end = raw_end;
         let margin = width.max(1.0);
         let bounds = Bounds::new(clip_bounds, margin);
+        let is_infinite = extensions.start || extensions.end;
 
-        let (draw_start, draw_end) = match extensions {
-            LineExtensions::None => {
-                let Some(points) = clip_segment(raw_start, raw_end, bounds) else {
-                    return;
-                };
-                points
+        // 1. Resolve Infinite Geometry
+        if is_infinite {
+            let Some((edge_start, edge_end)) = clip_infinite_line(raw_start, raw_end, bounds)
+            else {
+                return;
+            };
+            if extensions.start {
+                draw_start = edge_start;
             }
-            LineExtensions::Start => {
-                let Some((edge_start, _)) = clip_infinite_line(raw_start, raw_end, bounds) else {
-                    return;
-                };
-                (edge_start, raw_end)
+            if extensions.end {
+                draw_end = edge_end;
             }
-            LineExtensions::End => {
-                let Some((_, edge_end)) = clip_infinite_line(raw_start, raw_end, bounds) else {
-                    return;
-                };
-                (raw_start, edge_end)
-            }
-            LineExtensions::Both => {
-                let Some(points) = clip_infinite_line(raw_start, raw_end, bounds) else {
-                    return;
-                };
-                points
-            }
-        };
+        }
+        // 2. Resolve Finite Clipping
+        else {
+            let Some((clipped_p1, clipped_p2)) = clip_segment(draw_start, draw_end, bounds) else {
+                return;
+            };
+
+            draw_start = clipped_p1;
+            draw_end = clipped_p2;
+        }
 
         // 2. Resolve Arrow Retraction
         // We shrink the draw segment so the arrow tip doesn't overlap the line.
         let direction = normalize(direction_vector);
-        let arrow_len = width * arrows.2;
-        let has_start_arrow = arrows.0 && !extensions.0;
-        let has_end_arrow = arrows.1 && !extensions.1;
+        let arrow_len = width * arrows.size;
+        let has_start_arrow = arrows.start && !extensions.start;
+        let has_end_arrow = arrows.end && !extensions.end;
 
         if has_start_arrow {
             draw_start += direction * arrow_len;
@@ -559,12 +564,18 @@ impl Tessellator {
 
         // 4. Draw Arrowheads
         if has_start_arrow {
-            self.manual
-                .draw_arrowhead(buffer, raw_start, -direction, width, arrows.2, stroke.fill);
+            self.manual.draw_arrowhead(
+                buffer,
+                raw_start,
+                -direction,
+                width,
+                arrows.size,
+                stroke.fill,
+            );
         }
         if has_end_arrow {
             self.manual
-                .draw_arrowhead(buffer, raw_end, direction, width, arrows.2, stroke.fill);
+                .draw_arrowhead(buffer, raw_end, direction, width, arrows.size, stroke.fill);
         }
     }
 
@@ -580,8 +591,8 @@ impl Tessellator {
         stroke: Stroke<D>,
         width: f32,
         clip_bounds: Rectangle,
-        extensions: (bool, bool),
-        arrows: (bool, bool, f32),
+        extensions: LineExtensions,
+        arrows: LineArrows,
     ) where
         I: IntoIterator<Item = Point>,
     {
@@ -599,17 +610,17 @@ impl Tessellator {
         let pn = point_list[last_idx];
 
         // 1. Handle Infinite Extensions
-        if extensions.0 || extensions.1 {
+        if extensions.start || extensions.end {
             let margin = width.max(1.0);
             let bounds = Bounds::new(clip_bounds, margin);
 
-            if extensions.0 {
+            if extensions.start {
                 let p1 = point_list[1];
                 if let Some((edge_start, _)) = clip_infinite_line(p0, p1, bounds) {
                     point_list[0] = edge_start;
                 }
             }
-            if extensions.1 {
+            if extensions.end {
                 let p_prev = point_list[last_idx - 1];
                 if let Some((_, edge_end)) = clip_infinite_line(p_prev, pn, bounds) {
                     point_list[last_idx] = edge_end;
@@ -618,15 +629,15 @@ impl Tessellator {
         }
 
         // 2. Handle Arrow Retraction
-        if arrows.0 && !extensions.0 {
+        if arrows.start && !extensions.start {
             let p1 = point_list[1];
             let dir = normalize(p1 - p0);
-            point_list[0] = p0 + dir * (width * arrows.2);
+            point_list[0] = p0 + dir * (width * arrows.size);
         }
-        if arrows.1 && !extensions.1 {
+        if arrows.end && !extensions.end {
             let p_prev = point_list[last_idx - 1];
             let dir = normalize(pn - p_prev);
-            point_list[last_idx] = pn - dir * (width * arrows.2);
+            point_list[last_idx] = pn - dir * (width * arrows.size);
         }
 
         // 3. Draw Path
@@ -639,19 +650,19 @@ impl Tessellator {
         self.stroke_polyline(buffer, lyon_points, stroke, width, false);
 
         // 4. Draw Arrowheads
-        if arrows.0 && !extensions.0 {
+        if arrows.start && !extensions.start {
             let p1 = point_list[1];
             // Use direction from the original start point (p0) to p1
             // Even if p0 was retracted in the list, the visual direction is the same.
             let direction = normalize(p1 - p0);
             self.manual
-                .draw_arrowhead(buffer, p0, -direction, width, arrows.2, stroke.fill);
+                .draw_arrowhead(buffer, p0, -direction, width, arrows.size, stroke.fill);
         }
-        if arrows.1 && !extensions.1 {
+        if arrows.end && !extensions.end {
             let p_prev = point_list[last_idx - 1];
             let direction = normalize(pn - p_prev);
             self.manual
-                .draw_arrowhead(buffer, pn, direction, width, arrows.2, stroke.fill);
+                .draw_arrowhead(buffer, pn, direction, width, arrows.size, stroke.fill);
         }
     }
 
@@ -1120,14 +1131,6 @@ impl Tessellator {
     ///
     /// Unlike standard text, this method generates raw geometry (triangles) which can be
     /// freely rotated and scaled without losing quality.
-    ///
-    /// **OBS:** Only use this if you need rotation or dynamic sizing text.
-    ///
-    /// This is more CPU intensive than its `Label` counterpart, so if you need thousands
-    /// of labels at the same time, ensure you set the Quality settings appropriately.
-    ///
-    /// **Internal Refactor:** This method now bundles the rendering context and request
-    /// parameters into structs to improve maintainability.
     pub fn draw_text(&mut self, mesh_buffer: &mut crate::render::buffer::MeshData, text: Text) {
         // Construct the context to hold heavy resources (caches, buffers)
         let ctx = &mut TextRenderContext {
@@ -1135,8 +1138,6 @@ impl Tessellator {
             tessellator: &mut self.complex.fill,
             glyph_cache: &mut self.glyph_cache,
             scratch_geometry: &mut self.scratch_geometry,
-
-            // Pass the global tessellator quality multiplier down to the text engine
             quality_multiplier: self.quality,
         };
 

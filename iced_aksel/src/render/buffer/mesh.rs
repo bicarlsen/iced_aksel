@@ -1,4 +1,4 @@
-use crate::render::primitive::Primitive;
+use crate::{Quality, render::primitive::Primitive};
 
 use aksel::Float;
 use iced_core::{Rectangle, Transformation};
@@ -83,7 +83,7 @@ impl MeshBatcher {
     }
 
     /// Sets the quality of the internal renderer
-    pub fn set_quality(&mut self, quality: f32) {
+    pub fn set_quality(&mut self, quality: Quality) {
         self.tessellator.set_quality(quality);
     }
 
@@ -322,6 +322,10 @@ impl MeshBatcher {
                 bounds,
                 wrapping,
             } => {
+                let tolerance = quality
+                    .map(|q| q.max(0.001))
+                    .unwrap_or_else(|| self.tessellator.text_tolerance());
+
                 self.tessellator.draw_text(
                     &mut self.data,
                     crate::render::text::Text {
@@ -333,7 +337,7 @@ impl MeshBatcher {
                         horizontal_alignment,
                         vertical_alignment,
                         fill,
-                        quality,
+                        tolerance,
                         line_height: line_height.to_absolute(size),
                         bounds,
                         wrapping,

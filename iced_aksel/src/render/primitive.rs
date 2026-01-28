@@ -1,4 +1,4 @@
-use crate::{Quality, Stroke};
+use crate::Stroke;
 use aksel::Float;
 use iced_core::{
     Color, Font, Pixels, Point, Rectangle, Size,
@@ -6,18 +6,17 @@ use iced_core::{
     text::{LineHeight, Wrapping},
 };
 
-pub enum LineExtensions {
-    Start,
-    End,
-    Both,
-    None,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineExtensions {
+    pub start: bool,
+    pub end: bool,
 }
 
-pub enum LineArrows {
-    Start(f32),
-    End(f32),
-    Both(f32),
-    None,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineArrows {
+    pub start: bool,
+    pub end: bool,
+    pub size: f32,
 }
 
 // Describes a **shared** primitive interface between the Mesh and Path backends.
@@ -121,7 +120,8 @@ pub enum Primitive<D: Float> {
         horizontal_alignment: Horizontal,
         vertical_alignment: Vertical,
         fill: Color,
-        quality: Quality,
+        /// Override the quality tolerance of the text
+        quality: Option<f32>,
         line_height: LineHeight,
         bounds: Size,
         wrapping: Wrapping,

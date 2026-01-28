@@ -1,4 +1,3 @@
-use crate::Quality;
 use iced_core::{
     Color, Font, Pixels, Point, Size,
     alignment::{Horizontal, Vertical},
@@ -15,7 +14,7 @@ pub struct Text {
     pub horizontal_alignment: Horizontal,
     pub vertical_alignment: Vertical,
     pub fill: Color,
-    pub quality: Quality,
+    pub tolerance: f32,
     pub line_height: Pixels,
     pub bounds: Size,
     pub wrapping: Wrapping,

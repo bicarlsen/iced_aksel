@@ -94,8 +94,8 @@ pub struct Label<D> {
     pub vertical_alignment: Vertical,
     /// Color of the text
     pub fill: Color,
-    /// Quality preset to render at
-    pub quality: Quality,
+    /// Text tolerance quality override
+    pub quality: Option<f32>,
     /// Letter spacing for the text
     ///
     /// TODO: Unused - Add this to rendering implementation!
@@ -170,7 +170,7 @@ impl<D: Float> Label<D> {
             horizontal_alignment: Horizontal::Left,
             vertical_alignment: Vertical::Center,
             fill: Color::BLACK,
-            quality: Quality::default(), // Defaults to Medium
+            quality: None,
             letter_spacing: 1.2,
             font: None,
             line_height: 1.0,
@@ -237,13 +237,11 @@ impl<D: Float> Label<D> {
         self
     }
 
-    /// Sets the rendering quality (Level of Detail).
+    /// Overrides the rendering quality (Level of Detail).
     ///
-    /// - `Quality::Medium` (Default) is balanced for most cases.
-    /// - Use `Quality::Low` if rendering thousands of labels.
-    /// - Use `Quality::High` for very large, cinematic text.
-    pub const fn quality(mut self, quality: Quality) -> Self {
-        self.quality = quality;
+    /// See [`crate::Quality::Custom`] for more info
+    pub const fn quality(mut self, tolerance: f32) -> Self {
+        self.quality = Some(tolerance);
         self
     }
 }
