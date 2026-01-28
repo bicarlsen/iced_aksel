@@ -1,4 +1,4 @@
-use crate::{Quality, render::primitive::Primitive};
+use crate::{Quality, render::primitive::Primitive, stroke::StrokeStyle};
 
 use aksel::Float;
 use iced_core::{Rectangle, Transformation};
@@ -6,7 +6,7 @@ use iced_graphics::mesh::{Indexed, Mesh, Renderer, SolidVertex2D};
 
 mod tessellation;
 
-use tessellation::Tessellator;
+use tessellation::{Tessellator, manual::linear};
 
 const PRE_ALLOC_VERTICES: usize = 10_000;
 const PRE_ALLOC_INDICES: usize = 20_000;
@@ -88,7 +88,7 @@ impl MeshBatcher {
     }
 
     /// Returns the number of vertices currently sitting in the pending buffer.
-    pub fn vertices_count(&self) -> usize {
+    pub const fn vertices_count(&self) -> usize {
         if let Some(buffer) = &self.data.buffer {
             return buffer.vertices.len();
         }
@@ -96,7 +96,7 @@ impl MeshBatcher {
     }
 
     /// Returns the total vertices processed this frame (flushed + pending).
-    pub fn total_vertices(&self) -> usize {
+    pub const fn total_vertices(&self) -> usize {
         let current = if let Some(b) = &self.data.buffer {
             b.vertices.len()
         } else {
@@ -106,7 +106,7 @@ impl MeshBatcher {
     }
 
     /// Returns the total indices processed this frame (flushed + pending).
-    pub fn total_indices(&self) -> usize {
+    pub const fn total_indices(&self) -> usize {
         let current = if let Some(b) = &self.data.buffer {
             b.indices.len()
         } else {
@@ -234,10 +234,73 @@ impl MeshBatcher {
                     arrows,
                 );
             }
+            Primitive::HorizontalLine {
+                y,
+                x_start,
+                x_end,
+                width,
+                stroke,
+                snap,
+            } => match stroke.style {
+                StrokeStyle::Solid => {
+                    linear::draw_horizontal_line(
+                        &mut self.data,
+                        x_start,
+                        x_end,
+                        y,
+                        width,
+                        stroke.fill,
+                        snap,
+                    );
+                }
+                StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
+                    &mut self.data,
+                    x_start,
+                    x_end,
+                    y,
+                    width,
+                    stroke.fill,
+                    dash,
+                    gap,
+                    snap,
+                ),
+                StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
+            },
+            Primitive::VerticalLine {
+                x,
+                y_start,
+                y_end,
+                width,
+                stroke,
+                snap,
+            } => match stroke.style {
+                StrokeStyle::Solid => {
+                    linear::draw_horizontal_line(
+                        &mut self.data,
+                        y_start,
+                        y_end,
+                        x,
+                        width,
+                        stroke.fill,
+                        snap,
+                    );
+                }
+                StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
+                    &mut self.data,
+                    y_start,
+                    y_end,
+                    x,
+                    width,
+                    stroke.fill,
+                    dash,
+                    gap,
+                    snap,
+                ),
+                StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
+            },
             Primitive::PolyLine {
                 points,
                 stroke,
-                width,
                 clip_bounds,
                 extensions,
                 arrows,

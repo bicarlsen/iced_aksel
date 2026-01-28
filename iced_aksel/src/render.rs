@@ -2,7 +2,7 @@ mod buffer;
 mod primitive;
 mod text;
 
-pub use buffer::{MeshBatcher, PathBatcher, RenderBuffer};
+pub use buffer::RenderBuffer;
 pub use primitive::{LineArrows, LineExtensions, Primitive};
 pub use text::Text;
 
@@ -76,12 +76,12 @@ impl Renderer for iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_ti
 
 impl Renderer for iced_wgpu::Renderer {
     fn init_buffer(&self) -> RenderBuffer {
-        RenderBuffer::Mesh(MeshBatcher::new(100_000))
+        RenderBuffer::new_mesh(100_000)
     }
 }
 
 impl Renderer for iced_tiny_skia::Renderer {
     fn init_buffer(&self) -> RenderBuffer {
-        RenderBuffer::Path(PathBatcher::new(5000)) // TODO: Test limits
+        RenderBuffer::new_path(5000)
     }
 }

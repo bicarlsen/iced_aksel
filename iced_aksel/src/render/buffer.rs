@@ -21,11 +21,19 @@ pub use mesh::{MeshBatcher, MeshData};
 pub use path::PathBatcher;
 
 pub enum RenderBuffer {
-    Mesh(MeshBatcher),
-    Path(PathBatcher),
+    Mesh(Box<MeshBatcher>),
+    Path(Box<PathBatcher>),
 }
 
 impl RenderBuffer {
+    pub fn new_mesh(limit: usize) -> Self {
+        Self::Mesh(Box::new(MeshBatcher::new(limit)))
+    }
+
+    pub fn new_path(limit: usize) -> Self {
+        Self::Path(Box::new(PathBatcher::new(limit)))
+    }
+
     pub fn flush<R: crate::Renderer>(&mut self, renderer: &mut R, clip_bounds: &Rectangle) {
         match self {
             Self::Path(buf) => {
@@ -53,7 +61,7 @@ impl RenderBuffer {
             Self::Mesh(buf) => {
                 buf.tessellator.set_quality(quality);
             }
-            Self::Path(buf) => {
+            Self::Path(_buf) => {
                 todo!("Set quality on path-buffer")
             }
         }

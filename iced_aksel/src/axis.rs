@@ -21,7 +21,8 @@ use iced_core::{
 };
 
 use crate::{
-    render::RenderBuffer,
+    Stroke,
+    render::{Primitive, RenderBuffer},
     style::{AxisStyle, DashStyle, Style},
 };
 
@@ -911,6 +912,14 @@ impl<D: Float, Theme> Axis<D, Theme> {
         match self.position {
             Position::Bottom => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
+                buffer.add_primitive(Primitive::VerticalLine {
+                    x,
+                    y_start: bounds.y,
+                    y_end: bounds.y + length,
+                    width,
+                    stroke: Stroke::new(color, width),
+                    snap: (),
+                });
                 // draw_vertical_line(
                 //     &mut mesh_buffer.data,
                 //     x,

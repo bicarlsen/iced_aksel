@@ -1,6 +1,5 @@
 pub mod basic;
 pub mod linear;
-pub mod mesh;
 pub mod polygon;
 pub mod radial;
 
@@ -217,20 +216,5 @@ impl ManualTessellator {
             color,
             segments,
         );
-    }
-
-    // =========================================================================
-    //  Raw Mesh
-    // =========================================================================
-
-    #[inline]
-    pub fn draw_mesh(
-        &self,
-        buffer: &mut MeshData,
-        vertices: &[Point],
-        indices: &[u32],
-        color: Color,
-    ) {
-        mesh::draw_raw_mesh(buffer, vertices, indices, color);
     }
 }

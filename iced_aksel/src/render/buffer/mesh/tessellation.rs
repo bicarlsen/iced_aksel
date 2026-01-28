@@ -31,7 +31,7 @@ use crate::{
 use aksel::Float;
 use complex::{ComplexTessellator, DashedPolyline, LyonAdapter, SolidVertexConstructor};
 use iced_core::{Color, Point, Rectangle};
-use iced_graphics::color::pack;
+use iced_graphics::{color::pack, mesh::SolidVertex2D};
 use lyon_path::{LineCap, LineJoin, Path, PathEvent, iterator::FromPolyline, traits::PathIterator};
 use lyon_tessellation::{StrokeOptions, VertexBuffers};
 use math::*;
@@ -589,7 +589,6 @@ impl Tessellator {
         buffer: &mut crate::render::buffer::MeshData,
         points: I,
         stroke: Stroke<D>,
-        width: f32,
         clip_bounds: Rectangle,
         extensions: LineExtensions,
         arrows: LineArrows,
@@ -1020,8 +1019,16 @@ impl Tessellator {
                     .flat_map(|p| [p.x as f64, p.y as f64])
                     .collect();
                 if let Ok(indices) = earcutr::earcut(&flat_coords, &[], 2) {
+                    let packed = pack(color);
                     let mesh_indices: Vec<u32> = indices.iter().map(|&i| i as u32).collect();
-                    self.manual.draw_mesh(buffer, points, &mesh_indices, color);
+                    let mesh_vertices: Vec<SolidVertex2D> = points
+                        .iter()
+                        .map(|p| SolidVertex2D {
+                            position: [p.x, p.y],
+                            color: packed,
+                        })
+                        .collect();
+                    buffer.add(&mesh_indices, &mesh_vertices);
                 }
             }
         }
@@ -1085,15 +1092,15 @@ impl Tessellator {
                 &options,
                 &mut writer,
             ),
-            StrokeStyle::Dashed => {
-                let dashes = [resolved_width * 5., resolved_width * 2.];
+            StrokeStyle::Dashed { dash, gap } => {
+                let dashes = [resolved_width * dash, resolved_width * gap];
                 let dashed = DashedPolyline::new(points.into_iter(), &dashes);
                 self.complex
                     .stroke
                     .tessellate(dashed, &options, &mut writer)
             }
-            StrokeStyle::Dotted => {
-                let dots = [resolved_width, resolved_width * 2.0];
+            StrokeStyle::Dotted { gap } => {
+                let dots = [resolved_width, resolved_width * gap];
                 let dashed = DashedPolyline::new(points.into_iter(), &dots);
                 self.complex
                     .stroke

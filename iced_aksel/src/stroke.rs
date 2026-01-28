@@ -8,7 +8,7 @@ use iced_core::Color;
 ///
 /// These styles affect how lines are rendered. The stroke width influences
 /// the appearance of each style.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StrokeStyle {
     /// Solid continuous line with no gaps.
     ///
@@ -28,7 +28,12 @@ pub enum StrokeStyle {
     /// use iced_aksel::stroke::StrokeStyle;
     /// let style = StrokeStyle::Dashed;
     /// ```
-    Dashed,
+    Dashed {
+        /// Length of the dashes
+        dash: f32,
+        /// Length of the gaps in-between
+        gap: f32,
+    },
 
     /// Dotted line with small circular dots.
     ///
@@ -38,7 +43,10 @@ pub enum StrokeStyle {
     /// use iced_aksel::stroke::StrokeStyle;
     /// let style = StrokeStyle::Dotted;
     /// ```
-    Dotted,
+    Dotted {
+        /// Length of the gap between dots
+        gap: f32,
+    },
 }
 
 /// A stroke configuration with color, thickness, and style.

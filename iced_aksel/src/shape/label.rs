@@ -1,4 +1,3 @@
-use crate::Quality;
 use crate::render::Primitive;
 use crate::{Measure, Shape, plot};
 use aksel::{Float, PlotPoint};

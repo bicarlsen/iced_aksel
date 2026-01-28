@@ -67,6 +67,8 @@ pub use rectangle::Rectangle;
 pub use spline::Spline;
 pub use triangle::Triangle;
 
+pub use crate::render::{LineArrows, LineExtensions};
+
 /// Trait for shapes that can be rendered on a plot.
 ///
 /// Implement this trait for custom shapes. The rendering context provides access
