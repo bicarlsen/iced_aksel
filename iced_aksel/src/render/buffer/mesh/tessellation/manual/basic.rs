@@ -3,7 +3,7 @@
 //! This module handles shapes that can be trivially defined by a bounding box or center/radius.
 
 use crate::render::buffer::MeshData;
-use iced_core::Color;
+use iced_core::{Color, Point};
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
 /// Writes a filled axis-aligned rectangle.
@@ -69,8 +69,7 @@ pub fn draw_stroke_rect(
     y_min: f32,
     x_max: f32,
     y_max: f32,
-    thickness_x: f32,
-    thickness_y: f32,
+    thickness: f32,
     color: Color,
 ) {
     let packed_color = pack(color);
@@ -78,10 +77,10 @@ pub fn draw_stroke_rect(
     let start_index = mesh.vertices.len() as u32;
 
     // Inner rectangle coordinates
-    let inner_x_min = x_min + thickness_x;
-    let inner_x_max = x_max - thickness_x;
-    let inner_y_min = y_min + thickness_y;
-    let inner_y_max = y_max - thickness_y;
+    let inner_x_min = x_min + thickness;
+    let inner_x_max = x_max - thickness;
+    let inner_y_min = y_min + thickness;
+    let inner_y_max = y_max - thickness;
 
     mesh.vertices.extend_from_slice(&[
         // Outer Loop (0-3)
@@ -159,10 +158,8 @@ pub fn draw_stroke_rect(
 #[inline]
 pub fn draw_fill_circle(
     buffer: &mut MeshData,
-    center_x: f32,
-    center_y: f32,
-    radius_x: f32,
-    radius_y: f32,
+    center: Point,
+    radius: Point,
     color: Color,
     segments: usize,
 ) {
@@ -173,7 +170,7 @@ pub fn draw_fill_circle(
 
     // Center Vertex (Hub of the fan)
     mesh.vertices.push(SolidVertex2D {
-        position: [center_x, center_y],
+        position: [center.x, center.y],
         color: packed_color,
     });
 
@@ -183,8 +180,8 @@ pub fn draw_fill_circle(
         let (sin, cos) = theta.sin_cos();
         mesh.vertices.push(SolidVertex2D {
             position: [
-                cos.mul_add(radius_x, center_x),
-                sin.mul_add(radius_y, center_y),
+                cos.mul_add(radius.x, center.x),
+                sin.mul_add(radius.y, center.y),
             ],
             color: packed_color,
         });
@@ -203,15 +200,11 @@ pub fn draw_fill_circle(
 ///
 /// Creates an inner ring and an outer ring of vertices and laces them together.
 #[inline]
-#[allow(clippy::too_many_arguments)]
 pub fn draw_stroke_circle(
     buffer: &mut MeshData,
-    center_x: f32,
-    center_y: f32,
-    radius_x_inner: f32,
-    radius_y_inner: f32,
-    radius_x_outer: f32,
-    radius_y_outer: f32,
+    center: Point,
+    inner_radius: Point,
+    outer_radius: Point,
     color: Color,
     segments: usize,
 ) {
@@ -227,8 +220,8 @@ pub fn draw_stroke_circle(
         // Inner Vertex
         mesh.vertices.push(SolidVertex2D {
             position: [
-                cos.mul_add(radius_x_inner, center_x),
-                sin.mul_add(radius_y_inner, center_y),
+                cos.mul_add(inner_radius.x, center.x),
+                sin.mul_add(inner_radius.y, center.y),
             ],
             color: packed_color,
         });
@@ -236,8 +229,8 @@ pub fn draw_stroke_circle(
         // Outer Vertex
         mesh.vertices.push(SolidVertex2D {
             position: [
-                cos.mul_add(radius_x_outer, center_x),
-                sin.mul_add(radius_y_outer, center_y),
+                cos.mul_add(outer_radius.x, center.x),
+                sin.mul_add(outer_radius.y, center.y),
             ],
             color: packed_color,
         });

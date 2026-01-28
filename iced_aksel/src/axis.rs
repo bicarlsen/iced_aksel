@@ -21,8 +21,8 @@ use iced_core::{
 };
 
 use crate::{
-    Stroke,
     render::{Primitive, RenderBuffer},
+    stroke::{ResolvedStroke, StrokeStyle},
     style::{AxisStyle, DashStyle, Style},
 };
 
@@ -903,11 +903,9 @@ impl<D: Float, Theme> Axis<D, Theme> {
         buffer: &mut RenderBuffer,
         pos_norm: f32,
     ) {
-        let width = line.width.0;
+        let thickness = line.width.0;
         let length = line.length.0;
-        let color = line.color;
-
-        // TODO: Switch to using primitives!
+        let fill = line.color;
 
         match self.position {
             Position::Bottom => {
@@ -916,55 +914,55 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     x,
                     y_start: bounds.y,
                     y_end: bounds.y + length,
-                    width,
-                    stroke: Stroke::new(color, width),
-                    snap: (),
+                    stroke: ResolvedStroke {
+                        fill,
+                        thickness,
+                        style: StrokeStyle::Solid,
+                    },
+                    snap: true,
                 });
-                // draw_vertical_line(
-                //     &mut mesh_buffer.data,
-                //     x,
-                //     bounds.y,
-                //     bounds.y + length,
-                //     width,
-                //     color,
-                //     true,
-                // );
             }
             Position::Top => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
-                // draw_vertical_line(
-                //     &mut mesh_buffer.data,
-                //     x,
-                //     bounds.y + bounds.height - length,
-                //     bounds.y + bounds.height,
-                //     width,
-                //     color,
-                //     true,
-                // );
+                buffer.add_primitive(Primitive::VerticalLine {
+                    x,
+                    y_start: bounds.y,
+                    y_end: bounds.y + length,
+                    stroke: ResolvedStroke {
+                        fill,
+                        thickness,
+                        style: StrokeStyle::Solid,
+                    },
+                    snap: true,
+                });
             }
             Position::Right => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                // draw_horizontal_line(
-                //     &mut mesh_buffer.data,
-                //     bounds.x,
-                //     bounds.x + length,
-                //     y,
-                //     width,
-                //     color,
-                //     true,
-                // );
+                buffer.add_primitive(Primitive::HorizontalLine {
+                    y,
+                    x_start: bounds.x,
+                    x_end: bounds.x + length,
+                    stroke: ResolvedStroke {
+                        fill,
+                        thickness,
+                        style: StrokeStyle::Solid,
+                    },
+                    snap: true,
+                });
             }
             Position::Left => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                // draw_horizontal_line(
-                //     &mut mesh_buffer.data,
-                //     bounds.x + bounds.width - length,
-                //     bounds.x + bounds.width,
-                //     y,
-                //     width,
-                //     color,
-                //     true,
-                // );
+                buffer.add_primitive(Primitive::HorizontalLine {
+                    y,
+                    x_start: bounds.x,
+                    x_end: bounds.x + length,
+                    stroke: ResolvedStroke {
+                        fill,
+                        thickness,
+                        style: StrokeStyle::Solid,
+                    },
+                    snap: true,
+                });
             }
         }
     }
@@ -979,8 +977,8 @@ impl<D: Float, Theme> Axis<D, Theme> {
         pos_norm: f32,
     ) {
         let orientation = self.orientation();
-        let width = line.width.0;
-        let color = line.color;
+        let thickness = line.width.0;
+        let fill = line.color;
 
         // TODO: Switch to using primitives!
 
@@ -992,27 +990,32 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    // draw_vertical_dashed_line(
-                    //     &mut mesh_buffer.data,
-                    //     x,
-                    //     plot_bounds.y,
-                    //     plot_bounds.y + plot_bounds.height,
-                    //     width,
-                    //     color,
-                    //     line_length,
-                    //     gap_length,
-                    //     true,
-                    // );
+                    buffer.add_primitive(Primitive::VerticalLine {
+                        x,
+                        y_start: plot_bounds.y,
+                        y_end: plot_bounds.y + plot_bounds.height,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Dashed {
+                                gap: gap_length,
+                                dash: line_length,
+                            },
+                        },
+                        snap: true,
+                    });
                 } else {
-                    // draw_vertical_line(
-                    //     &mut mesh_buffer.data,
-                    //     x,
-                    //     plot_bounds.y,
-                    //     plot_bounds.y + plot_bounds.height,
-                    //     width,
-                    //     color,
-                    //     true,
-                    // );
+                    buffer.add_primitive(Primitive::VerticalLine {
+                        x,
+                        y_start: plot_bounds.y,
+                        y_end: plot_bounds.y + plot_bounds.height,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
+                    });
                 }
             }
             Orientation::Vertical => {
@@ -1022,27 +1025,32 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    // draw_horizontal_dashed_line(
-                    //     &mut mesh_buffer.data,
-                    //     plot_bounds.x,
-                    //     plot_bounds.x + plot_bounds.width,
-                    //     y,
-                    //     width,
-                    //     color,
-                    //     line_length,
-                    //     gap_length,
-                    //     true,
-                    // );
+                    buffer.add_primitive(Primitive::HorizontalLine {
+                        y,
+                        x_start: plot_bounds.x,
+                        x_end: plot_bounds.x + plot_bounds.width,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Dashed {
+                                dash: line_length,
+                                gap: gap_length,
+                            },
+                        },
+                        snap: true,
+                    });
                 } else {
-                    // draw_horizontal_line(
-                    //     &mut mesh_buffer.data,
-                    //     plot_bounds.x,
-                    //     plot_bounds.x + plot_bounds.width,
-                    //     y,
-                    //     width,
-                    //     color,
-                    //     true,
-                    // );
+                    buffer.add_primitive(Primitive::HorizontalLine {
+                        y,
+                        x_start: plot_bounds.x,
+                        x_end: plot_bounds.x + plot_bounds.width,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
+                    });
                 }
             }
         }

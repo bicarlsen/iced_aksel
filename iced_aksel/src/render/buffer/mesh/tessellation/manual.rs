@@ -48,20 +48,10 @@ impl ManualTessellator {
         y_min: f32,
         x_max: f32,
         y_max: f32,
-        thickness_x: f32,
-        thickness_y: f32,
+        thickness: f32,
         color: Color,
     ) {
-        basic::draw_stroke_rect(
-            buffer,
-            x_min,
-            y_min,
-            x_max,
-            y_max,
-            thickness_x,
-            thickness_y,
-            color,
-        );
+        basic::draw_stroke_rect(buffer, x_min, y_min, x_max, y_max, thickness, color);
     }
 
     #[inline]
@@ -69,16 +59,12 @@ impl ManualTessellator {
     pub fn draw_fill_circle(
         &self,
         buffer: &mut MeshData,
-        center_x: f32,
-        center_y: f32,
-        radius_x: f32,
-        radius_y: f32,
+        center: Point,
+        radius: Point,
         color: Color,
         segments: usize,
     ) {
-        basic::draw_fill_circle(
-            buffer, center_x, center_y, radius_x, radius_y, color, segments,
-        );
+        basic::draw_fill_circle(buffer, center, radius, color, segments);
     }
 
     #[inline]
@@ -86,26 +72,13 @@ impl ManualTessellator {
     pub fn draw_stroke_circle(
         &self,
         buffer: &mut MeshData,
-        center_x: f32,
-        center_y: f32,
-        radius_x_inner: f32,
-        radius_y_inner: f32,
-        radius_x_outer: f32,
-        radius_y_outer: f32,
+        center: Point,
+        inner_radius: Point,
+        outer_radius: Point,
         color: Color,
         segments: usize,
     ) {
-        basic::draw_stroke_circle(
-            buffer,
-            center_x,
-            center_y,
-            radius_x_inner,
-            radius_y_inner,
-            radius_x_outer,
-            radius_y_outer,
-            color,
-            segments,
-        );
+        basic::draw_stroke_circle(buffer, center, inner_radius, outer_radius, color, segments);
     }
 
     // =========================================================================

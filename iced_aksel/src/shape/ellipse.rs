@@ -64,12 +64,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Ellipse<D> {
         let center = Point::new(ctx.x_to_screen(&center.x), ctx.y_to_screen(&center.y));
         let radius = Point::new(radius_x.resolve_x(ctx), radius_y.resolve_y(ctx));
 
-        let stroke = stroke.map(|s| {
-            // For stroke thickness on ellipses, we use X-axis scaling as a convention
-            // to ensure a uniform stroke width, avoiding complex anisotropic stroking logic.
-            let width_pixels = s.thickness.resolve_x(ctx);
-            (s, width_pixels)
-        });
+        let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Ellipse {
             center,

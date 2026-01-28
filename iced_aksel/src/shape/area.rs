@@ -47,10 +47,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Area<D> {
             .map(|p| Point::new(ctx.x_to_screen(&p.x), ctx.y_to_screen(&p.y)))
             .collect();
 
-        let stroke = stroke.map(|s| {
-            let width_pixels = s.thickness.resolve_x(ctx);
-            (s, width_pixels)
-        });
+        let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Area {
             points,

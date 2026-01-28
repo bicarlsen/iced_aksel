@@ -65,17 +65,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Arc<D> {
             x.min(y)
         };
 
-        let stroke = stroke.and_then(|stroke| {
-            let width_x = stroke.thickness.resolve_x(ctx);
-            let width_y = stroke.thickness.resolve_y(ctx);
-            let width_pixels = width_x.min(width_y);
-
-            if width_pixels < 0.1 {
-                None
-            } else {
-                Some((stroke, width_pixels))
-            }
-        });
+        let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Arc {
             center,

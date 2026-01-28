@@ -170,9 +170,10 @@ impl PlotData<f64> for StyleableData {
         let color = (self.color)(theme);
 
         // Draw the line
-        plot.add_shape(
-            Polyline::new(self.line.clone()).stroke(Stroke::new(color, Measure::Screen(2.5))),
-        );
+        plot.add_shape(Polyline::new(
+            self.line.clone(),
+            Stroke::new(color, Measure::Screen(2.5)),
+        ));
 
         // Draw markers
         for point in &self.markers {

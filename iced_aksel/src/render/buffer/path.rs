@@ -1,6 +1,5 @@
 use super::Primitive;
 
-use aksel::Float;
 use iced_core::Rectangle;
 use iced_graphics::geometry::{Fill, Frame, Path};
 
@@ -62,7 +61,7 @@ impl PathBatcher {
     /// Renders a primitive into this path buffer.
     ///
     /// This converts the primitive into tiny-skia compatible paths.
-    pub fn add_primitive<D: Float>(&mut self, primitive: Primitive<D>) {
+    pub fn add_primitive(&mut self, primitive: Primitive) {
         // TODO: Implement path rendering for each primitive type
         // For now, this is a placeholder
         let _ = primitive;

@@ -98,12 +98,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Rectangle<D> {
             }
         };
 
-        let stroke = self.stroke.map(|s| {
-            let width_x = s.thickness.resolve_x(ctx);
-            let width_y = s.thickness.resolve_y(ctx);
-            // Pass tuple of (width_x, width_y) to support anisotropic strokes if needed
-            (s, width_x, width_y)
-        });
+        let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Rectangle {
             min,

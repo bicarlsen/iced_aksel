@@ -59,8 +59,8 @@ impl PlotData<f64> for CandleItems {
             let wick = shape::Line::new(
                 PlotPoint::new(x, candle.high),
                 PlotPoint::new(x, candle.low),
-            )
-            .stroke(Stroke::new(color, Measure::Screen(1.0)));
+                Stroke::new(color, Measure::Screen(1.0)),
+            );
 
             let body_y_center = (candle.open + candle.close) / 2.0;
             let body = shape::Rectangle::centered(
@@ -112,11 +112,14 @@ impl PlotData<f64> for SmaItems {
         let palette = theme.palette();
 
         if !self.points.is_empty() {
-            let sma_line = shape::Polyline::new(self.points.clone()).stroke(Stroke {
-                fill: palette.warning,
-                thickness: Measure::Screen(1.5),
-                style: StrokeStyle::Solid,
-            });
+            let sma_line = shape::Polyline::new(
+                self.points.clone(),
+                Stroke {
+                    fill: palette.warning,
+                    thickness: Measure::Screen(1.5),
+                    style: StrokeStyle::Solid,
+                },
+            );
             plot.add_shape(sma_line);
         }
     }
@@ -134,29 +137,38 @@ impl PlotData<f64> for BbandsItems {
         let palette = theme.palette();
 
         if !self.upper.is_empty() {
-            let upper_line = shape::Polyline::new(self.upper.clone()).stroke(Stroke {
-                fill: palette.text.scale_alpha(0.5),
-                thickness: Measure::Screen(1.0),
-                style: StrokeStyle::Solid,
-            });
+            let upper_line = shape::Polyline::new(
+                self.upper.clone(),
+                Stroke {
+                    fill: palette.text.scale_alpha(0.5),
+                    thickness: Measure::Screen(1.0),
+                    style: StrokeStyle::Solid,
+                },
+            );
             plot.add_shape(upper_line);
         }
 
         if !self.middle.is_empty() {
-            let middle_line = shape::Polyline::new(self.middle.clone()).stroke(Stroke {
-                fill: palette.primary.scale_alpha(0.5),
-                thickness: Measure::Screen(1.0),
-                style: StrokeStyle::Solid,
-            });
+            let middle_line = shape::Polyline::new(
+                self.middle.clone(),
+                Stroke {
+                    fill: palette.primary.scale_alpha(0.5),
+                    thickness: Measure::Screen(1.0),
+                    style: StrokeStyle::Solid,
+                },
+            );
             plot.add_shape(middle_line);
         }
 
         if !self.lower.is_empty() {
-            let lower_line = shape::Polyline::new(self.lower.clone()).stroke(Stroke {
-                fill: palette.text.scale_alpha(0.5),
-                thickness: Measure::Screen(1.0),
-                style: StrokeStyle::Solid,
-            });
+            let lower_line = shape::Polyline::new(
+                self.lower.clone(),
+                Stroke {
+                    fill: palette.text.scale_alpha(0.5),
+                    thickness: Measure::Screen(1.0),
+                    style: StrokeStyle::Solid,
+                },
+            );
             plot.add_shape(lower_line);
         }
     }

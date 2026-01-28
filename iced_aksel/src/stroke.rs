@@ -2,6 +2,7 @@
 
 use crate::Measure;
 
+use aksel::{Float, Transform};
 use iced_core::Color;
 
 /// Defines the visual style of a stroke.
@@ -69,17 +70,21 @@ pub enum StrokeStyle {
 ///     StrokeStyle::Dashed
 /// );
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stroke<D> {
     /// The color of the stroke.
     pub fill: Color,
     /// The thickness of the stroke.
+    ///
+    /// Using Measure::Plot here will use geometric mean to scale the thickness.
+    /// This is mostly only meant for charts that use *uniform* scaling of it's axes, as it might
+    /// scale weirdly if only one axis is scaled.
     pub thickness: Measure<D>,
     /// The visual style of the stroke.
     pub style: StrokeStyle,
 }
 
-impl<D> Stroke<D> {
+impl<D: Float> Stroke<D> {
     /// Creates a new solid stroke with the given color and thickness.
     ///
     /// # Example
@@ -119,4 +124,47 @@ impl<D> Stroke<D> {
             style,
         }
     }
+
+    ///  Resolves the Stroke into screen-pixels using geometric mean, if the thickness is described
+    ///  in plot coordinates. Directly translates the width if it's described in pixels.
+    pub fn resolve(self, transform: &Transform<D, f32, f32>) -> ResolvedStroke {
+        let Self {
+            fill,
+            thickness,
+            style,
+        } = self;
+
+        let plot_bounds = transform.plot_bounds();
+        let screen_bounds = transform.screen_bounds();
+
+        let thickness = match thickness {
+            Measure::Screen(t) => t,
+            Measure::Plot(p) => {
+                let x_span = (plot_bounds.max_x() - plot_bounds.min_x())
+                    .to_f32()
+                    .expect("plot to pixel mapping");
+                let y_span = (plot_bounds.max_y() - plot_bounds.min_y())
+                    .to_f32()
+                    .expect("plot to pixel mapping");
+
+                let sx = screen_bounds.width / x_span;
+                let sy = screen_bounds.height / y_span;
+                let stroke_scale = (sx.abs() * sy.abs()).sqrt();
+                p.to_f32().expect("plot to pixel mapping") * stroke_scale
+            }
+        };
+
+        ResolvedStroke {
+            fill,
+            thickness,
+            style,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedStroke {
+    pub fill: Color,
+    pub thickness: f32,
+    pub style: StrokeStyle,
 }

@@ -41,7 +41,7 @@ pub struct Bezier<D> {
     control_1: PlotPoint<D>,
     control_2: Option<PlotPoint<D>>,
     end: PlotPoint<D>,
-    stroke: Option<Stroke<D>>,
+    stroke: Stroke<D>,
 }
 
 impl<D: Float, R: crate::Renderer> Shape<D, R> for Bezier<D> {
@@ -54,18 +54,11 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Bezier<D> {
             stroke,
         } = self;
 
-        let stroke = match stroke {
-            Some(s) => s,
-            None => return, // Invisible
-        };
-
+        let stroke = stroke.resolve(ctx);
         let start = Point::new(ctx.x_to_screen(&start.x), ctx.y_to_screen(&start.y));
         let end = Point::new(ctx.x_to_screen(&end.x), ctx.y_to_screen(&end.y));
         let control_1 = Point::new(ctx.x_to_screen(&control_1.x), ctx.y_to_screen(&control_1.y));
         let control_2 = control_2.map(|p| Point::new(ctx.x_to_screen(&p.x), ctx.y_to_screen(&p.y)));
-
-        // Resolve thickness against X-axis
-        let width = stroke.thickness.resolve_x(ctx);
 
         ctx.add_primitive(Primitive::BezierCurve {
             start,
@@ -73,7 +66,6 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Bezier<D> {
             control_1,
             control_2,
             stroke,
-            width,
         });
     }
 }
@@ -82,13 +74,18 @@ impl<D: Float> Bezier<D> {
     /// Creates a **Quadratic** Bézier curve (Start -> Control -> End).
     ///
     /// Note: The shape is invisible by default. You **must** call `.stroke()` to render it.
-    pub const fn quadratic(start: PlotPoint<D>, control: PlotPoint<D>, end: PlotPoint<D>) -> Self {
+    pub const fn quadratic(
+        start: PlotPoint<D>,
+        control: PlotPoint<D>,
+        end: PlotPoint<D>,
+        stroke: Stroke<D>,
+    ) -> Self {
         Self {
             start,
             control_1: control,
             control_2: None,
             end,
-            stroke: None,
+            stroke,
         }
     }
 
@@ -100,19 +97,20 @@ impl<D: Float> Bezier<D> {
         control_1: PlotPoint<D>,
         control_2: PlotPoint<D>,
         end: PlotPoint<D>,
+        stroke: Stroke<D>,
     ) -> Self {
         Self {
             start,
             control_1,
             control_2: Some(control_2),
             end,
-            stroke: None,
+            stroke,
         }
     }
 
     /// Sets the stroke style for the curve.
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
-        self.stroke = Some(stroke);
+        self.stroke = stroke;
         self
     }
 }

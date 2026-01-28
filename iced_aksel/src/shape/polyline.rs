@@ -25,7 +25,7 @@ pub struct Polyline<D> {
     /// The points that define the polyline path
     pub points: Vec<PlotPoint<D>>,
     /// The stroke style (color, thickness, pattern)
-    pub stroke: Option<Stroke<D>>,
+    pub stroke: Stroke<D>,
     /// Wether to extend the line infinitely
     pub extensions: LineExtensions,
     /// Wether to draw arrowheads on the line
@@ -45,14 +45,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Polyline<D> {
             return;
         }
 
-        let stroke = match stroke {
-            Some(s) => s,
-            None => return, // Invisible
-        };
-
-        // Resolve stroke thickness against X axis
-        let width = stroke.thickness.resolve_x(ctx);
-
+        let stroke = stroke.resolve(ctx);
         let screen_bounds = ctx.screen_bounds();
         let clip_bounds = iced_core::Rectangle {
             x: screen_bounds.x,
@@ -69,7 +62,6 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Polyline<D> {
         ctx.add_primitive(Primitive::PolyLine {
             points,
             stroke,
-            width,
             clip_bounds,
             extensions,
             arrows,
@@ -81,10 +73,10 @@ impl<D: Float> Polyline<D> {
     /// Creates a new `Polyline` from a vector of points.
     ///
     /// Note: The shape is invisible by default. You **must** call `.stroke()` to render it.
-    pub const fn new(points: Vec<PlotPoint<D>>) -> Self {
+    pub const fn new(points: Vec<PlotPoint<D>>, stroke: Stroke<D>) -> Self {
         Self {
             points,
-            stroke: None,
+            stroke,
             extensions: LineExtensions {
                 start: false,
                 end: false,
@@ -99,7 +91,7 @@ impl<D: Float> Polyline<D> {
 
     /// Sets the stroke style for the polyline.
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
-        self.stroke = Some(stroke);
+        self.stroke = stroke;
         self
     }
 

@@ -1,6 +1,5 @@
 use crate::{Quality, render::primitive::Primitive, stroke::StrokeStyle};
 
-use aksel::Float;
 use iced_core::{Rectangle, Transformation};
 use iced_graphics::mesh::{Indexed, Mesh, Renderer, SolidVertex2D};
 
@@ -148,7 +147,7 @@ impl MeshBatcher {
     }
 
     /// Renders a primitive into this mesh buffer using the tessellator.
-    pub fn add_primitive<D: Float>(&mut self, primitive: Primitive<D>) {
+    pub fn add_primitive(&mut self, primitive: Primitive) {
         match primitive {
             Primitive::Rectangle {
                 min,
@@ -172,15 +171,8 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                self.tessellator.draw_ellipse(
-                    &mut self.data,
-                    center.x,
-                    center.y,
-                    radius.x,
-                    radius.y,
-                    fill,
-                    stroke,
-                );
+                self.tessellator
+                    .draw_ellipse(&mut self.data, center, radius, fill, stroke);
             }
             Primitive::Triangle {
                 points,
@@ -217,7 +209,6 @@ impl MeshBatcher {
             Primitive::Line {
                 start,
                 end,
-                width,
                 stroke,
                 clip_bounds,
                 extensions,
@@ -228,7 +219,6 @@ impl MeshBatcher {
                     start,
                     end,
                     stroke,
-                    width,
                     clip_bounds,
                     extensions,
                     arrows,
@@ -238,7 +228,6 @@ impl MeshBatcher {
                 y,
                 x_start,
                 x_end,
-                width,
                 stroke,
                 snap,
             } => match stroke.style {
@@ -248,7 +237,7 @@ impl MeshBatcher {
                         x_start,
                         x_end,
                         y,
-                        width,
+                        stroke.thickness,
                         stroke.fill,
                         snap,
                     );
@@ -258,7 +247,7 @@ impl MeshBatcher {
                     x_start,
                     x_end,
                     y,
-                    width,
+                    stroke.thickness,
                     stroke.fill,
                     dash,
                     gap,
@@ -270,27 +259,26 @@ impl MeshBatcher {
                 x,
                 y_start,
                 y_end,
-                width,
                 stroke,
                 snap,
             } => match stroke.style {
                 StrokeStyle::Solid => {
-                    linear::draw_horizontal_line(
+                    linear::draw_vertical_line(
                         &mut self.data,
+                        x,
                         y_start,
                         y_end,
-                        x,
-                        width,
+                        stroke.thickness,
                         stroke.fill,
                         snap,
                     );
                 }
-                StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
+                StrokeStyle::Dashed { dash, gap } => linear::draw_vertical_dashed_line(
                     &mut self.data,
+                    x,
                     y_start,
                     y_end,
-                    x,
-                    width,
+                    stroke.thickness,
                     stroke.fill,
                     dash,
                     gap,
@@ -309,7 +297,6 @@ impl MeshBatcher {
                     &mut self.data,
                     points,
                     stroke,
-                    width,
                     clip_bounds,
                     extensions,
                     arrows,
@@ -321,7 +308,6 @@ impl MeshBatcher {
                 control_1,
                 control_2,
                 stroke,
-                width,
             } => {
                 self.tessellator.draw_bezier(
                     &mut self.data,
@@ -330,17 +316,15 @@ impl MeshBatcher {
                     control_2,
                     end,
                     stroke,
-                    width,
                 );
             }
             Primitive::Spline {
                 points,
                 stroke,
-                width,
                 tension,
             } => {
                 self.tessellator
-                    .draw_spline(&mut self.data, points, stroke, width, tension);
+                    .draw_spline(&mut self.data, points, stroke, tension);
             }
             Primitive::Arc {
                 center,

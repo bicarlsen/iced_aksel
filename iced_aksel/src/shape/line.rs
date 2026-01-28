@@ -31,7 +31,7 @@ pub struct Line<D> {
     /// The end point of the line
     pub p2: PlotPoint<D>,
     /// The stroke style (color, thickness, pattern)
-    pub stroke: Option<Stroke<D>>,
+    pub stroke: Stroke<D>,
     /// Wether to extend the line infinitely
     pub extensions: LineExtensions,
     /// Whether to draw arrowheads on the line
@@ -48,17 +48,9 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Line<D> {
             arrows,
         } = self;
 
-        let stroke = match stroke {
-            Some(s) => s,
-            None => return, // Invisible if no stroke is defined
-        };
-
+        let stroke = stroke.resolve(ctx);
         let start = Point::new(ctx.x_to_screen(&p1.x), ctx.y_to_screen(&p1.y));
         let end = Point::new(ctx.x_to_screen(&p2.x), ctx.y_to_screen(&p2.y));
-
-        // We resolve stroke thickness using the X-axis for consistency.
-        let width = stroke.thickness.resolve_x(ctx);
-
         let screen_bounds = ctx.screen_bounds();
         let clip_bounds = iced_core::Rectangle {
             x: screen_bounds.x,
@@ -70,7 +62,6 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Line<D> {
         ctx.add_primitive(Primitive::Line {
             start,
             end,
-            width,
             stroke,
             clip_bounds,
             extensions,
@@ -83,11 +74,11 @@ impl<D: Float> Line<D> {
     /// Creates a new `Line` segment between two points.
     ///
     /// Note: The shape is invisible by default. You **must** call `.stroke()` to render it.
-    pub const fn new(p1: PlotPoint<D>, p2: PlotPoint<D>) -> Self {
+    pub const fn new(p1: PlotPoint<D>, p2: PlotPoint<D>, stroke: Stroke<D>) -> Self {
         Self {
             p1,
             p2,
-            stroke: None,
+            stroke,
             extensions: LineExtensions {
                 start: false,
                 end: false,
@@ -102,7 +93,7 @@ impl<D: Float> Line<D> {
 
     /// Sets the stroke style for the line.
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
-        self.stroke = Some(stroke);
+        self.stroke = stroke;
         self
     }
 

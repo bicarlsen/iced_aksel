@@ -11,7 +11,6 @@
 //! than making 10,000 calls of 1 triangle each.
 
 use super::{Primitive, Quality};
-use aksel::Float;
 use iced_core::Rectangle;
 
 mod mesh;
@@ -45,7 +44,7 @@ impl RenderBuffer {
         }
     }
 
-    pub fn add_primitive<D: Float>(&mut self, primitive: Primitive<D>) {
+    pub fn add_primitive(&mut self, primitive: Primitive) {
         match self {
             Self::Mesh(buf) => {
                 buf.add_primitive(primitive);

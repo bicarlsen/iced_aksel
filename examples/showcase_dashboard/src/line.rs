@@ -8,7 +8,7 @@ use iced_aksel::{
     axis::{self, TickResult},
     plot::{Plot, PlotData},
     scale::Linear,
-    shape::{Area, Label, LineArrows, LineExtensions, Polygon, Polyline, Rectangle},
+    shape::{Area, Label, Polygon, Polyline, Rectangle},
 };
 use std::collections::HashMap;
 
@@ -597,19 +597,10 @@ impl PlotData<f64> for LineChart {
                 plot.add_shape(Area::new(fill_poly).fill(color));
             }
 
-            plot.add_shape(Polyline {
-                points: points.clone(),
-                stroke: Some(Stroke::new(s.color, Measure::Screen(s.width))),
-                extensions: LineExtensions {
-                    start: false,
-                    end: false,
-                },
-                arrows: LineArrows {
-                    start: false,
-                    end: false,
-                    size: 3.0,
-                },
-            });
+            plot.add_shape(Polyline::new(
+                points.clone(),
+                Stroke::new(s.color, Measure::Screen(s.width)),
+            ));
 
             if s.show_markers {
                 for point in &points {

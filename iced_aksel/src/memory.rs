@@ -37,7 +37,7 @@ impl<AxisId> Memory<AxisId> {
     /// Gets the internal buffer
     ///
     /// Panics if the buffer isn't initialized
-    pub fn get_buffer(&self) -> RefMut<RenderBuffer> {
+    pub fn get_buffer(&self) -> RefMut<'_, RenderBuffer> {
         self.buffer
             .as_ref()
             .expect("Buffer isn't initialized")

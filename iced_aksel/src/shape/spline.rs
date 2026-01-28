@@ -29,7 +29,7 @@ pub struct Spline<D> {
     /// The points that the curve passes through
     pub points: Vec<PlotPoint<D>>,
     /// The stroke style (color, thickness, pattern)
-    pub stroke: Option<Stroke<D>>,
+    pub stroke: Stroke<D>,
     /// The tension of the curve (0.0 = smooth, 1.0 = straight lines)
     pub tension: f32,
 }
@@ -46,14 +46,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Spline<D> {
             return;
         }
 
-        let stroke = match stroke {
-            Some(s) => s,
-            None => return, // Invisible
-        };
-
-        // Resolve thickness against X-axis
-        let width = stroke.thickness.resolve_x(ctx);
-
+        let stroke = stroke.resolve(ctx);
         let points = points
             .into_iter()
             .map(|p| Point::new(ctx.x_to_screen(&p.x), ctx.y_to_screen(&p.y)))
@@ -62,7 +55,6 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Spline<D> {
         ctx.add_primitive(Primitive::Spline {
             points,
             stroke,
-            width,
             tension,
         })
     }
@@ -70,19 +62,17 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Spline<D> {
 
 impl<D: Float> Spline<D> {
     /// Creates a new `Spline` from a vector of points.
-    ///
-    /// Note: The shape is invisible by default. You **must** call `.stroke()` to render it.
-    pub const fn new(points: Vec<PlotPoint<D>>) -> Self {
+    pub const fn new(points: Vec<PlotPoint<D>>, stroke: Stroke<D>) -> Self {
         Self {
             points,
-            stroke: None,
+            stroke,
             tension: 0.0, // Default to standard Catmull-Rom smoothing
         }
     }
 
     /// Sets the stroke style for the spline.
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
-        self.stroke = Some(stroke);
+        self.stroke = stroke;
         self
     }
 

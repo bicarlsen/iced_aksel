@@ -21,14 +21,13 @@ pub mod math;
 pub mod text;
 
 use crate::{
-    Quality, Stroke,
+    Quality,
     render::{
         primitive::{LineArrows, LineExtensions},
         text::Text,
     },
-    stroke::StrokeStyle,
+    stroke::{ResolvedStroke, StrokeStyle},
 };
-use aksel::Float;
 use complex::{ComplexTessellator, DashedPolyline, LyonAdapter, SolidVertexConstructor};
 use iced_core::{Color, Point, Rectangle};
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
@@ -111,14 +110,8 @@ impl Tessellator {
     }
 
     /// Returns the globally set text-tolerance of this tessellator
-    pub fn text_tolerance(&self) -> f32 {
+    pub const fn text_tolerance(&self) -> f32 {
         self.text_tolerance
-    }
-
-    /// Manually clears the text glyph cache.
-    /// Useful if you are changing fonts or handling memory pressure warnings.
-    pub fn clear_glyph_cache(&mut self) {
-        self.glyph_cache.clear();
     }
 
     // =========================================================================
@@ -131,7 +124,7 @@ impl Tessellator {
     /// If the stroke thickness is large enough to cover the entire rectangle (e.g. thickness >= width),
     /// the engine will automatically switch to drawing a simple filled rectangle to save vertices.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_rectangle<D: Float>(
+    pub fn draw_rectangle(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         x_min: f32,
@@ -139,20 +132,20 @@ impl Tessellator {
         x_max: f32,
         y_max: f32,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32, f32)>,
+        stroke: Option<ResolvedStroke>,
     ) {
         let width = x_max - x_min;
         let height = y_max - y_min;
 
         // Check if the stroke is so thick it completely swallows the shape.
-        let is_consumed = stroke.is_some_and(|(_, thickness_x, thickness_y)| {
-            thickness_x >= width / 2.0 || thickness_y >= height / 2.0
+        let is_consumed = stroke.as_ref().is_some_and(|stroke| {
+            stroke.thickness >= width / 2.0 || stroke.thickness >= height / 2.0
         });
 
         if is_consumed {
-            if let Some((style, _, _)) = stroke {
+            if let Some(stroke) = stroke {
                 self.manual
-                    .draw_fill_rect(buffer, x_min, y_min, x_max, y_max, style.fill, true);
+                    .draw_fill_rect(buffer, x_min, y_min, x_max, y_max, stroke.fill, true);
             }
             return;
         }
@@ -176,8 +169,8 @@ impl Tessellator {
             );
         }
 
-        if let Some((style, thickness_x, thickness_y)) = stroke {
-            match style.style {
+        if let Some(stroke) = stroke {
+            match stroke.style {
                 StrokeStyle::Solid => {
                     self.manual.draw_stroke_rect(
                         buffer,
@@ -185,14 +178,13 @@ impl Tessellator {
                         y_min,
                         x_max,
                         y_max,
-                        thickness_x,
-                        thickness_y,
-                        style.fill,
+                        stroke.thickness,
+                        stroke.fill,
                     );
                 }
                 _ => {
                     // For dashed/dotted lines, we must construct a path for Lyon to process
-                    let offset = (thickness_x + thickness_y) / 4.0;
+                    let offset = (stroke.thickness * 2.0) / 4.0;
                     let points = vec![
                         lyon_tessellation::math::Point::new(x_min + offset, y_min + offset),
                         lyon_tessellation::math::Point::new(x_max - offset, y_min + offset),
@@ -200,13 +192,7 @@ impl Tessellator {
                         lyon_tessellation::math::Point::new(x_min + offset, y_max - offset),
                         lyon_tessellation::math::Point::new(x_min + offset, y_min + offset),
                     ];
-                    self.stroke_polyline(
-                        buffer,
-                        points,
-                        style,
-                        (thickness_x + thickness_y) / 2.0,
-                        true,
-                    );
+                    self.stroke_polyline(buffer, points, stroke, true);
                 }
             }
         }
@@ -220,18 +206,15 @@ impl Tessellator {
     /// # Performance
     /// This method automatically adjusts the number of segments (vertices) used to approximate the curve
     /// based on the radius and the current [`quality`](Self::quality) setting.
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_ellipse<D>(
+    pub fn draw_ellipse(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
-        center_x: f32,
-        center_y: f32,
-        radius_x: f32,
-        radius_y: f32,
+        center: Point,
+        radius: Point,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     ) {
-        let max_radius = radius_x.max(radius_y);
+        let max_radius = radius.x.max(radius.y);
 
         // Culling: Too small to be seen
         if max_radius < 0.5 {
@@ -240,67 +223,56 @@ impl Tessellator {
 
         let segments = self.resolve_lod(max_radius);
 
-        let is_consumed = if let Some((_, width)) = stroke {
-            width >= max_radius
+        let is_consumed = if let Some(stroke) = stroke {
+            stroke.thickness >= max_radius
         } else {
             false
         };
 
         if is_consumed {
-            if let Some((style, _)) = stroke {
-                self.manual.draw_fill_circle(
-                    buffer, center_x, center_y, radius_x, radius_y, style.fill, segments,
-                );
+            if let Some(stroke) = stroke {
+                self.manual
+                    .draw_fill_circle(buffer, center, radius, stroke.fill, segments);
             }
             return;
         }
 
         if let Some(color) = fill {
             let overlap = if stroke.is_some() { 0.5 } else { 0.0 };
-            let fill_radius_x = (radius_x - overlap).max(0.0);
-            let fill_radius_y = (radius_y - overlap).max(0.0);
+            let fill_radius =
+                Point::new((radius.x - overlap).max(0.0), (radius.y - overlap).max(0.0));
 
-            if fill_radius_x > 0.1 && fill_radius_y > 0.1 {
-                self.manual.draw_fill_circle(
-                    buffer,
-                    center_x,
-                    center_y,
-                    fill_radius_x,
-                    fill_radius_y,
-                    color,
-                    segments,
-                );
+            if fill_radius.x > 0.1 && fill_radius.y > 0.1 {
+                self.manual
+                    .draw_fill_circle(buffer, center, fill_radius, color, segments);
             }
         }
 
-        if let Some((style, width)) = stroke {
-            match style.style {
+        if let Some(stroke) = stroke {
+            match stroke.style {
                 StrokeStyle::Solid => {
-                    let radius_x_inner = radius_x - width;
-                    let radius_y_inner = radius_y - width;
+                    let inner_radius =
+                        Point::new(radius.x - stroke.thickness, radius.y - stroke.thickness);
                     self.manual.draw_stroke_circle(
                         buffer,
-                        center_x,
-                        center_y,
-                        radius_x_inner,
-                        radius_y_inner,
-                        radius_x,
-                        radius_y,
-                        style.fill,
+                        center,
+                        inner_radius,
+                        radius,
+                        stroke.fill,
                         segments,
                     );
                 }
                 _ => {
                     // Elliptical stroking with Lyon for dashed lines
-                    let stroke_radius_x = radius_x - (width / 2.0);
-                    let stroke_radius_y = radius_y - (width / 2.0);
+                    let stroke_radius_x = radius.x - (stroke.thickness / 2.0);
+                    let stroke_radius_y = radius.y - (stroke.thickness / 2.0);
 
                     if stroke_radius_x > 0.1 && stroke_radius_y > 0.1 {
                         use lyon_tessellation::geom::Arc;
                         use lyon_tessellation::math::{Angle, Point, Vector};
 
                         let arc = Arc {
-                            center: Point::new(center_x, center_y),
+                            center: Point::new(center.x, center.y),
                             radii: Vector::new(stroke_radius_x, stroke_radius_y),
                             start_angle: Angle::radians(0.0),
                             sweep_angle: Angle::radians(std::f32::consts::TAU),
@@ -308,7 +280,7 @@ impl Tessellator {
                         };
 
                         let tolerance = 0.2 / self.quality.max(0.1);
-                        self.stroke_polyline(buffer, arc.flattened(tolerance), style, width, true);
+                        self.stroke_polyline(buffer, arc.flattened(tolerance), stroke, true);
                     }
                 }
             }
@@ -320,14 +292,14 @@ impl Tessellator {
     /// # Vertex Order
     /// The method automatically calculates the winding order of the vertices to ensure
     /// math consistency. You do not need to provide points in clockwise/counter-clockwise order.
-    pub fn draw_triangle<D>(
+    pub fn draw_triangle(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         p1: Point,
         p2: Point,
         p3: Point,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     ) {
         // Compute cross product to check winding order (Clockwise vs Counter-Clockwise)
         let cross_product = (p2.x - p1.x).mul_add(p3.y - p1.y, -((p2.y - p1.y) * (p3.x - p1.x)));
@@ -339,7 +311,7 @@ impl Tessellator {
             (p1, p2, p3, cross_product)
         };
 
-        let (inner_p1, inner_p2, inner_p3, is_consumed) = if let Some((_, width)) = stroke {
+        let (inner_p1, inner_p2, inner_p3, is_consumed) = if let Some(stroke) = stroke {
             let dist_1 = p1.distance(p2);
             let dist_2 = p2.distance(p3);
             let dist_3 = p3.distance(p1);
@@ -351,14 +323,14 @@ impl Tessellator {
                 let inradius = double_area / perimeter;
 
                 // If stroke is thicker than the inradius, the triangle is fully filled by the stroke
-                if width >= inradius {
+                if stroke.thickness >= inradius {
                     (Point::ORIGIN, Point::ORIGIN, Point::ORIGIN, true)
                 } else {
                     // Compute the inner triangle for the "hole"
                     (
-                        compute_inset_vertex(p3, p1, p2, width),
-                        compute_inset_vertex(p1, p2, p3, width),
-                        compute_inset_vertex(p2, p3, p1, width),
+                        compute_inset_vertex(p3, p1, p2, stroke.thickness),
+                        compute_inset_vertex(p1, p2, p3, stroke.thickness),
+                        compute_inset_vertex(p2, p3, p1, stroke.thickness),
                         false,
                     )
                 }
@@ -368,9 +340,9 @@ impl Tessellator {
         };
 
         if is_consumed {
-            if let Some((style, _)) = stroke {
+            if let Some(stroke) = stroke {
                 self.manual
-                    .draw_fill_triangle(buffer, p1, p2, p3, style.fill);
+                    .draw_fill_triangle(buffer, p1, p2, p3, stroke.fill);
             }
             return;
         }
@@ -389,18 +361,18 @@ impl Tessellator {
             }
         }
 
-        if let Some((style, width)) = stroke {
-            match style.style {
+        if let Some(stroke) = stroke {
+            match stroke.style {
                 StrokeStyle::Solid => {
                     self.manual.draw_stroke_triangle(
                         buffer,
                         [p1, p2, p3],
                         [inner_p1, inner_p2, inner_p3],
-                        style.fill,
+                        stroke.fill,
                     );
                 }
                 _ => {
-                    let offset = width / 2.0;
+                    let offset = stroke.thickness / 2.0;
                     let center_p1 = compute_inset_vertex(p3, p1, p2, offset);
                     let center_p2 = compute_inset_vertex(p1, p2, p3, offset);
                     let center_p3 = compute_inset_vertex(p2, p3, p1, offset);
@@ -411,7 +383,7 @@ impl Tessellator {
                         lyon_tessellation::math::Point::new(center_p3.x, center_p3.y),
                         lyon_tessellation::math::Point::new(center_p1.x, center_p1.y),
                     ];
-                    self.stroke_polyline(buffer, points, style, width, true);
+                    self.stroke_polyline(buffer, points, stroke, true);
                 }
             }
         }
@@ -421,8 +393,7 @@ impl Tessellator {
     ///
     /// * `vertices`: The number of sides (must be >= 3).
     /// * `rotation`: Rotation in degrees. 0.0 aligns the first vertex to the North.
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_polygon<D>(
+    pub fn draw_polygon(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         center: Point,
@@ -430,7 +401,7 @@ impl Tessellator {
         vertices: u16,
         rotation: f32,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     ) {
         if vertices < 3 || radius < 0.5 {
             return;
@@ -446,20 +417,20 @@ impl Tessellator {
             }
         }
 
-        if let Some((style, width)) = stroke {
-            match style.style {
+        if let Some(stroke) = stroke {
+            match stroke.style {
                 StrokeStyle::Solid => {
-                    let inner_radius = (radius - width).max(0.0);
+                    let inner_radius = (radius - stroke.thickness).max(0.0);
                     let inner_points = generate_ring(center, inner_radius, vertices, rotation);
                     self.manual
-                        .draw_ring(buffer, &outer_points, &inner_points, style.fill);
+                        .draw_ring(buffer, &outer_points, &inner_points, stroke.fill);
                 }
                 _ => {
                     let lyon_points: Vec<_> = outer_points
                         .iter()
                         .map(|p| lyon_tessellation::math::Point::new(p.x, p.y))
                         .collect();
-                    self.stroke_polyline(buffer, lyon_points, style, width, true);
+                    self.stroke_polyline(buffer, lyon_points, stroke, true);
                 }
             }
         }
@@ -476,18 +447,17 @@ impl Tessellator {
     /// * **Infinite Extensions:** We mathematically project the line to the screen edges (`clip_bounds`)
     ///   to convert "Infinite" into "Finite but spanning the whole screen".
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_line<D: Float>(
+    pub fn draw_line(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         raw_start: Point,
         raw_end: Point,
-        stroke: Stroke<D>,
-        width: f32,
+        stroke: ResolvedStroke,
         clip_bounds: Rectangle,
         extensions: LineExtensions,
         arrows: LineArrows,
     ) {
-        if width < 0.1 {
+        if stroke.thickness < 0.1 {
             return;
         }
 
@@ -504,7 +474,7 @@ impl Tessellator {
 
         let mut draw_start = raw_start;
         let mut draw_end = raw_end;
-        let margin = width.max(1.0);
+        let margin = stroke.thickness.max(1.0);
         let bounds = Bounds::new(clip_bounds, margin);
         let is_infinite = extensions.start || extensions.end;
 
@@ -534,7 +504,7 @@ impl Tessellator {
         // 2. Resolve Arrow Retraction
         // We shrink the draw segment so the arrow tip doesn't overlap the line.
         let direction = normalize(direction_vector);
-        let arrow_len = width * arrows.size;
+        let arrow_len = stroke.thickness * arrows.size;
         let has_start_arrow = arrows.start && !extensions.start;
         let has_end_arrow = arrows.end && !extensions.end;
 
@@ -546,11 +516,16 @@ impl Tessellator {
         }
 
         // 3. Draw Line Body
-        match stroke.style {
+        match &stroke.style {
             StrokeStyle::Solid => {
                 // Performance: Use manual tessellation for solid lines (Fastest)
-                self.manual
-                    .draw_line_segment(buffer, draw_start, draw_end, width, stroke.fill);
+                self.manual.draw_line_segment(
+                    buffer,
+                    draw_start,
+                    draw_end,
+                    stroke.thickness,
+                    stroke.fill,
+                );
             }
             _ => {
                 // Fallback: Use Lyon for complex dashes/dots
@@ -558,7 +533,7 @@ impl Tessellator {
                     lyon_tessellation::math::Point::new(draw_start.x, draw_start.y),
                     lyon_tessellation::math::Point::new(draw_end.x, draw_end.y),
                 ];
-                self.stroke_polyline(buffer, points, stroke, width, false);
+                self.stroke_polyline(buffer, points, stroke, false);
             }
         }
 
@@ -568,14 +543,20 @@ impl Tessellator {
                 buffer,
                 raw_start,
                 -direction,
-                width,
+                stroke.thickness,
                 arrows.size,
                 stroke.fill,
             );
         }
         if has_end_arrow {
-            self.manual
-                .draw_arrowhead(buffer, raw_end, direction, width, arrows.size, stroke.fill);
+            self.manual.draw_arrowhead(
+                buffer,
+                raw_end,
+                direction,
+                stroke.thickness,
+                arrows.size,
+                stroke.fill,
+            );
         }
     }
 
@@ -584,18 +565,18 @@ impl Tessellator {
     /// Supports dashed lines (via `StrokeStyle`), infinite extensions on the first/last segments,
     /// and arrowheads at the ends.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_polyline<I, D: Float>(
+    pub fn draw_polyline<I>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         points: I,
-        stroke: Stroke<D>,
+        stroke: ResolvedStroke,
         clip_bounds: Rectangle,
         extensions: LineExtensions,
         arrows: LineArrows,
     ) where
         I: IntoIterator<Item = Point>,
     {
-        if width < 0.1 {
+        if stroke.thickness < 0.1 {
             return;
         }
 
@@ -610,7 +591,7 @@ impl Tessellator {
 
         // 1. Handle Infinite Extensions
         if extensions.start || extensions.end {
-            let margin = width.max(1.0);
+            let margin = stroke.thickness.max(1.0);
             let bounds = Bounds::new(clip_bounds, margin);
 
             if extensions.start {
@@ -631,12 +612,12 @@ impl Tessellator {
         if arrows.start && !extensions.start {
             let p1 = point_list[1];
             let dir = normalize(p1 - p0);
-            point_list[0] = p0 + dir * (width * arrows.size);
+            point_list[0] = p0 + dir * (stroke.thickness * arrows.size);
         }
         if arrows.end && !extensions.end {
             let p_prev = point_list[last_idx - 1];
             let dir = normalize(pn - p_prev);
-            point_list[last_idx] = pn - dir * (width * arrows.size);
+            point_list[last_idx] = pn - dir * (stroke.thickness * arrows.size);
         }
 
         // 3. Draw Path
@@ -646,7 +627,7 @@ impl Tessellator {
         let lyon_points = point_list
             .iter()
             .map(|p| lyon_tessellation::math::Point::new(p.x, p.y));
-        self.stroke_polyline(buffer, lyon_points, stroke, width, false);
+        self.stroke_polyline(buffer, lyon_points, stroke, false);
 
         // 4. Draw Arrowheads
         if arrows.start && !extensions.start {
@@ -654,14 +635,26 @@ impl Tessellator {
             // Use direction from the original start point (p0) to p1
             // Even if p0 was retracted in the list, the visual direction is the same.
             let direction = normalize(p1 - p0);
-            self.manual
-                .draw_arrowhead(buffer, p0, -direction, width, arrows.size, stroke.fill);
+            self.manual.draw_arrowhead(
+                buffer,
+                p0,
+                -direction,
+                stroke.thickness,
+                arrows.size,
+                stroke.fill,
+            );
         }
         if arrows.end && !extensions.end {
             let p_prev = point_list[last_idx - 1];
             let direction = normalize(pn - p_prev);
-            self.manual
-                .draw_arrowhead(buffer, pn, direction, width, arrows.size, stroke.fill);
+            self.manual.draw_arrowhead(
+                buffer,
+                pn,
+                direction,
+                stroke.thickness,
+                arrows.size,
+                stroke.fill,
+            );
         }
     }
 
@@ -672,18 +665,16 @@ impl Tessellator {
     /// Draws a quadratic or cubic Bézier curve.
     ///
     /// * `control_2`: If `None`, draws a Quadratic curve. If `Some`, draws a Cubic curve.
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_bezier<D>(
+    pub fn draw_bezier(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         start: Point,
         control_1: Point,
         control_2: Option<Point>,
         end: Point,
-        stroke: Stroke<D>,
-        width: f32,
+        stroke: ResolvedStroke,
     ) {
-        if width < 0.1 {
+        if stroke.thickness < 0.1 {
             return;
         }
 
@@ -711,7 +702,7 @@ impl Tessellator {
         // Higher quality = lower tolerance (more segments)
         let tolerance = 0.1 / self.quality.max(0.1);
 
-        self.stroke_path(buffer, builder.build().iter(), stroke, width, tolerance);
+        self.stroke_path(buffer, builder.build().iter(), stroke, tolerance);
     }
 
     /// Draws a smooth curve passing through all given points (Spline).
@@ -720,17 +711,16 @@ impl Tessellator {
     /// * `points`: The data points the line must pass through.
     /// * `tension`: `0.0` for smooth curves, `1.0` for straight lines.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_spline<I, D>(
+    pub fn draw_spline<I>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         points: I,
-        stroke: Stroke<D>,
-        width: f32,
+        stroke: ResolvedStroke,
         tension: f32,
     ) where
         I: IntoIterator<Item = Point>,
     {
-        if width < 0.1 {
+        if stroke.thickness < 0.1 {
             return;
         }
 
@@ -781,7 +771,7 @@ impl Tessellator {
         builder.end(false); // Open path
 
         let tolerance = 0.1 / self.quality.max(0.1);
-        self.stroke_path(buffer, builder.build().iter(), stroke, width, tolerance);
+        self.stroke_path(buffer, builder.build().iter(), stroke, tolerance);
     }
 
     // =========================================================================
@@ -793,7 +783,7 @@ impl Tessellator {
     /// * `start_angle`, `end_angle`: In Radians.
     /// * `radius_inner`: If `0`, draws a pie slice. If `> 0`, draws a ring/donut.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_arc<D>(
+    pub fn draw_arc(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         center_x: f32,
@@ -803,7 +793,7 @@ impl Tessellator {
         start_angle: f32,
         end_angle: f32,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     ) {
         if radius_outer < 0.5 {
             return;
@@ -815,14 +805,14 @@ impl Tessellator {
         let thickness = radius_outer - radius_inner;
 
         // If stroke is thicker than the arc itself, just fill the whole arc
-        let is_consumed = if let Some((_, width)) = stroke {
-            width >= thickness
+        let is_consumed = if let Some(stroke) = stroke {
+            stroke.thickness >= thickness
         } else {
             false
         };
 
         if is_consumed {
-            if let Some((style, _)) = stroke {
+            if let Some(stroke) = stroke {
                 self.manual.draw_arc_strip(
                     buffer,
                     center_x,
@@ -831,7 +821,7 @@ impl Tessellator {
                     radius_outer,
                     start_angle,
                     end_angle,
-                    style.fill,
+                    stroke.fill,
                     segments,
                 );
             }
@@ -863,10 +853,10 @@ impl Tessellator {
             }
         }
 
-        if let Some((style, width)) = stroke {
+        if let Some(stroke) = stroke {
             let center = lyon_tessellation::math::Point::new(center_x, center_y);
-            let stroke_inner = radius_inner + width / 2.0;
-            let stroke_outer = radius_outer - width / 2.0;
+            let stroke_inner = radius_inner + stroke.thickness / 2.0;
+            let stroke_outer = radius_outer - stroke.thickness / 2.0;
 
             if stroke_outer <= stroke_inner {
                 return;
@@ -981,7 +971,7 @@ impl Tessellator {
             }
 
             let tolerance = 0.2 / self.quality.max(0.1);
-            self.stroke_path(buffer, builder.build().iter(), style, width, tolerance);
+            self.stroke_path(buffer, builder.build().iter(), stroke, tolerance);
         }
     }
 
@@ -993,12 +983,12 @@ impl Tessellator {
     ///
     /// * **Convex Polygons:** Automatically detected and rendered using a fast fan.
     /// * **Concave Polygons:** Automatically detected and triangulated using Earcut.
-    pub fn draw_area<D>(
+    pub fn draw_area(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         points: &[Point],
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     ) {
         if points.len() < 3 {
             return;
@@ -1033,27 +1023,27 @@ impl Tessellator {
             }
         }
 
-        if let Some((style, width)) = stroke {
-            match style.style {
+        if let Some(stroke) = stroke {
+            match stroke.style {
                 StrokeStyle::Solid => {
                     if is_convex(points) {
                         // Fast path: Stroke ring for convex shapes
-                        let inner_polygon = compute_inset_polygon(points, width);
+                        let inner_polygon = compute_inset_polygon(points, stroke.thickness);
                         self.manual
-                            .draw_ring(buffer, points, &inner_polygon, style.fill);
+                            .draw_ring(buffer, points, &inner_polygon, stroke.fill);
                     } else {
                         // Fallback: Path stroking for concave shapes
                         let lyon_points = points
                             .iter()
                             .map(|p| lyon_tessellation::math::Point::new(p.x, p.y));
-                        self.stroke_polyline(buffer, lyon_points, style, width, true);
+                        self.stroke_polyline(buffer, lyon_points, stroke, true);
                     }
                 }
                 _ => {
                     let lyon_points = points
                         .iter()
                         .map(|p| lyon_tessellation::math::Point::new(p.x, p.y));
-                    self.stroke_polyline(buffer, lyon_points, style, width, true);
+                    self.stroke_polyline(buffer, lyon_points, stroke, true);
                 }
             }
         }
@@ -1065,18 +1055,17 @@ impl Tessellator {
 
     /// Internal adapter to bridge the gap between `iced_aksel` logic and `lyon`'s
     /// advanced path stroking engine.
-    fn stroke_polyline<I, D>(
+    fn stroke_polyline<I>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         points: I,
-        stroke: Stroke<D>,
-        resolved_width: f32,
+        stroke: ResolvedStroke,
         close_path: bool,
     ) where
         I: IntoIterator<Item = lyon_tessellation::math::Point>,
     {
         let options = StrokeOptions::default()
-            .with_line_width(resolved_width)
+            .with_line_width(stroke.thickness)
             .with_line_cap(LineCap::Butt)
             .with_line_join(LineJoin::Miter);
         let mesh = buffer.get_mesh_mut();
@@ -1093,14 +1082,14 @@ impl Tessellator {
                 &mut writer,
             ),
             StrokeStyle::Dashed { dash, gap } => {
-                let dashes = [resolved_width * dash, resolved_width * gap];
+                let dashes = [stroke.thickness * dash, stroke.thickness * gap];
                 let dashed = DashedPolyline::new(points.into_iter(), &dashes);
                 self.complex
                     .stroke
                     .tessellate(dashed, &options, &mut writer)
             }
             StrokeStyle::Dotted { gap } => {
-                let dots = [resolved_width, resolved_width * gap];
+                let dots = [stroke.thickness, stroke.thickness * gap];
                 let dashed = DashedPolyline::new(points.into_iter(), &dots);
                 self.complex
                     .stroke
@@ -1109,12 +1098,11 @@ impl Tessellator {
         };
     }
 
-    fn stroke_path<Iter, D>(
+    fn stroke_path<Iter>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
         path: Iter,
-        stroke: Stroke<D>,
-        resolved_width: f32,
+        stroke: ResolvedStroke,
         tolerance: f32,
     ) where
         Iter: PathIterator,
@@ -1127,7 +1115,7 @@ impl Tessellator {
                 _ => None,
             })
             .collect();
-        self.stroke_polyline(buffer, points, stroke, resolved_width, true);
+        self.stroke_polyline(buffer, points, stroke, true);
     }
 
     // =========================================================================

@@ -1,5 +1,4 @@
-use crate::Stroke;
-use aksel::Float;
+use crate::stroke::ResolvedStroke;
 use iced_core::{
     Color, Font, Pixels, Point, Rectangle, Size,
     alignment::{Horizontal, Vertical},
@@ -20,23 +19,23 @@ pub struct LineArrows {
 }
 
 // Describes a **shared** primitive interface between the Mesh and Path backends.
-pub enum Primitive<D: Float> {
+pub enum Primitive {
     Rectangle {
         min: Point,
         max: Point,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32, f32)>,
+        stroke: Option<ResolvedStroke>,
     },
     Ellipse {
         center: Point,
         radius: Point,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     },
     Triangle {
         points: [Point; 3],
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     },
     Polygon {
         center: Point,
@@ -44,12 +43,12 @@ pub enum Primitive<D: Float> {
         vertices: u16,
         rotation: f32,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     },
     Line {
         start: Point,
         end: Point,
-        stroke: Stroke<D>,
+        stroke: ResolvedStroke,
         clip_bounds: Rectangle,
         extensions: LineExtensions,
         arrows: LineArrows,
@@ -58,19 +57,19 @@ pub enum Primitive<D: Float> {
         y: f32,
         x_start: f32,
         x_end: f32,
-        stroke: Stroke<D>,
+        stroke: ResolvedStroke,
         snap: bool,
     },
     VerticalLine {
         x: f32,
         y_start: f32,
         y_end: f32,
-        stroke: Stroke<D>,
+        stroke: ResolvedStroke,
         snap: bool,
     },
     PolyLine {
         points: Vec<Point>,
-        stroke: Stroke<D>,
+        stroke: ResolvedStroke,
         clip_bounds: Rectangle,
         extensions: LineExtensions,
         arrows: LineArrows,
@@ -80,13 +79,11 @@ pub enum Primitive<D: Float> {
         end: Point,
         control_1: Point,
         control_2: Option<Point>,
-        stroke: Stroke<D>,
-        width: f32,
+        stroke: ResolvedStroke,
     },
     Spline {
         points: Vec<Point>,
-        stroke: Stroke<D>,
-        width: f32,
+        stroke: ResolvedStroke,
         tension: f32,
     },
     Arc {
@@ -96,12 +93,12 @@ pub enum Primitive<D: Float> {
         start_angle: f32,
         end_angle: f32,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     },
     Area {
         points: Vec<Point>,
         fill: Option<Color>,
-        stroke: Option<(Stroke<D>, f32)>,
+        stroke: Option<ResolvedStroke>,
     },
     Text {
         font: Font,

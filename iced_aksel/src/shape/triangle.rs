@@ -52,7 +52,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Triangle<D> {
             stroke,
         } = self;
 
-        let (p1, p2, p3) = match geometry {
+        let points = match geometry {
             Geometry::Vertices(pts) => (
                 Point::new(ctx.x_to_screen(&pts[0].x), ctx.y_to_screen(&pts[0].y)),
                 Point::new(ctx.x_to_screen(&pts[1].x), ctx.y_to_screen(&pts[1].y)),
@@ -84,19 +84,10 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Triangle<D> {
             }
         };
 
-        let stroke = stroke.and_then(|stroke| {
-            // Default to X-axis scale for stroke thickness to ensure consistency
-            let width_pixels = stroke.thickness.resolve_x(ctx);
-
-            if width_pixels < 0.1 {
-                None
-            } else {
-                Some((stroke, width_pixels))
-            }
-        });
+        let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Triangle {
-            points: [p1, p2, p3],
+            points: points.into(),
             fill,
             stroke,
         });

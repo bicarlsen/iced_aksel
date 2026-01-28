@@ -99,7 +99,7 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
         self.buffer
     }
 
-    pub fn add_primitive(&mut self, primitive: Primitive<D>) {
+    pub fn add_primitive(&mut self, primitive: Primitive) {
         self.buffer.add_primitive(primitive);
     }
 }

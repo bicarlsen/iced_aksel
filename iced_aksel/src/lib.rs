@@ -126,6 +126,8 @@ use memory::Memory;
 use plot::DragDelta;
 use render::RenderBuffer;
 
+use crate::render::Primitive;
+
 /// Default movement threshold (in pixels) to distinguish a click from a drag operation.
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
 
@@ -860,54 +862,42 @@ where
 
         // Bottom-Left
         if let (Some((lw, lc)), Some((bw, _))) = (left, bottom) {
-            // draw_fill_rect(
-            //     &mut buffer.data,
-            //     plot.x - lw,               // x_min
-            //     plot.y + plot.height,      // y_min
-            //     plot.x,                    // x_max
-            //     plot.y + plot.height + bw, // y_max
-            //     lc,
-            //     true,
-            // );
+            buffer.add_primitive(Primitive::Rectangle {
+                min: Point::new(plot.x - lw, plot.y + plot.height),
+                max: Point::new(plot.x, plot.y + plot.height + bw),
+                fill: Some(lc),
+                stroke: None,
+            });
         }
 
         // Top-Left
         if let (Some((lw, lc)), Some((tw, _))) = (left, top) {
-            // draw_fill_rect(
-            //     &mut buffer.data,
-            //     plot.x - lw, // x_min
-            //     plot.y - tw, // y_min
-            //     plot.x,      // x_max
-            //     plot.y,      // y_max
-            //     lc,
-            //     true,
-            // );
+            buffer.add_primitive(Primitive::Rectangle {
+                min: Point::new(plot.x - lw, plot.y - tw),
+                max: Point::new(plot.x, plot.y),
+                fill: Some(lc),
+                stroke: None,
+            });
         }
 
         // Bottom-Right
         if let (Some((rw, rc)), Some((bw, _))) = (right, bottom) {
-            // draw_fill_rect(
-            //     &mut buffer.data,
-            //     plot.x + plot.width,       // x_min
-            //     plot.y + plot.height,      // y_min
-            //     plot.x + plot.width + rw,  // x_max
-            //     plot.y + plot.height + bw, // y_max
-            //     rc,
-            //     true,
-            // );
+            buffer.add_primitive(Primitive::Rectangle {
+                min: Point::new(plot.x + plot.width, plot.y + plot.height),
+                max: Point::new(plot.x + plot.width + rw, plot.y + plot.height + bw),
+                fill: Some(rc),
+                stroke: None,
+            });
         }
 
         // Top-Right
         if let (Some((rw, rc)), Some((tw, _))) = (right, top) {
-            // draw_fill_rect(
-            //     &mut buffer.data,
-            //     plot.x + plot.width,      // x_min
-            //     plot.y - tw,              // y_min
-            //     plot.x + plot.width + rw, // x_max
-            //     plot.y,                   // y_max
-            //     rc,
-            //     true,
-            // );
+            buffer.add_primitive(Primitive::Rectangle {
+                min: Point::new(plot.x + plot.width, plot.y - tw),
+                max: Point::new(plot.x + plot.width + rw, plot.y),
+                fill: Some(rc),
+                stroke: None,
+            });
         }
     }
 }

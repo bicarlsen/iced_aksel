@@ -55,13 +55,7 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Polygon<D> {
             return;
         }
 
-        let stroke = stroke.map(|s| {
-            // Isotropic stroke width using the same logic (minimum scale)
-            let width_x = s.thickness.resolve_x(ctx);
-            let width_y = s.thickness.resolve_y(ctx);
-            let width_pixels = width_x.min(width_y);
-            (s, width_pixels)
-        });
+        let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Polygon {
             center,
