@@ -1,12 +1,12 @@
 use super::Primitive;
 
 use iced_core::{Point, Rectangle, Size};
-use iced_graphics::geometry::{Cache, Fill, Path};
+use iced_graphics::geometry::{Cache, Frame, Path};
 
 const PRE_ALLOC_PATHS: usize = 5000;
 
 pub struct PathBatcher<Renderer: crate::Renderer> {
-    buffer: Vec<(Path, Fill)>,
+    buffer: Vec<Primitive>,
     cache: Cache<Renderer>,
     paths_limit: usize,
 }
@@ -39,27 +39,21 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
         }
 
         if !self.buffer.is_empty() {
-            let paths = std::mem::replace(&mut self.buffer, Vec::with_capacity(PRE_ALLOC_PATHS));
+            let primitives =
+                std::mem::replace(&mut self.buffer, Vec::with_capacity(PRE_ALLOC_PATHS));
             let geometry = self
                 .cache
                 .draw_with_bounds(renderer, *clip_bounds, move |frame| {
-                    paths
+                    primitives
                         .into_iter()
-                        .for_each(|(path, fill)| frame.fill(&path, fill));
+                        .for_each(|primitive| Self::draw_primitive(primitive, frame))
                 });
 
             renderer.draw_geometry(geometry);
         }
     }
 
-    pub fn add(&mut self, path: Path, fill: Fill) {
-        self.buffer.push((path, fill));
-    }
-
-    /// Renders a primitive into this path buffer.
-    ///
-    /// This converts the primitive into tiny-skia compatible paths.
-    pub fn add_primitive(&mut self, primitive: Primitive) {
+    fn draw_primitive(primitive: Primitive, frame: &mut Frame<Renderer>) {
         match primitive {
             Primitive::Rectangle {
                 xy1,
@@ -83,12 +77,17 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
                 let path = Path::rectangle(top_left, size);
 
                 if let Some(color) = fill {
-                    self.add(path, color.into())
+                    frame.fill(&path, color)
                 }
             }
-            _ => {}
+            _ => (), // TODO: Draw other primtiives
         }
+    }
 
-        // todo!("Implement path rendering for tiny-skia backend")
+    /// Renders a primitive into this path buffer.
+    ///
+    /// This converts the primitive into tiny-skia compatible paths.
+    pub fn add_primitive(&mut self, primitive: Primitive) {
+        self.buffer.push(primitive)
     }
 }
