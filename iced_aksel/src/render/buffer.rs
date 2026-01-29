@@ -19,12 +19,12 @@ mod path;
 pub use mesh::{MeshBatcher, MeshData};
 pub use path::PathBatcher;
 
-pub enum RenderBuffer {
+pub enum RenderBuffer<Renderer: crate::Renderer> {
     Mesh(Box<MeshBatcher>),
-    Path(Box<PathBatcher>),
+    Path(Box<PathBatcher<Renderer>>),
 }
 
-impl RenderBuffer {
+impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
     pub fn new_mesh(limit: usize) -> Self {
         Self::Mesh(Box::new(MeshBatcher::new(limit)))
     }
@@ -33,7 +33,7 @@ impl RenderBuffer {
         Self::Path(Box::new(PathBatcher::new(limit)))
     }
 
-    pub fn flush<R: crate::Renderer>(&mut self, renderer: &mut R, clip_bounds: &Rectangle) {
+    pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
         match self {
             Self::Path(buf) => {
                 buf.flush(renderer, clip_bounds);

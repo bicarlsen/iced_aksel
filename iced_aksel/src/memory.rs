@@ -3,19 +3,19 @@ use std::cell::{RefCell, RefMut};
 use super::Action;
 use crate::{
     Quality,
-    render::{RenderBuffer, Renderer},
+    render::{Backend, RenderBuffer},
 };
 
 use iced_core::mouse;
 
 /// Internal chart memory
-pub struct Memory<AxisId> {
+pub struct Memory<AxisId, Renderer: crate::Renderer> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
-    pub buffer: Option<RefCell<RenderBuffer>>,
+    pub buffer: Option<RefCell<RenderBuffer<Renderer>>>,
 }
 
-impl<AxisId> Memory<AxisId> {
+impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
     pub fn new() -> Self {
         Self {
             action: Action::default(),
@@ -24,11 +24,14 @@ impl<AxisId> Memory<AxisId> {
         }
     }
 
-    pub fn make_sure_buffer_is_initialized<R: Renderer>(&mut self, renderer: &R, quality: Quality) {
+    pub fn make_sure_buffer_is_initialized(&mut self, renderer: &Renderer, quality: Quality) {
         if let Some(buffer) = &self.buffer {
             buffer.borrow_mut().set_quality(quality);
         } else {
-            let mut buffer = renderer.init_buffer();
+            let mut buffer = match renderer.preffered_backend() {
+                Backend::Mesh => RenderBuffer::new_mesh(100_000),
+                Backend::Path => RenderBuffer::new_path(5000),
+            };
             buffer.set_quality(quality);
             self.buffer = Some(RefCell::new(buffer));
         }
@@ -37,7 +40,7 @@ impl<AxisId> Memory<AxisId> {
     /// Gets the internal buffer
     ///
     /// Panics if the buffer isn't initialized
-    pub fn get_buffer(&self) -> RefMut<'_, RenderBuffer> {
+    pub fn get_buffer(&self) -> RefMut<'_, RenderBuffer<Renderer>> {
         self.buffer
             .as_ref()
             .expect("Buffer isn't initialized")

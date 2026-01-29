@@ -318,7 +318,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         style: &Style,
         layout: Layout<'_>,
         plot_bounds: &Rectangle,
-        buffer: &mut RenderBuffer,
+        buffer: &mut RenderBuffer<Renderer>,
         viewport: &Rectangle,
     ) where
         Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
@@ -896,13 +896,15 @@ impl<D: Float, Theme> Axis<D, Theme> {
     }
 
     /// Renders a single tick mark into the mesh buffer using linear tessellators.
-    fn draw_tick_line(
+    fn draw_tick_line<Renderer>(
         &self,
         line: TickLine,
         bounds: &Rectangle,
-        buffer: &mut RenderBuffer,
+        buffer: &mut RenderBuffer<Renderer>,
         pos_norm: f32,
-    ) {
+    ) where
+        Renderer: crate::Renderer,
+    {
         let thickness = line.width.0;
         let length = line.length.0;
         let fill = line.color;
@@ -968,14 +970,16 @@ impl<D: Float, Theme> Axis<D, Theme> {
     }
 
     /// Renders a single grid line into the mesh buffer.
-    fn draw_grid_line(
+    fn draw_grid_line<Renderer>(
         &self,
         line: GridLine,
         axis_bounds: &Rectangle,
         plot_bounds: &Rectangle,
-        buffer: &mut RenderBuffer,
+        buffer: &mut RenderBuffer<Renderer>,
         pos_norm: f32,
-    ) {
+    ) where
+        Renderer: crate::Renderer,
+    {
         let orientation = self.orientation();
         let thickness = line.width.0;
         let fill = line.color;

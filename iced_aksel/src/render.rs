@@ -53,6 +53,11 @@ impl Quality {
     }
 }
 
+pub enum Backend {
+    Mesh,
+    Path,
+}
+
 /// Renderer requirements for plotting.
 ///
 /// This trait is automatically implemented for any renderer that satisfies the requirements.
@@ -61,27 +66,28 @@ pub trait Renderer:
     + iced_core::text::Renderer<Font = iced_core::Font>
     + iced_graphics::geometry::Renderer
     + iced_graphics::mesh::Renderer
+    + Sized
 {
-    fn init_buffer(&self) -> RenderBuffer;
+    fn preffered_backend(&self) -> Backend;
 }
 
 impl Renderer for iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_tiny_skia::Renderer> {
-    fn init_buffer(&self) -> RenderBuffer {
+    fn preffered_backend(&self) -> Backend {
         match self {
-            Self::Primary(primary) => primary.init_buffer(),
-            Self::Secondary(secondary) => secondary.init_buffer(),
+            Self::Primary(primary) => primary.preffered_backend(),
+            Self::Secondary(secondary) => secondary.preffered_backend(),
         }
     }
 }
 
 impl Renderer for iced_wgpu::Renderer {
-    fn init_buffer(&self) -> RenderBuffer {
-        RenderBuffer::new_mesh(100_000)
+    fn preffered_backend(&self) -> Backend {
+        Backend::Mesh
     }
 }
 
 impl Renderer for iced_tiny_skia::Renderer {
-    fn init_buffer(&self) -> RenderBuffer {
-        RenderBuffer::new_path(5000)
+    fn preffered_backend(&self) -> Backend {
+        Backend::Path
     }
 }

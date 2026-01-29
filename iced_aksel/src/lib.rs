@@ -533,7 +533,7 @@ where
     /// Determines if the user clicked on the plot or an axis and updates the internal state.
     fn handle_mouse_press(
         &self,
-        memory: &mut Memory<AxisId>,
+        memory: &mut Memory<AxisId, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -620,7 +620,7 @@ where
     /// Triggers click events if the drag distance was within the deadband.
     fn handle_mouse_release(
         &self,
-        memory: &mut Memory<AxisId>,
+        memory: &mut Memory<AxisId, Renderer>,
         layout: Layout,
         _cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -666,7 +666,7 @@ where
     /// Manages hover states and processes drag deltas.
     fn handle_mouse_moved(
         &self,
-        memory: &mut Memory<AxisId>,
+        memory: &mut Memory<AxisId, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -796,7 +796,7 @@ where
         layout: Layout<'_>,
         style: &style::Style,
         plot: Rectangle,
-        buffer: &mut RenderBuffer,
+        buffer: &mut RenderBuffer<Renderer>,
     ) {
         // Track the "inner-most" spine properties for each side
         let mut left: Option<(f32, Color)> = None;
@@ -907,16 +907,16 @@ impl<AxisId, Domain, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
     Domain: Float,
-    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
     Theme: Catalog,
     Message: Clone,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Memory<AxisId>>()
+        tree::Tag::of::<Memory<AxisId, Renderer>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId>::new())
+        tree::State::new(Memory::<AxisId, Renderer>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -1013,7 +1013,7 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        let memory: &mut Memory<AxisId> = tree.state.downcast_mut();
+        let memory: &mut Memory<AxisId, Renderer> = tree.state.downcast_mut();
         memory.make_sure_buffer_is_initialized(renderer, self.quality);
 
         if !self.errors.is_empty()
@@ -1110,7 +1110,7 @@ where
         let plot_bounds = self.get_plot_layout(layout).bounds();
 
         // 1. Retrieve the Memory from the Tree directly
-        let memory = tree.state.downcast_ref::<Memory<AxisId>>();
+        let memory = tree.state.downcast_ref::<Memory<AxisId, Renderer>>();
 
         // Get buffer from memory
         let mut buffer = memory.get_buffer();
@@ -1122,21 +1122,21 @@ where
             height: plot_bounds.height,
         };
 
-        for (i, (_, axis)) in self.state.axes().iter().enumerate() {
-            // We only care about layout bounds here to determine position
-            let axis_layout = layout.children().nth(i).unwrap();
-
-            // Draw the axis itself (Standard draw call)
-            axis.draw::<Renderer>(
-                renderer,
-                theme,
-                &style,
-                axis_layout,
-                &plot_bounds,
-                &mut buffer,
-                &bounds,
-            );
-        }
+        // for (i, (_, axis)) in self.state.axes().iter().enumerate() {
+        //     // We only care about layout bounds here to determine position
+        //     let axis_layout = layout.children().nth(i).unwrap();
+        //
+        //     // Draw the axis itself (Standard draw call)
+        //     axis.draw::<Renderer>(
+        //         renderer,
+        //         theme,
+        //         &style,
+        //         axis_layout,
+        //         &plot_bounds,
+        //         &mut buffer,
+        //         &bounds,
+        //     );
+        // }
 
         // 2. Draw Spine Corners (Self-contained logic)
         self.draw_spine_corners(layout, &style, plot_bounds, &mut buffer);
@@ -1243,7 +1243,7 @@ where
     Domain: Float,
     Message: Clone + 'a,
     Theme: Catalog + 'a,
-    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
 {
     fn from(plot: Chart<'a, AxisId, Domain, Message, Theme, Renderer>) -> Self {
         Element::new(plot)

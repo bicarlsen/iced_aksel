@@ -77,7 +77,7 @@ pub struct Context<'a, D: Float, Renderer: crate::Renderer = iced_renderer::Rend
     transform: &'a Transform<'a, D, f32, f32>,
     clip_bounds: &'a iced_core::Rectangle,
     renderer: &'a mut Renderer,
-    buffer: &'a mut RenderBuffer,
+    buffer: &'a mut RenderBuffer<Renderer>,
 }
 
 impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer> {
@@ -95,7 +95,7 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
         self.renderer.default_font()
     }
 
-    pub fn buffer(&mut self) -> &mut RenderBuffer {
+    pub fn buffer(&mut self) -> &mut RenderBuffer<Renderer> {
         self.buffer
     }
 
@@ -123,7 +123,7 @@ where
     pub const fn new(
         renderer: &'a mut R,
         clip_bounds: &'a iced_core::Rectangle,
-        buffer: &'a mut RenderBuffer,
+        buffer: &'a mut RenderBuffer<R>,
         transform: &'a Transform<'a, D, f32, f32>,
     ) -> Self {
         let context = Context {
