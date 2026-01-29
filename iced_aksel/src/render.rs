@@ -61,17 +61,20 @@ pub enum Backend {
 /// Renderer requirements for plotting.
 ///
 /// This trait is automatically implemented for any renderer that satisfies the requirements.
-pub trait Renderer:
+pub trait Renderer<Font = iced_core::Font>:
     iced_core::Renderer
-    + iced_core::text::Renderer<Font = iced_core::Font>
+    + iced_core::text::Renderer<Font = Font>
     + iced_graphics::geometry::Renderer
     + iced_graphics::mesh::Renderer
-    + Sized
 {
     fn preffered_backend(&self) -> Backend;
 }
 
-impl Renderer for iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_tiny_skia::Renderer> {
+impl<A, B> Renderer<A::Font> for iced_renderer::fallback::Renderer<A, B>
+where
+    A: Renderer,
+    B: Renderer<A::Font, Paragraph = A::Paragraph, Editor = A::Editor>,
+{
     fn preffered_backend(&self) -> Backend {
         match self {
             Self::Primary(primary) => primary.preffered_backend(),
