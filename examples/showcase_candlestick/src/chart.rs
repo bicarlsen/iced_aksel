@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use chrono::{Datelike, TimeZone, Timelike};
@@ -107,6 +108,7 @@ pub struct CandlestickChart {
     pub settings: ChartSettings,
     /// The raw candle data, mapped by timestamp.
     data: BTreeMap<i64, Candle>,
+    damaged: RefCell<bool>,
 
     /// The single state managing all axes (X, Y-Price, Y-Volume).
     pub state: State<AxisId, f64>,
@@ -147,6 +149,7 @@ impl CandlestickChart {
                 ..settings
             },
             data: candle_data,
+            damaged: true.into(),
             state,
             candle_items: CandleItems {
                 candles: Vec::new(),
@@ -167,7 +170,8 @@ impl CandlestickChart {
 
     /// Returns the single `Chart` widget containing all layers.
     pub fn view(&self) -> Chart<'_, AxisId, f64, crate::Message> {
-        Chart::new(&self.state)
+        let chart = Chart::new(&self.state)
+            .damage(*self.damaged.borrow())
             .plot_data(&self.candle_items, X_AXIS_ID, Y_AXIS_ID)
             .plot_data(&self.volume_items, X_AXIS_ID, Y_VOL_AXIS_ID)
             .plot_data(&self.sma_items, X_AXIS_ID, Y_AXIS_ID)
@@ -183,28 +187,37 @@ impl CandlestickChart {
             })
             .marker(&Y_AXIS_ID, MarkerPosition::Cursor, |ctx| {
                 Some(ctx.marker(format!("{:.2}", ctx.value)))
-            })
+            });
+
+        *self.damaged.borrow_mut() = false;
+
+        chart
     }
 
     /// Handles incoming messages and updates the chart state.
     pub fn handle_message(&mut self, message: Message) {
         match message {
             Message::UpdateChart => {
+                self.damaged = true.into();
                 self.rebuild_layers();
             }
             Message::OnPlotDrag(delta) => {
+                self.damaged = true.into();
                 self.handle_plot_drag(delta);
                 self.rebuild_layers();
             }
             Message::OnPlotScroll(cursor_pos, delta) => {
+                self.damaged = true.into();
                 self.handle_plot_scroll(cursor_pos, delta);
                 self.rebuild_layers();
             }
             Message::OnAxisDrag(id, delta) => {
+                self.damaged = true.into();
                 self.handle_axis_drag(id, delta);
                 self.rebuild_layers();
             }
             Message::OnAxisDoubleClick(id) => {
+                self.damaged = true.into();
                 if id == Y_AXIS_ID {
                     self.settings.y_lock = true;
                     self.update_y_lock_domain();

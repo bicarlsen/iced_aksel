@@ -84,7 +84,7 @@ impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer>
     type Target = Transform<'a, D, f32, f32>;
 
     fn deref(&self) -> &Self::Target {
-        &self.transform
+        self.transform
     }
 }
 
@@ -95,7 +95,7 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
         self.renderer.default_font()
     }
 
-    pub fn buffer(&mut self) -> &mut RenderBuffer<Renderer> {
+    pub const fn buffer(&mut self) -> &mut RenderBuffer<Renderer> {
         self.buffer
     }
 
@@ -180,17 +180,5 @@ where
         {
             buffer.flush(self.context.renderer, self.context.clip_bounds);
         }
-    }
-}
-
-impl<'a, D, R> Drop for Plot<'a, D, R>
-where
-    D: Float,
-    R: crate::Renderer,
-{
-    fn drop(&mut self) {
-        self.context
-            .buffer
-            .flush(self.context.renderer, self.context.clip_bounds);
     }
 }

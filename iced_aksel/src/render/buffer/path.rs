@@ -21,14 +21,23 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
     }
 
     pub const fn paths_count(&self) -> usize {
-        return self.buffer.len();
+        self.buffer.len()
     }
 
     pub const fn limit(&self) -> usize {
         self.paths_limit
     }
 
-    pub(crate) fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
+    pub(crate) fn flush(
+        &mut self,
+        renderer: &mut Renderer,
+        clip_bounds: &Rectangle,
+        with_damage: bool,
+    ) {
+        if with_damage {
+            self.cache.clear();
+        }
+
         if !self.buffer.is_empty() {
             let paths = std::mem::replace(&mut self.buffer, Vec::with_capacity(PRE_ALLOC_PATHS));
             let geometry = self

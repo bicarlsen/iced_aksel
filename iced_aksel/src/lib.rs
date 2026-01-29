@@ -227,6 +227,7 @@ pub struct Chart<
     padding: Padding,
     quality: Quality,
     markers: Vec<MarkerRequest<'a, AxisId, Domain, Theme>>,
+    damaged: bool,
 
     // Fonts
     axis_font: Option<Font>,
@@ -276,6 +277,7 @@ where
             padding: Padding::new(0.),
             quality: Quality::Medium,
             markers: Vec::with_capacity(state.axes().len()),
+            damaged: false,
 
             // Handlers and fonts default to None
             axis_font: None,
@@ -324,6 +326,11 @@ where
     /// Sets the font used to render the [`Axis`] labels and [`axis::Marker`]
     pub const fn axes_font(mut self, font: Font) -> Self {
         self.axis_font = Some(font);
+        self
+    }
+
+    pub const fn damage(mut self, damage: bool) -> Self {
+        self.damaged = damage;
         self
     }
 
@@ -1104,7 +1111,6 @@ where
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
-        renderer.start_layer(layout.bounds());
         let style = theme.style(&self.class);
         let bounds = layout.bounds();
         let plot_bounds = self.get_plot_layout(layout).bounds();
@@ -1139,10 +1145,10 @@ where
         // }
 
         // 2. Draw Spine Corners (Self-contained logic)
-        self.draw_spine_corners(layout, &style, plot_bounds, &mut buffer);
+        // self.draw_spine_corners(layout, &style, plot_bounds, &mut buffer);
 
         // Flush the mesh buffer (draws all the lines/ticks aggregated so far)
-        buffer.flush(renderer, &bounds);
+        // buffer.flush(renderer, &bounds);
 
         // 3. Render data layers
         for layer in &self.layers {
@@ -1159,36 +1165,36 @@ where
         }
 
         // Flush the mesh buffer once more to draw all data layers
-        buffer.flush(renderer, &plot_bounds);
+        // buffer.flush(renderer, &plot_bounds);
 
         // 4. Render markers
-        for marker_request in &self.markers {
-            let Some((idx, _, axis)) = self.state.axes().get_full(marker_request.axis_id) else {
-                continue;
-            };
-
-            let axis_bounds = layout.child(idx).bounds();
-
-            let Some((marker, normalized_position)) = marker_request.create_marker(
-                axis,
-                &axis_bounds,
-                &plot_bounds,
-                cursor,
-                &style.axis,
-                theme,
-            ) else {
-                continue;
-            };
-
-            axis.draw_marker_overlay(
-                renderer,
-                normalized_position,
-                marker,
-                axis_bounds,
-                &bounds,
-                style.axis.text_offset,
-            );
-        }
+        // for marker_request in &self.markers {
+        //     let Some((idx, _, axis)) = self.state.axes().get_full(marker_request.axis_id) else {
+        //         continue;
+        //     };
+        //
+        //     let axis_bounds = layout.child(idx).bounds();
+        //
+        //     let Some((marker, normalized_position)) = marker_request.create_marker(
+        //         axis,
+        //         &axis_bounds,
+        //         &plot_bounds,
+        //         cursor,
+        //         &style.axis,
+        //         theme,
+        //     ) else {
+        //         continue;
+        //     };
+        //
+        //     axis.draw_marker_overlay(
+        //         renderer,
+        //         normalized_position,
+        //         marker,
+        //         axis_bounds,
+        //         &bounds,
+        //         style.axis.text_offset,
+        //     );
+        // }
 
         // 5. Draw Debug Overlay (if enabled)
         if self.debug
@@ -1227,9 +1233,7 @@ where
             renderer.end_layer();
         }
 
-        buffer.flush(renderer, &bounds);
-
-        renderer.end_layer()
+        buffer.flush(renderer, &bounds, self.damaged);
     }
 }
 

@@ -33,10 +33,10 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
         Self::Path(Box::new(PathBatcher::new(limit)))
     }
 
-    pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
+    pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle, with_damage: bool) {
         match self {
             Self::Path(buf) => {
-                buf.flush(renderer, clip_bounds);
+                buf.flush(renderer, clip_bounds, with_damage);
             }
             Self::Mesh(buf) => {
                 buf.flush(renderer, clip_bounds);
