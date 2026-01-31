@@ -1,7 +1,12 @@
 use super::Primitive;
 
-use iced_core::{Point, Rectangle, Size};
-use iced_graphics::geometry::{Cache, Frame, Path};
+use crate::stroke::{ResolvedStroke, StrokeStyle};
+use iced_core::alignment::{Horizontal, Vertical};
+use iced_core::text::{LineHeight, Shaping};
+use iced_core::{Point, Rectangle, Size, Vector};
+use iced_graphics::geometry::{
+    Cache, Frame, LineCap, LineDash, LineJoin, Path, Stroke, Style, Text,
+};
 
 const PRE_ALLOC_PATHS: usize = 5000;
 
@@ -26,6 +31,13 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
 
     pub const fn limit(&self) -> usize {
         self.paths_limit
+    }
+
+    /// Renders a primitive into this path buffer.
+    ///
+    /// This converts the primitive into tiny-skia compatible paths.
+    pub fn add_primitive(&mut self, primitive: Primitive) {
+        self.buffer.push(primitive)
     }
 
     pub(crate) fn flush(
@@ -54,40 +66,152 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
     }
 
     fn draw_primitive(primitive: Primitive, frame: &mut Frame<Renderer>) {
-        match primitive {
-            Primitive::Rectangle {
-                xy1,
-                xy2,
-                fill,
-                stroke,
-            } => {
-                let left_most = xy1.x.min(xy2.x);
-                let right_most = xy1.x.max(xy2.x);
+        // -------------------------------------------------------------------------
+        // 1. Handle Text (The "Odd One Out")
+        // -------------------------------------------------------------------------
+        if let Primitive::Text {
+            content,
+            position,
+            size,
+            line_height,
+            bounds,
+            horizontal_alignment,
+            vertical_alignment,
+            fill,
+            font,
+            rotation,
+            ..
+        } = primitive
+        {
+            frame.with_save(|frame| {
+                // 1. Calculate Bounds & Clip Rect
+                // We must offset the clip rectangle based on alignment so it matches the text placement.
+                let (max_width, clip_rect) = if bounds.width.is_infinite() {
+                    (f32::INFINITY, None)
+                } else {
+                    // --- THE FIX: Calculate Origin based on Alignment ---
+                    let x_origin = match horizontal_alignment {
+                        Horizontal::Left => position.x,
+                        Horizontal::Center => position.x - (bounds.width / 2.0),
+                        Horizontal::Right => position.x - bounds.width,
+                    };
 
-                let top_most = xy1.y.min(xy2.y);
-                let bottom_most = xy1.y.max(xy2.y);
+                    let y_origin = match vertical_alignment {
+                        Vertical::Top => position.y,
+                        Vertical::Center => position.y - (bounds.height / 2.0),
+                        Vertical::Bottom => position.y - bounds.height,
+                    };
 
-                let size = Size {
-                    width: left_most - right_most,
-                    height: bottom_most - top_most,
+                    (
+                        bounds.width,
+                        Some(Rectangle::new(Point::new(x_origin, y_origin), bounds)),
+                    )
                 };
 
-                let top_left = Point::new(left_most, top_most);
-
-                let path = Path::rectangle(top_left, size);
-
-                if let Some(color) = fill {
-                    frame.fill(&path, color)
+                // 2. Rotation (Rotate around the generic anchor point)
+                // Note: If you want to rotate the *box* around the specific alignment point,
+                // this logic is correct.
+                if rotation != 0.0 {
+                    frame.translate(Vector::new(position.x, position.y));
+                    frame.rotate(rotation);
+                    frame.translate(Vector::new(-position.x, -position.y));
                 }
-            }
-            _ => (), // TODO: Draw other primtiives
+
+                // 3. Draw Text
+                let draw_text = |frame: &mut Frame<Renderer>| {
+                    frame.fill_text(Text {
+                        content: content.clone(),
+                        position, // Draw at anchor
+                        color: fill,
+                        size,
+                        // Ensure this is Absolute to prevent the "Crazy Line Height"
+                        line_height,
+                        font,
+                        align_x: horizontal_alignment.into(),
+                        align_y: vertical_alignment.into(),
+                        shaping: Shaping::Advanced,
+                        max_width,
+                    });
+                };
+
+                // 4. Clip & Execute
+                if let Some(rect) = clip_rect {
+                    frame.with_clip(rect, draw_text);
+                } else {
+                    draw_text(frame);
+                }
+            });
+            return;
+        }
+
+        // -------------------------------------------------------------------------
+        // 2. The Shape Pipeline (Rect, Triangle, Ellipse)
+        // -------------------------------------------------------------------------
+        // Since we returned above, 'primitive' here is guaranteed to be a Shape.
+
+        // A. Extract Styles
+        let (fill, stroke) = match &primitive {
+            Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Triangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Ellipse { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Polygon { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Line { stroke, .. } => (None, Some(stroke)),
+            Primitive::HorizontalLine { stroke, .. } => (None, Some(stroke)),
+            Primitive::VerticalLine { stroke, .. } => (None, Some(stroke)),
+            Primitive::PolyLine { stroke, .. } => (None, Some(stroke)),
+            Primitive::BezierCurve { stroke, .. } => (None, Some(stroke)),
+            Primitive::Area { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Arc { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Spline { stroke, .. } => (None, Some(stroke)),
+            // If we missed a case, we draw nothing
+            _ => (None, None),
+        };
+
+        // B. Build Geometry (Using the method on Primitive we added)
+        let path = Path::new(|b| primitive.draw_geometry(b));
+
+        // C. Render Fill
+        if let Some(color) = fill {
+            frame.fill(&path, color);
+        }
+
+        // D. Render Stroke (Using our helper)
+        if let Some(s) = stroke {
+            let mut dashed_storage = [0.0; 2];
+            let iced_stroke = create_iced_stroke(s, &mut dashed_storage);
+            frame.stroke(&path, iced_stroke);
         }
     }
+}
 
-    /// Renders a primitive into this path buffer.
-    ///
-    /// This converts the primitive into tiny-skia compatible paths.
-    pub fn add_primitive(&mut self, primitive: Primitive) {
-        self.buffer.push(primitive)
+// --- Helper Function ---
+// This prevents code duplication between Rectangle, Triangle, Circle, etc.
+fn create_iced_stroke<'a>(
+    s: &ResolvedStroke,
+    storage: &'a mut [f32; 2],
+) -> iced_graphics::geometry::Stroke<'a> {
+    let (segments, line_cap) = match s.style {
+        StrokeStyle::Solid => (&[] as &[f32], LineCap::Butt),
+        StrokeStyle::Dashed { dash, gap } => {
+            storage[0] = dash * s.thickness;
+            storage[1] = gap * s.thickness;
+            (&storage[..], LineCap::Butt)
+        }
+        StrokeStyle::Dotted { gap } => {
+            storage[0] = 0.0;
+            storage[1] = gap * s.thickness;
+            (&storage[..], LineCap::Round)
+        }
+    };
+
+    iced_graphics::geometry::Stroke {
+        style: Style::Solid(s.fill),
+        width: s.thickness,
+        line_cap,
+        line_join: LineJoin::Miter, // Miter makes sharp triangle corners look sharp
+        line_dash: LineDash {
+            segments,
+            offset: 0,
+        },
     }
 }
