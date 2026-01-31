@@ -7,6 +7,7 @@ use iced_core::{
     text::Wrapping,
 };
 use std::fmt::Debug;
+use iced_core::text::LineHeight;
 
 /// Defines how text bounds should be interpreted.
 ///
@@ -133,7 +134,6 @@ impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
 
         // 2. Resolve Size (Screen Pixels vs Plot Units)
         let font_size_in_pixels = size.resolve_y(ctx);
-        let line_height = font_size_in_pixels + line_height;
 
         // 3. Resolve bounds
         let bounds = bounds.resolve(ctx, &position);
@@ -149,7 +149,7 @@ impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
             fill,
             quality,
             font,
-            line_height: line_height.into(),
+            line_height: LineHeight::Relative(self.line_height),
             bounds,
             wrapping,
         });
