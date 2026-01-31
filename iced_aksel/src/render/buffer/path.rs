@@ -84,7 +84,7 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
         } = primitive
         {
             frame.with_save(|frame| {
-                // 1. Calculate Bounds & Clip Rect
+                // 1. Calculate Bounds & Clip Rec
                 // We must offset the clip rectangle based on alignment so it matches the text placement.
                 let (max_width, clip_rect) = if bounds.width.is_infinite() {
                     (f32::INFINITY, None)
