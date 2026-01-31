@@ -1,3 +1,4 @@
+use crate::geometry::{DrawGeometry, GeometryWriter};
 use crate::stroke::ResolvedStroke;
 use iced_core::{
     Color, Font, Pixels, Point, Radians, Rectangle, Size, Vector,
@@ -118,6 +119,41 @@ pub enum Primitive {
         bounds: Size,
         wrapping: Wrapping,
     },
+}
+
+impl DrawGeometry for Primitive {
+    fn draw<S: GeometryWriter>(&self, sink: &mut S) {
+        match self {
+            Self::Rectangle {
+                xy1,
+                xy2,
+                fill,
+                stroke,
+            } => {
+                // 1. Sort coordinates to define the bounds (Min/Max)
+                let x_min = xy1.x.min(xy2.x);
+                let x_max = xy1.x.max(xy2.x);
+                let y_min = xy1.y.min(xy2.y);
+                let y_max = xy1.y.max(xy2.y);
+
+                // 2. Define the 4 corners in order (Top-Left winding)
+                let p0 = Point::new(x_min, y_min); // Top-Left
+                let p1 = Point::new(x_max, y_min); // Top-Right
+                let p2 = Point::new(x_max, y_max); // Bottom-Right
+                let p3 = Point::new(x_min, y_max); // Bottom-Left
+
+                // 3. Stream to sink
+                sink.move_to(p0);
+                sink.line_to(p1);
+                sink.line_to(p2);
+                sink.line_to(p3);
+                sink.close();
+            }
+            _ => {
+                todo!()
+            }
+        }
+    }
 }
 
 impl Primitive {

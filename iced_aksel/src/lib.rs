@@ -105,6 +105,7 @@ mod render;
 mod state;
 
 pub mod axis;
+pub mod geometry;
 pub mod plot;
 pub mod shape;
 pub mod stroke;

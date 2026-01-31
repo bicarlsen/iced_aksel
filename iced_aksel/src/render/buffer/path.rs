@@ -1,14 +1,37 @@
 use super::Primitive;
 
+use crate::geometry::{DrawGeometry, GeometryWriter, RectangleGeometry};
 use crate::stroke::{ResolvedStroke, StrokeStyle};
 use iced_core::alignment::{Horizontal, Vertical};
 use iced_core::text::{LineHeight, Shaping};
 use iced_core::{Point, Rectangle, Size, Vector};
+use iced_graphics::geometry::path::Builder;
 use iced_graphics::geometry::{
     Cache, Frame, LineCap, LineDash, LineJoin, Path, Stroke, Style, Text,
 };
 
 const PRE_ALLOC_PATHS: usize = 5000;
+
+/// Wraps the Iced Path Builder to act as a GeometryWriter.
+struct PathBuilderWriter<'a> {
+    builder: &'a mut Builder,
+}
+
+impl<'a> GeometryWriter for PathBuilderWriter<'a> {
+    fn move_to(&mut self, p: Point) {
+        self.builder.move_to(p);
+    }
+
+    fn line_to(&mut self, p: Point) {
+        self.builder.line_to(p);
+    }
+
+    fn close(&mut self) {
+        // Tiny-Skia needs explicit close to create a proper Line Join
+        // (sharp corner) at the end of the shape.
+        self.builder.close();
+    }
+}
 
 pub struct PathBatcher<Renderer: crate::Renderer> {
     buffer: Vec<Primitive>,
@@ -149,9 +172,43 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
         // -------------------------------------------------------------------------
         // Since we returned above, 'primitive' here is guaranteed to be a Shape.
 
+        match &primitive {
+            Primitive::Rectangle {
+                xy1,
+                xy2,
+                fill,
+                stroke: resolved_stroke,
+                ..
+            } => {
+                frame.with_save(|frame| {
+                    let mut builder = Builder::new();
+
+                    // 1. Create Shape Logic
+                    let rect_shape = RectangleGeometry::new(*xy1, *xy2);
+
+                    // 2. Create Writer
+                    let mut writer = PathBuilderWriter {
+                        builder: &mut builder,
+                    };
+
+                    // 3. Draw
+                    rect_shape.draw(&mut writer);
+
+                    // 4. Close and Fill
+                    builder.close(); // Tiny-Skia needs explicit close for the path
+                    let path = builder.build();
+
+                    if let Some(color) = fill {
+                        frame.fill(&path, *color);
+                    }
+                });
+            }
+            _ => {}
+        }
+
         // A. Extract Styles
         let (fill, stroke) = match &primitive {
-            Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            // Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Triangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Ellipse { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Polygon { fill, stroke, .. } => (*fill, stroke.as_ref()),
