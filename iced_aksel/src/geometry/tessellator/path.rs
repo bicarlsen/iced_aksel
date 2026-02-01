@@ -11,6 +11,7 @@ pub enum PathCommand {
     QuadTo(Point, Point),         // Control, End
     CubicTo(Point, Point, Point), // Control1, Control2, End
     Close,
+    Stop,
 }
 
 /// A simplified, engine-agnostic buffer for geometry.
@@ -60,6 +61,12 @@ impl GeometryBuffer {
 
     pub fn close(&mut self) {
         self.commands.push(PathCommand::Close);
+    }
+
+    /// Ends the current sub-path without closing it.
+    /// Used for open shapes like Lines, Polylines, and Arcs.
+    pub fn stop(&mut self) {
+        self.commands.push(PathCommand::Stop);
     }
 
     // --- Granular Helpers (Your "Granularity" Request) ---
@@ -266,6 +273,7 @@ impl GeometryBuffer {
                 PathCommand::QuadTo(c, e) => builder.quadratic_curve_to(*c, *e),
                 PathCommand::CubicTo(c1, c2, e) => builder.bezier_curve_to(*c1, *c2, *e),
                 PathCommand::Close => builder.close(),
+                PathCommand::Stop => {} // Iced handles open paths implicitly, do nothing
             }
         }
     }
@@ -323,11 +331,20 @@ impl<'a> Iterator for LyonAdapter<'a> {
                 let last = self.current;
                 let first = self.first;
                 self.current = first;
-                // EndpointId(0) is a dummy ID required by Lyon, usually ignored
                 Some(PathEvent::End {
                     last,
                     first,
                     close: true,
+                })
+            }
+            PathCommand::Stop => {
+                let last = self.current;
+                let first = self.first;
+                // Important: Signal that the path ends here, but is NOT closed.
+                Some(PathEvent::End {
+                    last,
+                    first,
+                    close: false,
                 })
             }
         }

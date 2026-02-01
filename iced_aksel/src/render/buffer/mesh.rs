@@ -169,291 +169,340 @@ impl MeshBatcher {
 
     /// Renders a primitive into this mesh buffer using the tessellator.
     pub fn add_primitive(&mut self, primitive: Primitive) {
-        match primitive {
-            Primitive::Rectangle {
-                xy1,
-                xy2,
-                fill,
-                stroke,
-            } => {
-                let buffer = primitive.build_geometry();
+        // A. Extract Styles
+        let (fill, stroke) = match &primitive {
+            Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Triangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Ellipse { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Polygon { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Line { stroke, .. } => (None, Some(stroke)),
+            Primitive::HorizontalLine { stroke, .. } => (None, Some(stroke)),
+            Primitive::VerticalLine { stroke, .. } => (None, Some(stroke)),
+            Primitive::PolyLine { stroke, .. } => (None, Some(stroke)),
+            Primitive::BezierCurve { stroke, .. } => (None, Some(stroke)),
+            Primitive::Area { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Arc { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Spline { stroke, .. } => (None, Some(stroke)),
+            // If we missed a case, we draw nothing
+            _ => (None, None),
+        };
 
-                // 2. FILL (Tessellate the buffer)
-                if let Some(color) = fill {
-                    let packed = pack(color);
+        // 1. Generate the Geometry (IR)
+        // This creates the GeometryBuffer with the 4 cubic bezier curves
+        let buffer = primitive.build_geometry();
 
-                    let options = FillOptions::default();
+        // 2. FILL (Tessellate the buffer)
+        if let Some(color) = fill {
+            let packed = pack(color);
 
-                    // Stream the buffer directly into Lyon's Fill Tessellator
-                    let _ = self.lyon_filler.tessellate(
-                        buffer.lyon_iter(),
-                        &options,
-                        &mut self.data.adapter(packed),
-                    );
-                }
+            let options = FillOptions::default();
 
-                // 3. STROKE (Tessellate the buffer)
-                if let Some(s) = stroke {
-                    let packed = pack(s.fill);
-                    let options = StrokeOptions::default();
-
-                    // Stream the same buffer into Lyon's Stroke Tessellator
-                    let _ = self.lyon_stroker.tessellate(
-                        buffer.lyon_iter(),
-                        &options,
-                        &mut self.data.adapter(packed),
-                    );
-                }
-            }
-            Primitive::Ellipse { fill, stroke, .. } => {
-                // 1. Generate the Geometry (IR)
-                // This creates the GeometryBuffer with the 4 cubic bezier curves
-                let buffer = primitive.build_geometry();
-
-                // 2. FILL (Tessellate the buffer)
-                if let Some(color) = fill {
-                    let packed = pack(color);
-
-                    let options = FillOptions::default();
-
-                    // Stream the buffer directly into Lyon's Fill Tessellator
-                    let _ = self.lyon_filler.tessellate(
-                        buffer.lyon_iter(),
-                        &options,
-                        &mut self.data.adapter(packed),
-                    );
-                }
-
-                // 3. STROKE (Tessellate the buffer)
-                if let Some(s) = stroke {
-                    let packed = pack(s.fill);
-                    let options = StrokeOptions::default();
-
-                    // Stream the same buffer into Lyon's Stroke Tessellator
-                    let _ = self.lyon_stroker.tessellate(
-                        buffer.lyon_iter(),
-                        &options,
-                        &mut self.data.adapter(packed),
-                    );
-                }
-            }
-            Primitive::Triangle {
-                points,
-                fill,
-                stroke,
-            } => {
-                self.tessellator.draw_triangle(
-                    &mut self.data,
-                    points[0],
-                    points[1],
-                    points[2],
-                    fill,
-                    stroke,
-                );
-            }
-            Primitive::Polygon {
-                center,
-                radius,
-                vertices,
-                rotation,
-                fill,
-                stroke,
-            } => {
-                self.tessellator.draw_polygon(
-                    &mut self.data,
-                    center,
-                    radius,
-                    vertices,
-                    rotation,
-                    fill,
-                    stroke,
-                );
-            }
-            Primitive::Line {
-                start,
-                end,
-                stroke,
-                clip_bounds,
-                extensions,
-                arrows,
-            } => {
-                self.tessellator.draw_line(
-                    &mut self.data,
-                    start,
-                    end,
-                    stroke,
-                    clip_bounds,
-                    extensions,
-                    arrows,
-                );
-            }
-            Primitive::HorizontalLine {
-                y,
-                x_start,
-                x_end,
-                stroke,
-                snap,
-            } => match stroke.style {
-                StrokeStyle::Solid => {
-                    linear::draw_horizontal_line(
-                        &mut self.data,
-                        x_start,
-                        x_end,
-                        y,
-                        stroke.thickness,
-                        stroke.fill,
-                        snap,
-                    );
-                }
-                StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
-                    &mut self.data,
-                    x_start,
-                    x_end,
-                    y,
-                    stroke.thickness,
-                    stroke.fill,
-                    dash,
-                    gap,
-                    snap,
-                ),
-                StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
-            },
-            Primitive::VerticalLine {
-                x,
-                y_start,
-                y_end,
-                stroke,
-                snap,
-            } => match stroke.style {
-                StrokeStyle::Solid => {
-                    linear::draw_vertical_line(
-                        &mut self.data,
-                        x,
-                        y_start,
-                        y_end,
-                        stroke.thickness,
-                        stroke.fill,
-                        snap,
-                    );
-                }
-                StrokeStyle::Dashed { dash, gap } => linear::draw_vertical_dashed_line(
-                    &mut self.data,
-                    x,
-                    y_start,
-                    y_end,
-                    stroke.thickness,
-                    stroke.fill,
-                    dash,
-                    gap,
-                    snap,
-                ),
-                StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
-            },
-            Primitive::PolyLine {
-                points,
-                stroke,
-                clip_bounds,
-                extensions,
-                arrows,
-            } => {
-                self.tessellator.draw_polyline(
-                    &mut self.data,
-                    points,
-                    stroke,
-                    clip_bounds,
-                    extensions,
-                    arrows,
-                );
-            }
-            Primitive::BezierCurve {
-                start,
-                end,
-                control_1,
-                control_2,
-                stroke,
-            } => {
-                self.tessellator.draw_bezier(
-                    &mut self.data,
-                    start,
-                    control_1,
-                    control_2,
-                    end,
-                    stroke,
-                );
-            }
-            Primitive::Spline {
-                points,
-                stroke,
-                tension,
-            } => {
-                self.tessellator
-                    .draw_spline(&mut self.data, points, stroke, tension);
-            }
-            Primitive::Arc {
-                center,
-                radius_inner,
-                radius_outer,
-                start_angle,
-                end_angle,
-                fill,
-                stroke,
-            } => {
-                self.tessellator.draw_arc(
-                    &mut self.data,
-                    center.x,
-                    center.y,
-                    radius_inner,
-                    radius_outer,
-                    start_angle,
-                    end_angle,
-                    fill,
-                    stroke,
-                );
-            }
-            Primitive::Area {
-                points,
-                fill,
-                stroke,
-            } => {
-                self.tessellator
-                    .draw_area(&mut self.data, &points, fill, stroke);
-            }
-            Primitive::Text {
-                font,
-                content,
-                position,
-                size,
-                rotation,
-                horizontal_alignment,
-                vertical_alignment,
-                fill,
-                quality,
-                line_height,
-                bounds,
-                wrapping,
-            } => {
-                let tolerance = quality
-                    .map(|q| q.max(0.001))
-                    .unwrap_or_else(|| self.tessellator.text_tolerance());
-
-                self.tessellator.draw_text(
-                    &mut self.data,
-                    crate::render::text::Text {
-                        font,
-                        content,
-                        position,
-                        size,
-                        rotation,
-                        horizontal_alignment,
-                        vertical_alignment,
-                        fill,
-                        tolerance,
-                        line_height: line_height.to_absolute(size),
-                        bounds,
-                        wrapping,
-                    },
-                );
-            }
+            // Stream the buffer directly into Lyon's Fill Tessellator
+            let _ = self.lyon_filler.tessellate(
+                buffer.lyon_iter(),
+                &options,
+                &mut self.data.adapter(packed),
+            );
         }
+
+        // 3. STROKE (Tessellate the buffer)
+        if let Some(s) = stroke {
+            let packed = pack(s.fill);
+            let options = StrokeOptions::default();
+
+            // Stream the same buffer into Lyon's Stroke Tessellator
+            let _ = self.lyon_stroker.tessellate(
+                buffer.lyon_iter(),
+                &options,
+                &mut self.data.adapter(packed),
+            );
+        }
+        //
+        // match primitive {
+        //     Primitive::Rectangle {
+        //         xy1,
+        //         xy2,
+        //         fill,
+        //         stroke,
+        //     } => {
+        //         let buffer = primitive.build_geometry();
+        //
+        //         // 2. FILL (Tessellate the buffer)
+        //         if let Some(color) = fill {
+        //             let packed = pack(color);
+        //
+        //             let options = FillOptions::default();
+        //
+        //             // Stream the buffer directly into Lyon's Fill Tessellator
+        //             let _ = self.lyon_filler.tessellate(
+        //                 buffer.lyon_iter(),
+        //                 &options,
+        //                 &mut self.data.adapter(packed),
+        //             );
+        //         }
+        //
+        //         // 3. STROKE (Tessellate the buffer)
+        //         if let Some(s) = stroke {
+        //             let packed = pack(s.fill);
+        //             let options = StrokeOptions::default();
+        //
+        //             // Stream the same buffer into Lyon's Stroke Tessellator
+        //             let _ = self.lyon_stroker.tessellate(
+        //                 buffer.lyon_iter(),
+        //                 &options,
+        //                 &mut self.data.adapter(packed),
+        //             );
+        //         }
+        //     }
+        //     Primitive::Ellipse { fill, stroke, .. } => {
+        //         // 1. Generate the Geometry (IR)
+        //         // This creates the GeometryBuffer with the 4 cubic bezier curves
+        //         let buffer = primitive.build_geometry();
+        //
+        //         // 2. FILL (Tessellate the buffer)
+        //         if let Some(color) = fill {
+        //             let packed = pack(color);
+        //
+        //             let options = FillOptions::default();
+        //
+        //             // Stream the buffer directly into Lyon's Fill Tessellator
+        //             let _ = self.lyon_filler.tessellate(
+        //                 buffer.lyon_iter(),
+        //                 &options,
+        //                 &mut self.data.adapter(packed),
+        //             );
+        //         }
+        //
+        //         // 3. STROKE (Tessellate the buffer)
+        //         if let Some(s) = stroke {
+        //             let packed = pack(s.fill);
+        //             let options = StrokeOptions::default();
+        //
+        //             // Stream the same buffer into Lyon's Stroke Tessellator
+        //             let _ = self.lyon_stroker.tessellate(
+        //                 buffer.lyon_iter(),
+        //                 &options,
+        //                 &mut self.data.adapter(packed),
+        //             );
+        //         }
+        //     }
+        //     Primitive::Triangle {
+        //         points,
+        //         fill,
+        //         stroke,
+        //     } => {
+        //         self.tessellator.draw_triangle(
+        //             &mut self.data,
+        //             points[0],
+        //             points[1],
+        //             points[2],
+        //             fill,
+        //             stroke,
+        //         );
+        //     }
+        //     Primitive::Polygon {
+        //         center,
+        //         radius,
+        //         vertices,
+        //         rotation,
+        //         fill,
+        //         stroke,
+        //     } => {
+        //         self.tessellator.draw_polygon(
+        //             &mut self.data,
+        //             center,
+        //             radius,
+        //             vertices,
+        //             rotation,
+        //             fill,
+        //             stroke,
+        //         );
+        //     }
+        //     Primitive::Line {
+        //         start,
+        //         end,
+        //         stroke,
+        //         clip_bounds,
+        //         extensions,
+        //         arrows,
+        //     } => {
+        //         self.tessellator.draw_line(
+        //             &mut self.data,
+        //             start,
+        //             end,
+        //             stroke,
+        //             clip_bounds,
+        //             extensions,
+        //             arrows,
+        //         );
+        //     }
+        //     Primitive::HorizontalLine {
+        //         y,
+        //         x_start,
+        //         x_end,
+        //         stroke,
+        //         snap,
+        //     } => match stroke.style {
+        //         StrokeStyle::Solid => {
+        //             linear::draw_horizontal_line(
+        //                 &mut self.data,
+        //                 x_start,
+        //                 x_end,
+        //                 y,
+        //                 stroke.thickness,
+        //                 stroke.fill,
+        //                 snap,
+        //             );
+        //         }
+        //         StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
+        //             &mut self.data,
+        //             x_start,
+        //             x_end,
+        //             y,
+        //             stroke.thickness,
+        //             stroke.fill,
+        //             dash,
+        //             gap,
+        //             snap,
+        //         ),
+        //         StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
+        //     },
+        //     Primitive::VerticalLine {
+        //         x,
+        //         y_start,
+        //         y_end,
+        //         stroke,
+        //         snap,
+        //     } => match stroke.style {
+        //         StrokeStyle::Solid => {
+        //             linear::draw_vertical_line(
+        //                 &mut self.data,
+        //                 x,
+        //                 y_start,
+        //                 y_end,
+        //                 stroke.thickness,
+        //                 stroke.fill,
+        //                 snap,
+        //             );
+        //         }
+        //         StrokeStyle::Dashed { dash, gap } => linear::draw_vertical_dashed_line(
+        //             &mut self.data,
+        //             x,
+        //             y_start,
+        //             y_end,
+        //             stroke.thickness,
+        //             stroke.fill,
+        //             dash,
+        //             gap,
+        //             snap,
+        //         ),
+        //         StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
+        //     },
+        //     Primitive::PolyLine {
+        //         points,
+        //         stroke,
+        //         clip_bounds,
+        //         extensions,
+        //         arrows,
+        //     } => {
+        //         self.tessellator.draw_polyline(
+        //             &mut self.data,
+        //             points,
+        //             stroke,
+        //             clip_bounds,
+        //             extensions,
+        //             arrows,
+        //         );
+        //     }
+        //     Primitive::BezierCurve {
+        //         start,
+        //         end,
+        //         control_1,
+        //         control_2,
+        //         stroke,
+        //     } => {
+        //         self.tessellator.draw_bezier(
+        //             &mut self.data,
+        //             start,
+        //             control_1,
+        //             control_2,
+        //             end,
+        //             stroke,
+        //         );
+        //     }
+        //     Primitive::Spline {
+        //         points,
+        //         stroke,
+        //         tension,
+        //     } => {
+        //         self.tessellator
+        //             .draw_spline(&mut self.data, points, stroke, tension);
+        //     }
+        //     Primitive::Arc {
+        //         center,
+        //         radius_inner,
+        //         radius_outer,
+        //         start_angle,
+        //         end_angle,
+        //         fill,
+        //         stroke,
+        //     } => {
+        //         self.tessellator.draw_arc(
+        //             &mut self.data,
+        //             center.x,
+        //             center.y,
+        //             radius_inner,
+        //             radius_outer,
+        //             start_angle,
+        //             end_angle,
+        //             fill,
+        //             stroke,
+        //         );
+        //     }
+        //     Primitive::Area {
+        //         points,
+        //         fill,
+        //         stroke,
+        //     } => {
+        //         self.tessellator
+        //             .draw_area(&mut self.data, &points, fill, stroke);
+        //     }
+        //     Primitive::Text {
+        //         font,
+        //         content,
+        //         position,
+        //         size,
+        //         rotation,
+        //         horizontal_alignment,
+        //         vertical_alignment,
+        //         fill,
+        //         quality,
+        //         line_height,
+        //         bounds,
+        //         wrapping,
+        //     } => {
+        //         let tolerance = quality
+        //             .map(|q| q.max(0.001))
+        //             .unwrap_or_else(|| self.tessellator.text_tolerance());
+        //
+        //         self.tessellator.draw_text(
+        //             &mut self.data,
+        //             crate::render::text::Text {
+        //                 font,
+        //                 content,
+        //                 position,
+        //                 size,
+        //                 rotation,
+        //                 horizontal_alignment,
+        //                 vertical_alignment,
+        //                 fill,
+        //                 tolerance,
+        //                 line_height: line_height.to_absolute(size),
+        //                 bounds,
+        //                 wrapping,
+        //             },
+        //         );
+        //     }
+        // }
     }
 }

@@ -163,7 +163,7 @@ impl GalleryApp {
         let chart = Chart::new(&self.chart_state)
             .plot_data(&self.gallery_data, "x".to_string(), "y".to_string())
             .width(Length::Fill)
-            .height(Length::Fill);
+            .height(Length::Fill).damage(true);
 
         row![
             scrollable(sidebar).width(150),

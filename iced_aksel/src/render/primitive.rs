@@ -122,22 +122,19 @@ pub enum Primitive {
 }
 
 impl Primitive {
-    /// Generates the Intermediate Representation.
-    /// This logic is now backend-agnostic.
     pub fn build_geometry(&self) -> GeometryBuffer {
         let mut buffer = GeometryBuffer::new();
 
         match self {
             // --- 1. SIMPLE SHAPES ---
             Primitive::Rectangle { xy1, xy2, .. } => {
-                // We define top-left width/height
                 use iced_core::{Rectangle, Size};
                 let rect = Rectangle::new(*xy1, Size::new(xy2.x - xy1.x, xy2.y - xy1.y));
                 buffer.rectangle(rect);
             }
 
             Primitive::Triangle { points, .. } => {
-                buffer.polyline(points, true); // True = closed
+                buffer.polyline(points, true);
             }
 
             Primitive::Polygon {
@@ -158,38 +155,37 @@ impl Primitive {
                 arrows,
                 ..
             } => {
-                // 1. Calculate Direction & Length manually (Fixes .length() error)
+                // 1. Calculate Geometry
                 let dir = Vector::new(end.x - start.x, end.y - start.y);
                 let len = (dir.x * dir.x + dir.y * dir.y).sqrt();
 
-                // Avoid division by zero
                 let unit = if len > 0.001 {
                     Vector::new(dir.x / len, dir.y / len)
                 } else {
                     Vector::new(1.0, 0.0)
                 };
 
-                // 2. Resolve Extension Lengths (Fixes bool multiplication error)
-                // Since extensions.start is bool, we define a fixed extension length (e.g. 10.0)
                 const EXT_LEN: f32 = 10.0;
                 let start_dist = if extensions.start { EXT_LEN } else { 0.0 };
                 let end_dist = if extensions.end { EXT_LEN } else { 0.0 };
 
-                // Apply extensions (Start moves backwards, End moves forwards)
                 let p_start = *start - unit * start_dist;
                 let p_end = *end + unit * end_dist;
 
+                // 2. Draw Main Shaft
                 buffer.move_to(p_start);
                 buffer.line_to(p_end);
 
-                // 3. Handle Arrows
-                // We use the same 'unit' vector to orient the arrow heads
+                // --- FIX IS HERE ---
+                // We MUST stop the line before drawing arrows,
+                // otherwise Lyon sees "MoveTo (Line)" then "MoveTo (Arrow)" and panics.
+                buffer.stop();
+
+                // 3. Draw Arrows (They handle their own MoveTo/Close)
                 if arrows.start {
-                    // Tip is at p_start, pointing OUT (so direction is -unit)
                     draw_arrow_head(&mut buffer, p_start, unit * -1.0, 10.0);
                 }
                 if arrows.end {
-                    // Tip is at p_end, pointing OUT (so direction is unit)
                     draw_arrow_head(&mut buffer, p_end, unit, 10.0);
                 }
             }
@@ -199,6 +195,7 @@ impl Primitive {
             } => {
                 buffer.move_to(Point::new(*x_start, *y));
                 buffer.line_to(Point::new(*x_end, *y));
+                buffer.stop(); // Ensure closed
             }
 
             Primitive::VerticalLine {
@@ -206,10 +203,12 @@ impl Primitive {
             } => {
                 buffer.move_to(Point::new(*x, *y_start));
                 buffer.line_to(Point::new(*x, *y_end));
+                buffer.stop(); // Ensure closed
             }
 
             Primitive::PolyLine { points, .. } => {
-                buffer.polyline(points, false); // False = open
+                buffer.polyline(points, false);
+                buffer.stop();
             }
 
             // --- 3. CURVES ---
@@ -225,12 +224,14 @@ impl Primitive {
                     Some(c2) => buffer.cubic_bezier_to(*control_1, *c2, *end),
                     None => buffer.quadratic_bezier_to(*control_1, *end),
                 }
+                buffer.stop();
             }
 
             Primitive::Spline {
                 points, tension, ..
             } => {
                 buffer.catmull_rom_spline(points, *tension);
+                buffer.stop();
             }
 
             Primitive::Arc {
@@ -240,16 +241,16 @@ impl Primitive {
                 end_angle,
                 ..
             } => {
-                // Note: radius_outer is usually the one drawn for strokes
                 buffer.arc(*center, *radius_outer, *start_angle, *end_angle);
+                buffer.stop(); // Ensure closed
             }
 
             Primitive::Ellipse { center, radius, .. } => {
                 buffer.ellipse(*center, radius.x, radius.y);
+                // Ellipse calls buffer.close(), so we don't need stop().
             }
 
             Primitive::Area { points, .. } => {
-                // Area is implicitly closed
                 buffer.polyline(points, true);
             }
 
