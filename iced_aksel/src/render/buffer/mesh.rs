@@ -5,12 +5,14 @@ use iced_core::{Color, Point, Rectangle, Transformation};
 use iced_graphics::color::{Packed, pack};
 use iced_graphics::mesh::{Indexed, Mesh, Renderer, SolidVertex2D};
 use lyon_path::LineCap;
-use lyon_tessellation::{BuffersBuilder, StrokeOptions, StrokeTessellator, StrokeVertex};
+use lyon_tessellation::{
+    BuffersBuilder, FillOptions, FillTessellator, StrokeOptions, StrokeTessellator, StrokeVertex,
+};
 
 mod tessellation;
 
-use crate::geometry::tessellator::fast::FillMeshWriter;
-use crate::geometry::traits::{GeometricShape, GeometryWriter};
+use crate::geometry::tessellator::lyon::LyonMeshBuilder;
+use crate::geometry::tessellator::path::LyonAdapter;
 use crate::stroke::ResolvedStroke;
 use tessellation::{Tessellator, manual::linear};
 
@@ -56,6 +58,13 @@ impl MeshData {
             indices: Vec::with_capacity(PRE_ALLOC_INDICES),
         })
     }
+
+    /// Creates the builder that bridges Lyon's output to this mesh's storage.
+    pub fn adapter(&mut self, packed_color: Packed) -> LyonMeshBuilder<'_> {
+        let mesh = self.get_mesh_mut();
+
+        LyonMeshBuilder::new(&mut mesh.vertices, &mut mesh.indices, packed_color)
+    }
 }
 
 /// A simplified container for GPU vertex and index data.
@@ -70,6 +79,7 @@ pub struct MeshBatcher {
     pub(crate) tessellator: Tessellator,
 
     lyon_stroker: StrokeTessellator,
+    lyon_filler: FillTessellator,
 
     /// A soft limit for vertices per batch.
     /// If exceeded, the `Context` (in `plot.rs`) will trigger a flush.
@@ -87,6 +97,7 @@ impl MeshBatcher {
             },
             tessellator: Tessellator::new(),
             lyon_stroker: StrokeTessellator::new(),
+            lyon_filler: FillTessellator::new(),
             vertex_limit,
         }
     }
@@ -165,33 +176,66 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                // 1. Define the Shape
-                let rect_shape = geometry::Rectangle::new(xy1, xy2);
+                let buffer = primitive.build_geometry();
 
-                // 2. FILL (Fast Path)
+                // 2. FILL (Tessellate the buffer)
                 if let Some(color) = fill {
-                    // a. Create the writer (borrows mesh_data mutably)
-                    let mesh = self.data.get_mesh_mut();
-                    let start_index = mesh.indices.len() as u32;
+                    let packed = pack(color);
 
-                    let mut writer = FillMeshWriter {
-                        mesh,
-                        start_index,
-                        packed_color: pack(color),
-                    };
+                    let options = FillOptions::default();
 
-                    // b. Draw the shape into the mesh
-                    rect_shape.draw(&mut writer);
+                    // Stream the buffer directly into Lyon's Fill Tessellator
+                    let _ = self.lyon_filler.tessellate(
+                        buffer.lyon_iter(),
+                        &options,
+                        &mut self.data.adapter(packed),
+                    );
+                }
+
+                // 3. STROKE (Tessellate the buffer)
+                if let Some(s) = stroke {
+                    let packed = pack(s.fill);
+                    let options = StrokeOptions::default();
+
+                    // Stream the same buffer into Lyon's Stroke Tessellator
+                    let _ = self.lyon_stroker.tessellate(
+                        buffer.lyon_iter(),
+                        &options,
+                        &mut self.data.adapter(packed),
+                    );
                 }
             }
-            Primitive::Ellipse {
-                center,
-                radius,
-                fill,
-                stroke,
-            } => {
-                self.tessellator
-                    .draw_ellipse(&mut self.data, center, radius, fill, stroke);
+            Primitive::Ellipse { fill, stroke, .. } => {
+                // 1. Generate the Geometry (IR)
+                // This creates the GeometryBuffer with the 4 cubic bezier curves
+                let buffer = primitive.build_geometry();
+
+                // 2. FILL (Tessellate the buffer)
+                if let Some(color) = fill {
+                    let packed = pack(color);
+
+                    let options = FillOptions::default();
+
+                    // Stream the buffer directly into Lyon's Fill Tessellator
+                    let _ = self.lyon_filler.tessellate(
+                        buffer.lyon_iter(),
+                        &options,
+                        &mut self.data.adapter(packed),
+                    );
+                }
+
+                // 3. STROKE (Tessellate the buffer)
+                if let Some(s) = stroke {
+                    let packed = pack(s.fill);
+                    let options = StrokeOptions::default();
+
+                    // Stream the same buffer into Lyon's Stroke Tessellator
+                    let _ = self.lyon_stroker.tessellate(
+                        buffer.lyon_iter(),
+                        &options,
+                        &mut self.data.adapter(packed),
+                    );
+                }
             }
             Primitive::Triangle {
                 points,

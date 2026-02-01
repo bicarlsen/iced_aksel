@@ -1,3 +1,4 @@
+use crate::geometry::tessellator::path::GeometryBuffer;
 use crate::stroke::ResolvedStroke;
 use iced_core::{
     Color, Font, Pixels, Point, Radians, Rectangle, Size, Vector,
@@ -121,6 +122,143 @@ pub enum Primitive {
 }
 
 impl Primitive {
+    /// Generates the Intermediate Representation.
+    /// This logic is now backend-agnostic.
+    pub fn build_geometry(&self) -> GeometryBuffer {
+        let mut buffer = GeometryBuffer::new();
+
+        match self {
+            // --- 1. SIMPLE SHAPES ---
+            Primitive::Rectangle { xy1, xy2, .. } => {
+                // We define top-left width/height
+                use iced_core::{Rectangle, Size};
+                let rect = Rectangle::new(*xy1, Size::new(xy2.x - xy1.x, xy2.y - xy1.y));
+                buffer.rectangle(rect);
+            }
+
+            Primitive::Triangle { points, .. } => {
+                buffer.polyline(points, true); // True = closed
+            }
+
+            Primitive::Polygon {
+                center,
+                radius,
+                vertices,
+                rotation,
+                ..
+            } => {
+                buffer.polygon(*center, *radius, *vertices, *rotation);
+            }
+
+            // --- 2. COMPLEX LINES & CURVES ---
+            Primitive::Line {
+                start,
+                end,
+                extensions,
+                arrows,
+                ..
+            } => {
+                // 1. Calculate Direction & Length manually (Fixes .length() error)
+                let dir = Vector::new(end.x - start.x, end.y - start.y);
+                let len = (dir.x * dir.x + dir.y * dir.y).sqrt();
+
+                // Avoid division by zero
+                let unit = if len > 0.001 {
+                    Vector::new(dir.x / len, dir.y / len)
+                } else {
+                    Vector::new(1.0, 0.0)
+                };
+
+                // 2. Resolve Extension Lengths (Fixes bool multiplication error)
+                // Since extensions.start is bool, we define a fixed extension length (e.g. 10.0)
+                const EXT_LEN: f32 = 10.0;
+                let start_dist = if extensions.start { EXT_LEN } else { 0.0 };
+                let end_dist = if extensions.end { EXT_LEN } else { 0.0 };
+
+                // Apply extensions (Start moves backwards, End moves forwards)
+                let p_start = *start - unit * start_dist;
+                let p_end = *end + unit * end_dist;
+
+                buffer.move_to(p_start);
+                buffer.line_to(p_end);
+
+                // 3. Handle Arrows
+                // We use the same 'unit' vector to orient the arrow heads
+                if arrows.start {
+                    // Tip is at p_start, pointing OUT (so direction is -unit)
+                    draw_arrow_head(&mut buffer, p_start, unit * -1.0, 10.0);
+                }
+                if arrows.end {
+                    // Tip is at p_end, pointing OUT (so direction is unit)
+                    draw_arrow_head(&mut buffer, p_end, unit, 10.0);
+                }
+            }
+
+            Primitive::HorizontalLine {
+                y, x_start, x_end, ..
+            } => {
+                buffer.move_to(Point::new(*x_start, *y));
+                buffer.line_to(Point::new(*x_end, *y));
+            }
+
+            Primitive::VerticalLine {
+                x, y_start, y_end, ..
+            } => {
+                buffer.move_to(Point::new(*x, *y_start));
+                buffer.line_to(Point::new(*x, *y_end));
+            }
+
+            Primitive::PolyLine { points, .. } => {
+                buffer.polyline(points, false); // False = open
+            }
+
+            // --- 3. CURVES ---
+            Primitive::BezierCurve {
+                start,
+                end,
+                control_1,
+                control_2,
+                ..
+            } => {
+                buffer.move_to(*start);
+                match control_2 {
+                    Some(c2) => buffer.cubic_bezier_to(*control_1, *c2, *end),
+                    None => buffer.quadratic_bezier_to(*control_1, *end),
+                }
+            }
+
+            Primitive::Spline {
+                points, tension, ..
+            } => {
+                buffer.catmull_rom_spline(points, *tension);
+            }
+
+            Primitive::Arc {
+                center,
+                radius_outer,
+                start_angle,
+                end_angle,
+                ..
+            } => {
+                // Note: radius_outer is usually the one drawn for strokes
+                buffer.arc(*center, *radius_outer, *start_angle, *end_angle);
+            }
+
+            Primitive::Ellipse { center, radius, .. } => {
+                buffer.ellipse(*center, radius.x, radius.y);
+            }
+
+            Primitive::Area { points, .. } => {
+                // Area is implicitly closed
+                buffer.polyline(points, true);
+            }
+
+            _ => {}
+        }
+
+        buffer
+    }
+
     /// Draws the geometry of this primitive into the provided Iced Path Builder.
     pub fn draw_geometry(&self, builder: &mut iced_graphics::geometry::path::Builder) {
         match self {
@@ -632,4 +770,21 @@ fn add_arc_using_beziers(
         }
         builder.bezier_curve_to(c1, c2, p3);
     }
+}
+
+/// Helper to draw a simple arrow head at a point
+fn draw_arrow_head(buffer: &mut GeometryBuffer, tip: Point, direction: Vector, size: f32) {
+    // Calculate normal vector (rotated 90 deg)
+    let normal = Vector::new(-direction.y, direction.x);
+
+    // Base of arrow
+    let base = tip - direction * size;
+    let left = base + normal * (size * 0.5);
+    let right = base - normal * (size * 0.5);
+
+    // Draw triangle
+    buffer.move_to(tip);
+    buffer.line_to(left);
+    buffer.line_to(right);
+    buffer.close(); // Back to tip
 }

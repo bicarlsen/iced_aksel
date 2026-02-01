@@ -2,12 +2,9 @@ use super::Primitive;
 
 use crate::stroke::{ResolvedStroke, StrokeStyle};
 use iced_core::alignment::{Horizontal, Vertical};
-use iced_core::text::{LineHeight, Shaping};
-use iced_core::{Point, Rectangle, Size, Vector};
-use iced_graphics::geometry::path::Builder;
-use iced_graphics::geometry::{
-    Cache, Frame, LineCap, LineDash, LineJoin, Path, Stroke, Style, Text,
-};
+use iced_core::text::Shaping;
+use iced_core::{Point, Rectangle, Vector};
+use iced_graphics::geometry::{Cache, Frame, LineCap, LineDash, LineJoin, Path, Style, Text};
 
 const PRE_ALLOC_PATHS: usize = 5000;
 
@@ -196,7 +193,7 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
 
         // A. Extract Styles
         let (fill, stroke) = match &primitive {
-            // Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
+            Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Triangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Ellipse { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Polygon { fill, stroke, .. } => (*fill, stroke.as_ref()),
@@ -212,19 +209,22 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
             _ => (None, None),
         };
 
-        // B. Build Geometry (Using the method on Primitive we added)
-        let path = Path::new(|b| primitive.draw_geometry(b));
+        // 2. Build the Intermediate Representation
+        // This runs the shared math (Bezier approx, etc.)
+        let buffer = primitive.build_geometry();
 
-        // C. Render Fill
+        // 3. Convert IR to Iced Path
+        // We assume 'buffer.populate_iced' exists as defined in previous step
+        let path = Path::new(|b| buffer.populate_iced(b));
+
+        // 4. Draw
         if let Some(color) = fill {
             frame.fill(&path, color);
         }
 
-        // D. Render Stroke (Using our helper)
         if let Some(s) = stroke {
-            let mut dashed_storage = [0.0; 2];
-            let iced_stroke = create_iced_stroke(s, &mut dashed_storage);
-            frame.stroke(&path, iced_stroke);
+            let mut storage = [0.0; 2];
+            frame.stroke(&path, create_iced_stroke(s, &mut storage));
         }
     }
 }

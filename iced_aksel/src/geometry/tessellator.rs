@@ -1,4 +1,2 @@
-// pub mod dash;
-pub mod fast;
-// pub mod lyon;
-// mod path;
+pub(crate) mod lyon;
+pub mod path;
