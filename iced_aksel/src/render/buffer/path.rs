@@ -142,72 +142,8 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
             return;
         }
 
-        // -------------------------------------------------------------------------
-        // 2. The Shape Pipeline (Rect, Triangle, Ellipse)
-        // -------------------------------------------------------------------------
-        // Since we returned above, 'primitive' here is guaranteed to be a Shape.
-
-        match &primitive {
-            Primitive::Rectangle {
-                xy1,
-                xy2,
-                fill,
-                stroke,
-            } => {
-                // // 1. Setup Data (Shared Math)
-                // // This guarantees the same 4 corner points as the WebGPU backend.
-                // let rect_shape = RectangleGeometry::new(*xy1, *xy2);
-                //
-                // frame.with_save(|frame| {
-                //     // 2. Initialize the native Iced Path Builder
-                //     let mut builder = Builder::new();
-                //
-                //     // 3. Create the Adapter (The "Sink")
-                //     // This makes the Iced Builder look like a GeometrySink.
-                //     let mut sink = IcedGeometryBuilder::new(&mut builder);
-                //
-                //     // 4. Stream Geometry
-                //     // The shape calls move_to/line_to on the sink, which forwards to the builder.
-                //     rect_shape.draw(&mut sink);
-                //
-                //     // 5. Finalize Path
-                //     let path = builder.build();
-                //
-                //     // 6. Draw (Fill and/or Stroke)
-                //     if let Some(color) = fill {
-                //         frame.fill(&path, *color);
-                //     }
-                //
-                //     if let Some(stroke_style) = stroke {
-                //         // Assuming you have a helper to convert your Stroke to Iced's Stroke
-                //         // TODO: Fix this
-                //         let stroke = Stroke::default()
-                //             .with_color(stroke_style.fill)
-                //             .with_width(stroke_style.thickness);
-                //         frame.stroke(&path, stroke);
-                //     }
-                // });
-            }
-            _ => {}
-        }
-
         // A. Extract Styles
-        let (fill, stroke) = match &primitive {
-            Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Triangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Ellipse { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Polygon { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Line { stroke, .. } => (None, Some(stroke)),
-            Primitive::HorizontalLine { stroke, .. } => (None, Some(stroke)),
-            Primitive::VerticalLine { stroke, .. } => (None, Some(stroke)),
-            Primitive::PolyLine { stroke, .. } => (None, Some(stroke)),
-            Primitive::BezierCurve { stroke, .. } => (None, Some(stroke)),
-            Primitive::Area { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Arc { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Spline { stroke, .. } => (None, Some(stroke)),
-            // If we missed a case, we draw nothing
-            _ => (None, None),
-        };
+        let (fill, stroke) = primitive.resolve_stroke();
 
         // 2. Build the Intermediate Representation
         // This runs the shared math (Bezier approx, etc.)
@@ -224,7 +160,7 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
 
         if let Some(s) = stroke {
             let mut storage = [0.0; 2];
-            frame.stroke(&path, create_iced_stroke(s, &mut storage));
+            frame.stroke(&path, create_iced_stroke(&s, &mut storage));
         }
     }
 }

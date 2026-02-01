@@ -122,6 +122,24 @@ pub enum Primitive {
 }
 
 impl Primitive {
+    pub fn resolve_stroke(&self) -> (Option<Color>, Option<ResolvedStroke>) {
+        match self {
+            Primitive::Rectangle { fill, stroke, .. } => (*fill, *stroke),
+            Primitive::Triangle { fill, stroke, .. } => (*fill, *stroke),
+            Primitive::Ellipse { fill, stroke, .. } => (*fill, *stroke),
+            Primitive::Polygon { fill, stroke, .. } => (*fill, *stroke),
+            Primitive::Line { stroke, .. } => (None, Some(*stroke)),
+            Primitive::HorizontalLine { stroke, .. } => (None, Some(*stroke)),
+            Primitive::VerticalLine { stroke, .. } => (None, Some(*stroke)),
+            Primitive::PolyLine { stroke, .. } => (None, Some(*stroke)),
+            Primitive::BezierCurve { stroke, .. } => (None, Some(*stroke)),
+            Primitive::Area { fill, stroke, .. } => (*fill, *stroke),
+            Primitive::Arc { fill, stroke, .. } => (*fill, *stroke),
+            Primitive::Spline { stroke, .. } => (None, Some(*stroke)),
+            // If we missed a case, we draw nothing
+            _ => (None, None),
+        }
+    }
     pub fn build_geometry(&self) -> GeometryBuffer {
         let mut buffer = GeometryBuffer::new();
 
@@ -242,12 +260,11 @@ impl Primitive {
                 ..
             } => {
                 buffer.arc(*center, *radius_outer, *start_angle, *end_angle);
-                buffer.stop(); // Ensure closed
+                buffer.stop();
             }
 
             Primitive::Ellipse { center, radius, .. } => {
                 buffer.ellipse(*center, radius.x, radius.y);
-                // Ellipse calls buffer.close(), so we don't need stop().
             }
 
             Primitive::Area { points, .. } => {

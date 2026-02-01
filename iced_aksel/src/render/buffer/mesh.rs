@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use iced_core::{Color, Point, Rectangle, Transformation};
 use iced_graphics::color::{Packed, pack};
 use iced_graphics::mesh::{Indexed, Mesh, Renderer, SolidVertex2D};
-use lyon_path::LineCap;
+use lyon_path::{LineCap, LineJoin};
 use lyon_tessellation::{
     BuffersBuilder, FillOptions, FillTessellator, StrokeOptions, StrokeTessellator, StrokeVertex,
 };
@@ -170,22 +170,7 @@ impl MeshBatcher {
     /// Renders a primitive into this mesh buffer using the tessellator.
     pub fn add_primitive(&mut self, primitive: Primitive) {
         // A. Extract Styles
-        let (fill, stroke) = match &primitive {
-            Primitive::Rectangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Triangle { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Ellipse { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Polygon { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Line { stroke, .. } => (None, Some(stroke)),
-            Primitive::HorizontalLine { stroke, .. } => (None, Some(stroke)),
-            Primitive::VerticalLine { stroke, .. } => (None, Some(stroke)),
-            Primitive::PolyLine { stroke, .. } => (None, Some(stroke)),
-            Primitive::BezierCurve { stroke, .. } => (None, Some(stroke)),
-            Primitive::Area { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Arc { fill, stroke, .. } => (*fill, stroke.as_ref()),
-            Primitive::Spline { stroke, .. } => (None, Some(stroke)),
-            // If we missed a case, we draw nothing
-            _ => (None, None),
-        };
+        let (fill, stroke) = primitive.resolve_stroke();
 
         // 1. Generate the Geometry (IR)
         // This creates the GeometryBuffer with the 4 cubic bezier curves
@@ -194,13 +179,12 @@ impl MeshBatcher {
         // 2. FILL (Tessellate the buffer)
         if let Some(color) = fill {
             let packed = pack(color);
-
-            let options = FillOptions::default();
+            let fill_options = FillOptions::default().with_tolerance(0.1);
 
             // Stream the buffer directly into Lyon's Fill Tessellator
             let _ = self.lyon_filler.tessellate(
                 buffer.lyon_iter(),
-                &options,
+                &fill_options,
                 &mut self.data.adapter(packed),
             );
         }
@@ -208,301 +192,68 @@ impl MeshBatcher {
         // 3. STROKE (Tessellate the buffer)
         if let Some(s) = stroke {
             let packed = pack(s.fill);
-            let options = StrokeOptions::default();
 
             // Stream the same buffer into Lyon's Stroke Tessellator
             let _ = self.lyon_stroker.tessellate(
                 buffer.lyon_iter(),
-                &options,
+                &convert_options(&s),
                 &mut self.data.adapter(packed),
             );
         }
-        //
-        // match primitive {
-        //     Primitive::Rectangle {
-        //         xy1,
-        //         xy2,
-        //         fill,
-        //         stroke,
-        //     } => {
-        //         let buffer = primitive.build_geometry();
-        //
-        //         // 2. FILL (Tessellate the buffer)
-        //         if let Some(color) = fill {
-        //             let packed = pack(color);
-        //
-        //             let options = FillOptions::default();
-        //
-        //             // Stream the buffer directly into Lyon's Fill Tessellator
-        //             let _ = self.lyon_filler.tessellate(
-        //                 buffer.lyon_iter(),
-        //                 &options,
-        //                 &mut self.data.adapter(packed),
-        //             );
-        //         }
-        //
-        //         // 3. STROKE (Tessellate the buffer)
-        //         if let Some(s) = stroke {
-        //             let packed = pack(s.fill);
-        //             let options = StrokeOptions::default();
-        //
-        //             // Stream the same buffer into Lyon's Stroke Tessellator
-        //             let _ = self.lyon_stroker.tessellate(
-        //                 buffer.lyon_iter(),
-        //                 &options,
-        //                 &mut self.data.adapter(packed),
-        //             );
-        //         }
-        //     }
-        //     Primitive::Ellipse { fill, stroke, .. } => {
-        //         // 1. Generate the Geometry (IR)
-        //         // This creates the GeometryBuffer with the 4 cubic bezier curves
-        //         let buffer = primitive.build_geometry();
-        //
-        //         // 2. FILL (Tessellate the buffer)
-        //         if let Some(color) = fill {
-        //             let packed = pack(color);
-        //
-        //             let options = FillOptions::default();
-        //
-        //             // Stream the buffer directly into Lyon's Fill Tessellator
-        //             let _ = self.lyon_filler.tessellate(
-        //                 buffer.lyon_iter(),
-        //                 &options,
-        //                 &mut self.data.adapter(packed),
-        //             );
-        //         }
-        //
-        //         // 3. STROKE (Tessellate the buffer)
-        //         if let Some(s) = stroke {
-        //             let packed = pack(s.fill);
-        //             let options = StrokeOptions::default();
-        //
-        //             // Stream the same buffer into Lyon's Stroke Tessellator
-        //             let _ = self.lyon_stroker.tessellate(
-        //                 buffer.lyon_iter(),
-        //                 &options,
-        //                 &mut self.data.adapter(packed),
-        //             );
-        //         }
-        //     }
-        //     Primitive::Triangle {
-        //         points,
-        //         fill,
-        //         stroke,
-        //     } => {
-        //         self.tessellator.draw_triangle(
-        //             &mut self.data,
-        //             points[0],
-        //             points[1],
-        //             points[2],
-        //             fill,
-        //             stroke,
-        //         );
-        //     }
-        //     Primitive::Polygon {
-        //         center,
-        //         radius,
-        //         vertices,
-        //         rotation,
-        //         fill,
-        //         stroke,
-        //     } => {
-        //         self.tessellator.draw_polygon(
-        //             &mut self.data,
-        //             center,
-        //             radius,
-        //             vertices,
-        //             rotation,
-        //             fill,
-        //             stroke,
-        //         );
-        //     }
-        //     Primitive::Line {
-        //         start,
-        //         end,
-        //         stroke,
-        //         clip_bounds,
-        //         extensions,
-        //         arrows,
-        //     } => {
-        //         self.tessellator.draw_line(
-        //             &mut self.data,
-        //             start,
-        //             end,
-        //             stroke,
-        //             clip_bounds,
-        //             extensions,
-        //             arrows,
-        //         );
-        //     }
-        //     Primitive::HorizontalLine {
-        //         y,
-        //         x_start,
-        //         x_end,
-        //         stroke,
-        //         snap,
-        //     } => match stroke.style {
-        //         StrokeStyle::Solid => {
-        //             linear::draw_horizontal_line(
-        //                 &mut self.data,
-        //                 x_start,
-        //                 x_end,
-        //                 y,
-        //                 stroke.thickness,
-        //                 stroke.fill,
-        //                 snap,
-        //             );
-        //         }
-        //         StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
-        //             &mut self.data,
-        //             x_start,
-        //             x_end,
-        //             y,
-        //             stroke.thickness,
-        //             stroke.fill,
-        //             dash,
-        //             gap,
-        //             snap,
-        //         ),
-        //         StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
-        //     },
-        //     Primitive::VerticalLine {
-        //         x,
-        //         y_start,
-        //         y_end,
-        //         stroke,
-        //         snap,
-        //     } => match stroke.style {
-        //         StrokeStyle::Solid => {
-        //             linear::draw_vertical_line(
-        //                 &mut self.data,
-        //                 x,
-        //                 y_start,
-        //                 y_end,
-        //                 stroke.thickness,
-        //                 stroke.fill,
-        //                 snap,
-        //             );
-        //         }
-        //         StrokeStyle::Dashed { dash, gap } => linear::draw_vertical_dashed_line(
-        //             &mut self.data,
-        //             x,
-        //             y_start,
-        //             y_end,
-        //             stroke.thickness,
-        //             stroke.fill,
-        //             dash,
-        //             gap,
-        //             snap,
-        //         ),
-        //         StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
-        //     },
-        //     Primitive::PolyLine {
-        //         points,
-        //         stroke,
-        //         clip_bounds,
-        //         extensions,
-        //         arrows,
-        //     } => {
-        //         self.tessellator.draw_polyline(
-        //             &mut self.data,
-        //             points,
-        //             stroke,
-        //             clip_bounds,
-        //             extensions,
-        //             arrows,
-        //         );
-        //     }
-        //     Primitive::BezierCurve {
-        //         start,
-        //         end,
-        //         control_1,
-        //         control_2,
-        //         stroke,
-        //     } => {
-        //         self.tessellator.draw_bezier(
-        //             &mut self.data,
-        //             start,
-        //             control_1,
-        //             control_2,
-        //             end,
-        //             stroke,
-        //         );
-        //     }
-        //     Primitive::Spline {
-        //         points,
-        //         stroke,
-        //         tension,
-        //     } => {
-        //         self.tessellator
-        //             .draw_spline(&mut self.data, points, stroke, tension);
-        //     }
-        //     Primitive::Arc {
-        //         center,
-        //         radius_inner,
-        //         radius_outer,
-        //         start_angle,
-        //         end_angle,
-        //         fill,
-        //         stroke,
-        //     } => {
-        //         self.tessellator.draw_arc(
-        //             &mut self.data,
-        //             center.x,
-        //             center.y,
-        //             radius_inner,
-        //             radius_outer,
-        //             start_angle,
-        //             end_angle,
-        //             fill,
-        //             stroke,
-        //         );
-        //     }
-        //     Primitive::Area {
-        //         points,
-        //         fill,
-        //         stroke,
-        //     } => {
-        //         self.tessellator
-        //             .draw_area(&mut self.data, &points, fill, stroke);
-        //     }
-        //     Primitive::Text {
-        //         font,
-        //         content,
-        //         position,
-        //         size,
-        //         rotation,
-        //         horizontal_alignment,
-        //         vertical_alignment,
-        //         fill,
-        //         quality,
-        //         line_height,
-        //         bounds,
-        //         wrapping,
-        //     } => {
-        //         let tolerance = quality
-        //             .map(|q| q.max(0.001))
-        //             .unwrap_or_else(|| self.tessellator.text_tolerance());
-        //
-        //         self.tessellator.draw_text(
-        //             &mut self.data,
-        //             crate::render::text::Text {
-        //                 font,
-        //                 content,
-        //                 position,
-        //                 size,
-        //                 rotation,
-        //                 horizontal_alignment,
-        //                 vertical_alignment,
-        //                 fill,
-        //                 tolerance,
-        //                 line_height: line_height.to_absolute(size),
-        //                 bounds,
-        //                 wrapping,
-        //             },
-        //         );
-        //     }
-        // }
     }
+}
+
+/// Converts your high-level stroke style into Lyon's low-level options.
+fn convert_options(stroke: &ResolvedStroke) -> StrokeOptions {
+    let mut options = StrokeOptions::default()
+        .with_line_width(stroke.thickness)
+        .with_tolerance(0.1); // High quality curves
+
+    match stroke.style {
+        // 1. SOLID
+        StrokeStyle::Solid => {
+            options = options
+                .with_line_cap(LineCap::Butt)
+                .with_line_join(LineJoin::Miter);
+        }
+
+        // 2. DASHED
+        StrokeStyle::Dashed { dash, gap } => {
+            // Lyon expects a list of segment lengths.
+            // We use your relative units multiplied by thickness (standard convention)
+            // or absolute if your units are already absolute.
+            // Assuming 'dash' and 'gap' are multipliers of thickness (like SVG):
+            // If they are absolute pixels, remove the `* stroke.thickness`.
+
+            // Let's assume they are multipliers based on your previous code context:
+            // dash: 5.0 means "5 times the line width"
+            // If they are raw pixels, remove the multiplication.
+
+            // NOTE: Lyon's builder pattern for dashes is separate from StrokeOptions
+            // in some versions, but StrokeOptions itself doesn't hold the dash pattern directly
+            // in newer Lyon versions. It usually requires a Source Wrapper (like DashPath).
+
+            // HOWEVER, standard StrokeOptions doesn't have "with_dash_pattern".
+            // If you are using standard lyon_tessellation::StrokeOptions,
+            // you only configure Cap/Join/Width.
+
+            // To support dashes in Lyon, we actually need to wrap the ITERATOR,
+            // not just the options.
+
+            // For now, let's set the CAPS correctly.
+            options = options
+                .with_line_cap(LineCap::Butt)
+                .with_line_join(LineJoin::Miter);
+        }
+
+        // 3. DOTTED
+        StrokeStyle::Dotted { .. } => {
+            // Dots are just zero-length dashes with Round caps.
+            options = options
+                .with_line_cap(LineCap::Round)
+                .with_line_join(LineJoin::Round);
+        }
+    };
+
+    options
 }
