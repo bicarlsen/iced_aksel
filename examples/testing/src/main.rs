@@ -237,7 +237,7 @@ type Variants = [(&'static str, StrokeStyle, f64); 3];
 impl ShapeGallery {
     fn draw_rectangles(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(2.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // 1. Simple Stroke
             plot.add_shape(
@@ -277,7 +277,7 @@ impl ShapeGallery {
 
     fn draw_ellipses(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(2.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // 1. Circle
             plot.add_shape(
@@ -311,7 +311,7 @@ impl ShapeGallery {
 
     fn draw_triangles(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(2.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // 1. Vertex Triangle
             plot.add_shape(
@@ -338,7 +338,7 @@ impl ShapeGallery {
 
     fn draw_polygons(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(2.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // Hexagon
             plot.add_shape(
@@ -361,7 +361,7 @@ impl ShapeGallery {
 
     fn draw_lines(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(3.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // 1. Basic Line
             plot.add_shape(Line::new(
@@ -394,7 +394,7 @@ impl ShapeGallery {
 
     fn draw_polylines(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(3.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             let points = vec![
                 PlotPoint::new(10.0, *y_base - 5.0),
@@ -410,7 +410,7 @@ impl ShapeGallery {
 
     fn draw_splines(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(3.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             let points = vec![
                 PlotPoint::new(10.0, *y_base),
@@ -427,7 +427,7 @@ impl ShapeGallery {
 
     fn draw_beziers(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(3.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // 1. Quadratic
             plot.add_shape(Bezier::quadratic(
@@ -450,7 +450,7 @@ impl ShapeGallery {
 
     fn draw_arcs(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(3.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // 1. Pie Slice Outline
             plot.add_shape(
@@ -483,7 +483,7 @@ impl ShapeGallery {
 
     fn draw_areas(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(3.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // Area with stroke outline
             let points = vec![
@@ -503,7 +503,7 @@ impl ShapeGallery {
 
     fn draw_labels(&self, plot: &mut Plot<f64>, variants: &Variants) {
         for (_, style, y_base) in variants {
-            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(2.0), *style);
+            let stroke = Stroke::with_style(Color::WHITE, Measure::Screen(1.0), *style);
 
             // 1. Label inside a box
             // Note: Labels themselves don't stroke the font glyphs in this engine,

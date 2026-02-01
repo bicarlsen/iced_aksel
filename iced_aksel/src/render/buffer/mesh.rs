@@ -4,6 +4,8 @@ use std::borrow::Cow;
 use iced_core::{Color, Point, Rectangle, Transformation};
 use iced_graphics::color::{Packed, pack};
 use iced_graphics::mesh::{Indexed, Mesh, Renderer, SolidVertex2D};
+use lyon::lyon_algorithms;
+use lyon_path::iterator::Flattened;
 use lyon_path::{LineCap, LineJoin};
 use lyon_tessellation::{
     BuffersBuilder, FillOptions, FillTessellator, StrokeOptions, StrokeTessellator, StrokeVertex,
@@ -12,7 +14,7 @@ use lyon_tessellation::{
 mod tessellation;
 
 use crate::geometry::tessellator::lyon::LyonMeshBuilder;
-use crate::geometry::tessellator::path::LyonAdapter;
+use crate::geometry::tessellator::lyon::dash::DashingIterator;
 use crate::stroke::ResolvedStroke;
 use tessellation::{Tessellator, manual::linear};
 
@@ -169,36 +171,75 @@ impl MeshBatcher {
 
     /// Renders a primitive into this mesh buffer using the tessellator.
     pub fn add_primitive(&mut self, primitive: Primitive) {
-        // A. Extract Styles
-        let (fill, stroke) = primitive.resolve_stroke();
-
-        // 1. Generate the Geometry (IR)
-        // This creates the GeometryBuffer with the 4 cubic bezier curves
+        let (fill, stroke) = primitive.resolve_stroke(); // Assuming you have this helper
         let buffer = primitive.build_geometry();
-
-        // 2. FILL (Tessellate the buffer)
+        // 1. FILL (Unchanged)
         if let Some(color) = fill {
             let packed = pack(color);
-            let fill_options = FillOptions::default().with_tolerance(0.1);
-
-            // Stream the buffer directly into Lyon's Fill Tessellator
             let _ = self.lyon_filler.tessellate(
                 buffer.lyon_iter(),
-                &fill_options,
+                &FillOptions::default().with_tolerance(0.1),
                 &mut self.data.adapter(packed),
             );
         }
 
-        // 3. STROKE (Tessellate the buffer)
+        // 2. STROKE
         if let Some(s) = stroke {
             let packed = pack(s.fill);
 
-            // Stream the same buffer into Lyon's Stroke Tessellator
-            let _ = self.lyon_stroker.tessellate(
-                buffer.lyon_iter(),
-                &convert_options(&s),
-                &mut self.data.adapter(packed),
-            );
+            // Standard Options
+            let mut options = StrokeOptions::default()
+                .with_line_width(s.thickness)
+                .with_tolerance(0.1);
+
+            let source = buffer.lyon_iter();
+
+            match s.style {
+                // --- SOLID (Fast Path) ---
+                StrokeStyle::Solid => {
+                    options = options.with_line_cap(LineCap::Butt);
+                    let _ = self.lyon_stroker.tessellate(
+                        source,
+                        &options,
+                        &mut self.data.adapter(packed),
+                    );
+                }
+
+                // --- DASHED ---
+                StrokeStyle::Dashed { dash, gap } => {
+                    options = options.with_line_cap(LineCap::Butt);
+                    let d = dash * s.thickness;
+                    let g = gap * s.thickness;
+
+                    // 1. Flatten
+                    let flattened = Flattened::new(0.1, source);
+                    // 2. Dash (Safe State Machine)
+                    let dashed = DashingIterator::new(flattened, vec![d, g]);
+
+                    let _ = self.lyon_stroker.tessellate(
+                        dashed,
+                        &options,
+                        &mut self.data.adapter(packed),
+                    );
+                }
+
+                // --- DOTTED ---
+                StrokeStyle::Dotted { gap } => {
+                    options = options.with_line_cap(LineCap::Round);
+                    let g = gap * s.thickness;
+
+                    // Dot = very small line (0.1) with Round Cap
+                    // We use 0.1 instead of 0.0 because custom iterators sometimes glitch on 0-length
+                    let flattened = Flattened::new(0.1, source);
+                    let dotted = DashingIterator::new(flattened, vec![0.1, g]);
+
+                    let _ = self.lyon_stroker.tessellate(
+                        dotted,
+                        &options,
+                        &mut self.data.adapter(packed),
+                    );
+                }
+            }
         }
     }
 }

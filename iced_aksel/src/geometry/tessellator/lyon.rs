@@ -1,3 +1,5 @@
+pub mod dash;
+
 use iced_graphics::color::Packed;
 use iced_graphics::mesh::SolidVertex2D;
 use lyon_tessellation::{

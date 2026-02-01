@@ -1,2 +1,2 @@
-pub(crate) mod lyon;
+pub mod lyon;
 pub mod path;
