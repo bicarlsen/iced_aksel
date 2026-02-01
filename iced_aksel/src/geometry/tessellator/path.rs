@@ -21,7 +21,6 @@ pub enum PathCommand {
 #[derive(Clone, Debug, Default)]
 pub struct GeometryBuffer {
     commands: Vec<PathCommand>,
-    // Optional: cache bounds or convexity here if needed for optimization
 }
 
 impl GeometryBuffer {
