@@ -1,36 +1,30 @@
-use super::{DrawGeometry, GeometryWriter};
+use crate::geometry::traits::{GeometricShape, GeometryWriter};
 use iced_core::Point;
 
-/// A rectangle defined by two opposite corners.
-pub struct RectangleGeometry {
-    top_left: Point,
-    bottom_right: Point,
+pub struct Rectangle {
+    pub xy1: Point,
+    pub xy2: Point,
 }
 
-impl RectangleGeometry {
-    /// Creates a new rectangle geometry from any two corners.
-    /// Automatically sorts them to ensure Top-Left / Bottom-Right order.
-    pub fn new(p1: Point, p2: Point) -> Self {
-        Self {
-            top_left: Point::new(p1.x.min(p2.x), p1.y.min(p2.y)),
-            bottom_right: Point::new(p1.x.max(p2.x), p1.y.max(p2.y)),
-        }
+impl Rectangle {
+    pub fn new(xy1: Point, xy2: Point) -> Self {
+        Self { xy1, xy2 }
     }
 }
 
-impl DrawGeometry for RectangleGeometry {
+impl GeometricShape for Rectangle {
     fn draw<W: GeometryWriter>(&self, writer: &mut W) {
-        let x0 = self.top_left.x;
-        let y0 = self.top_left.y;
-        let x1 = self.bottom_right.x;
-        let y1 = self.bottom_right.y;
+        // 1. Sort coordinates to find the 4 corners
+        let left = self.xy1.x.min(self.xy2.x);
+        let right = self.xy1.x.max(self.xy2.x);
+        let top = self.xy1.y.min(self.xy2.y);
+        let bottom = self.xy1.y.max(self.xy2.y);
 
-        // Winding Order: Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left
-        // This specific order works perfectly for both "Fan" triangulation and Path stroking.
-        writer.move_to(Point::new(x0, y0));
-        writer.line_to(Point::new(x1, y0));
-        writer.line_to(Point::new(x1, y1));
-        writer.line_to(Point::new(x0, y1));
+        // 2. Stream the path (Top-Left -> Top-Right -> Bottom-Right -> Bottom-Left)
+        writer.move_to(Point::new(left, top)); // P0 (Pivot)
+        writer.line_to(Point::new(right, top)); // P1
+        writer.line_to(Point::new(right, bottom)); // P2 (Forms Triangle 1: P0-P1-P2)
+        writer.line_to(Point::new(left, bottom)); // P3 (Forms Triangle 2: P0-P2-P3)
         writer.close();
     }
 }

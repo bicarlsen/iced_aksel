@@ -1,6 +1,5 @@
 use super::Primitive;
 
-use crate::geometry::{DrawGeometry, GeometryWriter, RectangleGeometry};
 use crate::stroke::{ResolvedStroke, StrokeStyle};
 use iced_core::alignment::{Horizontal, Vertical};
 use iced_core::text::{LineHeight, Shaping};
@@ -11,27 +10,6 @@ use iced_graphics::geometry::{
 };
 
 const PRE_ALLOC_PATHS: usize = 5000;
-
-/// Wraps the Iced Path Builder to act as a GeometryWriter.
-struct PathBuilderWriter<'a> {
-    builder: &'a mut Builder,
-}
-
-impl<'a> GeometryWriter for PathBuilderWriter<'a> {
-    fn move_to(&mut self, p: Point) {
-        self.builder.move_to(p);
-    }
-
-    fn line_to(&mut self, p: Point) {
-        self.builder.line_to(p);
-    }
-
-    fn close(&mut self) {
-        // Tiny-Skia needs explicit close to create a proper Line Join
-        // (sharp corner) at the end of the shape.
-        self.builder.close();
-    }
-}
 
 pub struct PathBatcher<Renderer: crate::Renderer> {
     buffer: Vec<Primitive>,
@@ -177,31 +155,41 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
                 xy1,
                 xy2,
                 fill,
-                stroke: resolved_stroke,
-                ..
+                stroke,
             } => {
-                frame.with_save(|frame| {
-                    let mut builder = Builder::new();
-
-                    // 1. Create Shape Logic
-                    let rect_shape = RectangleGeometry::new(*xy1, *xy2);
-
-                    // 2. Create Writer
-                    let mut writer = PathBuilderWriter {
-                        builder: &mut builder,
-                    };
-
-                    // 3. Draw
-                    rect_shape.draw(&mut writer);
-
-                    // 4. Close and Fill
-                    builder.close(); // Tiny-Skia needs explicit close for the path
-                    let path = builder.build();
-
-                    if let Some(color) = fill {
-                        frame.fill(&path, *color);
-                    }
-                });
+                // // 1. Setup Data (Shared Math)
+                // // This guarantees the same 4 corner points as the WebGPU backend.
+                // let rect_shape = RectangleGeometry::new(*xy1, *xy2);
+                //
+                // frame.with_save(|frame| {
+                //     // 2. Initialize the native Iced Path Builder
+                //     let mut builder = Builder::new();
+                //
+                //     // 3. Create the Adapter (The "Sink")
+                //     // This makes the Iced Builder look like a GeometrySink.
+                //     let mut sink = IcedGeometryBuilder::new(&mut builder);
+                //
+                //     // 4. Stream Geometry
+                //     // The shape calls move_to/line_to on the sink, which forwards to the builder.
+                //     rect_shape.draw(&mut sink);
+                //
+                //     // 5. Finalize Path
+                //     let path = builder.build();
+                //
+                //     // 6. Draw (Fill and/or Stroke)
+                //     if let Some(color) = fill {
+                //         frame.fill(&path, *color);
+                //     }
+                //
+                //     if let Some(stroke_style) = stroke {
+                //         // Assuming you have a helper to convert your Stroke to Iced's Stroke
+                //         // TODO: Fix this
+                //         let stroke = Stroke::default()
+                //             .with_color(stroke_style.fill)
+                //             .with_width(stroke_style.thickness);
+                //         frame.stroke(&path, stroke);
+                //     }
+                // });
             }
             _ => {}
         }
