@@ -24,6 +24,7 @@ lyon_path.workspace = true
 lyon.workspace = true
 earcutr.workspace = true
 lru.workspace = true
+swash.workspace = true
 
 [dev-dependencies]
 rand.workspace = true

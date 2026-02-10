@@ -12,6 +12,7 @@ fn main() -> iced::Result {
     iced::application(TextCanvas::new, TextCanvas::update, TextCanvas::view)
         .title("Text rendering")
         .theme(TextCanvas::theme)
+        .antialiasing(true)
         .run()
 }
 

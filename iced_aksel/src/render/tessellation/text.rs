@@ -40,6 +40,11 @@ use lyon::tessellation::{
 };
 use lyon_path::FillRule;
 use std::num::NonZeroUsize;
+use swash::{
+    FontRef as SwashFontRef,
+    scale::ScaleContext,
+    zeno::{Command as PathCommand, PathData},
+};
 
 // -----------------------------------------------------------------------------
 // Configuration & Types
@@ -50,6 +55,10 @@ use std::num::NonZeroUsize;
 /// 2000 glyphs is roughly enough for ~20-30 completely different alphabets
 /// or font sizes active simultaneously.
 const CACHE_CAPACITY: usize = 2000;
+
+/// Text sizes at or below this threshold will use hinted outlines for better
+/// rendering quality on pixel grids.
+const SMALL_TEXT_THRESHOLD_PX: f32 = 16.0;
 
 /// The rendering quality of the vector text.
 ///
@@ -116,6 +125,9 @@ pub struct CacheKey {
     pub glyph_id: u16,
     pub size_bucket: u16,
     pub tolerance_bucket: u16,
+    pub hinted: bool,
+    /// Oversampling factor (1, 2, or 4) - higher values mean more geometric detail
+    pub oversample_factor: u8,
 }
 
 /// A safe wrapper around the glyph cache to enforce correct keying and memory limits.
@@ -177,13 +189,15 @@ pub struct TextRenderContext<'a> {
     pub scratch_geometry: &'a mut VertexBuffers<Point, u16>,
     /// A global multiplier for quality (e.g. from the Chart widget).
     pub quality_multiplier: f32,
+    /// Swash scaling context for hinted outline generation.
+    pub swash_scale_context: &'a mut ScaleContext,
 }
 
 // -----------------------------------------------------------------------------
 // Helpers & Adapters
 // -----------------------------------------------------------------------------
 
-// Adapter to bridge ttf-parser commands (MoveTo, LineTo) to lyon commands.
+// Adapter to bridge skrifa commands (MoveTo, LineTo) to lyon commands.
 struct LyonPathBuilder<'a>(pub &'a mut dyn PathBuilder);
 
 impl<'a> OutlinePen for LyonPathBuilder<'a> {
@@ -231,8 +245,14 @@ fn snap_to_bucket(raw_tolerance: f32) -> f32 {
         0.2 // High Detail
     } else if raw_tolerance > 0.1 {
         0.1 // Ultra Detail
+    } else if raw_tolerance > 0.05 {
+        0.05 // Extreme Detail
+    } else if raw_tolerance > 0.025 {
+        0.025 // Ultra-fine (for small text)
+    } else if raw_tolerance > 0.01 {
+        0.01 // Maximum Detail (for tiny text)
     } else {
-        0.05 // Extreme Detail (Maximum zoom)
+        0.005 // Absolute Maximum (sub-pixel precision)
     }
 }
 
@@ -316,11 +336,51 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
     };
 
     // --- Decide pixel tolerance ---
-    let base_error_px = req.quality.to_tolerance();
+    // Size-adaptive tolerance: smaller text gets finer detail automatically
+    let size_factor = (req.size.0 / 100.0).clamp(0.1, 1.0); // Normalize to 100px baseline
+    let base_error_px = req.quality.to_tolerance() * size_factor;
     let desired_error_px = base_error_px / ctx.quality_multiplier.max(0.1);
     let tess_tol_px = snap_to_bucket(desired_error_px);
     let tol_bucket_u16 = tol_bucket(tess_tol_px);
     let size_bucket_u16 = size_bucket(req.size.0);
+
+    // Use hinting and oversampling for small text to improve quality on pixel grids
+    let use_hinting = req.size.0 <= SMALL_TEXT_THRESHOLD_PX;
+
+    // Oversampling: render small text at higher resolution then scale down
+    // This dramatically improves quality by capturing more geometric detail
+    // Combined with MSAAx4, this provides 32x+ effective sampling for tiny text
+    let oversample_factor = if req.size.0 <= 10.0 {
+        8.0 // Ultra-tiny text (≤10px): 8x oversampling
+    } else if req.size.0 <= 12.0 {
+        6.0 // Very small text (11-12px): 6x oversampling
+    } else if req.size.0 <= SMALL_TEXT_THRESHOLD_PX {
+        4.0 // Small text (13-16px): 4x oversampling
+    } else {
+        1.0 // Normal text (>16px): no oversampling
+    };
+
+    // Debug output for the first glyph to help diagnose rendering quality
+    #[cfg(debug_assertions)]
+    if !req.content.is_empty() {
+        eprintln!(
+            "[TEXT] '{}' @ {:.1}px | tolerance={:.4}px | hinting={} | oversample={}x | effective_samples={}x (with MSAA)",
+            &req.content.chars().take(10).collect::<String>(),
+            req.size.0,
+            tess_tol_px,
+            use_hinting,
+            oversample_factor,
+            oversample_factor * 4.0  // Assuming MSAAx4 is enabled
+        );
+
+        // Warn if text might still look pixelated despite high oversampling
+        if req.size.0 <= 12.0 && oversample_factor >= 6.0 {
+            eprintln!(
+                "[TEXT] ⚠️  Very small text with {}x oversampling. If still grainy, MSAA may not be applying to meshes.",
+                oversample_factor
+            );
+        }
+    }
 
     let fill_options = FillOptions::default()
         .with_tolerance(tess_tol_px)
@@ -349,6 +409,8 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
                 glyph_id: glyph.glyph_id,
                 size_bucket: size_bucket_u16,
                 tolerance_bucket: tol_bucket_u16,
+                hinted: use_hinting,
+                oversample_factor: oversample_factor as u8,
             };
 
             // --- Create cached glyph ---
@@ -360,36 +422,85 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
                     None => continue,
                 };
 
-                // Create skrifa font ref
-                let font_ref = match FontRef::from_index(font_arc.data(), face_index) {
-                    Ok(f) => f,
-                    // Same here - Not found, just continue
-                    Err(_) => continue,
-                };
+                // Oversample: render at higher resolution for better quality
+                let render_size = glyph.font_size * oversample_factor;
 
-                // Create the outline
-                let outlines = font_ref.outline_glyphs();
-                let gid = GlyphId16::new(glyph.glyph_id);
-                let outline_glyph = match outlines.get(gid.into()) {
-                    Some(og) => og,
-                    // Missing outline (e.g. Bitmap emoji)
-                    None => {
-                        // We cache an empty glyph to avoid calculations next frame
-                        ctx.glyph_cache.insert(key, CachedGlyph::empty());
-                        continue;
-                    }
-                };
-
-                // Create a "pan" to draw the path
                 let mut path_builder = Path::builder();
-                let mut pen = LyonPathBuilder(&mut path_builder);
+                let outline_extracted = if use_hinting {
+                    // Use swash for hinted outlines (better for small text)
+                    let swash_font = match SwashFontRef::from_index(font_arc.data(), face_index as usize) {
+                        Some(f) => f,
+                        None => {
+                            ctx.glyph_cache.insert(key, CachedGlyph::empty());
+                            continue;
+                        }
+                    };
 
-                // Create the settings for drawing
-                let settings =
-                    DrawSettings::unhinted(Size::new(glyph.font_size), LocationRef::default());
+                    let mut scaler = ctx
+                        .swash_scale_context
+                        .builder(swash_font)
+                        .size(render_size)
+                        .hint(true)
+                        .build();
 
-                // Draw the glyph and cache it
-                if outline_glyph.draw(settings, &mut pen).is_ok() {
+                    // Get the scaled outline with hinting
+                    if let Some(outline) = scaler.scale_outline(glyph.glyph_id) {
+                        // Convert swash path commands to lyon path
+                        for cmd in outline.path().commands() {
+                            match cmd {
+                                PathCommand::MoveTo(p) => {
+                                    path_builder.begin(point(p.x, p.y));
+                                }
+                                PathCommand::LineTo(p) => {
+                                    path_builder.line_to(point(p.x, p.y));
+                                }
+                                PathCommand::QuadTo(p1, p2) => {
+                                    path_builder.quadratic_bezier_to(point(p1.x, p1.y), point(p2.x, p2.y));
+                                }
+                                PathCommand::CurveTo(p1, p2, p3) => {
+                                    path_builder.cubic_bezier_to(
+                                        point(p1.x, p1.y),
+                                        point(p2.x, p2.y),
+                                        point(p3.x, p3.y),
+                                    );
+                                }
+                                PathCommand::Close => {
+                                    path_builder.end(true);
+                                }
+                            }
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    // Use skrifa for unhinted outlines (better for large text)
+                    let font_ref = match FontRef::from_index(font_arc.data(), face_index) {
+                        Ok(f) => f,
+                        Err(_) => {
+                            ctx.glyph_cache.insert(key, CachedGlyph::empty());
+                            continue;
+                        }
+                    };
+
+                    let outlines = font_ref.outline_glyphs();
+                    let gid = GlyphId16::new(glyph.glyph_id);
+                    let outline_glyph = match outlines.get(gid.into()) {
+                        Some(og) => og,
+                        None => {
+                            ctx.glyph_cache.insert(key, CachedGlyph::empty());
+                            continue;
+                        }
+                    };
+
+                    let mut pen = LyonPathBuilder(&mut path_builder);
+                    let settings =
+                        DrawSettings::unhinted(Size::new(render_size), LocationRef::default());
+                    outline_glyph.draw(settings, &mut pen).is_ok()
+                };
+
+                // Tessellate the extracted outline
+                if outline_extracted {
                     let path = path_builder.build();
 
                     ctx.scratch_geometry.clear();
@@ -430,6 +541,7 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
                     req.fill,
                     local_x,
                     local_y,
+                    oversample_factor,
                 );
             }
         }
@@ -447,6 +559,7 @@ fn flush_character_to_mesh(
     color: Color,
     local_offset_x: f32,
     local_offset_y: f32,
+    oversample_scale: f32,
 ) {
     let mesh = target_buffer.get_mesh_mut();
     let start_index = mesh.vertices.len() as u32;
@@ -457,11 +570,18 @@ fn flush_character_to_mesh(
     // Fonts are usually Y-up, screens are Y-down.
     let flip_y = -1.0;
 
+    // Scale factor to undo oversampling
+    let scale = 1.0 / oversample_scale;
+
     // Transform every vertex in the glyph
     for vertex in &source_geometry.vertices {
+        // Scale down from oversampled coordinates
+        let scaled_x = vertex.x * scale;
+        let scaled_y = vertex.y * scale;
+
         // Position relative to the word/line start
-        let local_x = vertex.x + local_offset_x;
-        let local_y = vertex.y.mul_add(flip_y, local_offset_y);
+        let local_x = scaled_x + local_offset_x;
+        let local_y = scaled_y.mul_add(flip_y, local_offset_y);
 
         // Rotate around the text origin
         let rotated_x = local_x.mul_add(cos, -(local_y * sin));

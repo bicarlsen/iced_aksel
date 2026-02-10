@@ -35,6 +35,7 @@ use math::*;
 
 use crate::render::tessellation::text::{TextRenderContext, TextTessellationCache};
 pub use text::Quality;
+use swash::scale::ScaleContext;
 
 /// The central driver for the rendering engine.
 ///
@@ -53,6 +54,9 @@ pub struct Tessellator {
     /// Cache for tessellated text glyphs to avoid re-tessellating the alphabet every frame.
     glyph_cache: TextTessellationCache,
 
+    /// Swash scaling context for hinted outline generation (reused across frames).
+    swash_scale_context: ScaleContext,
+
     /// Global quality multiplier.
     /// * 1.0 = Standard (Default).
     /// * 0.5 = High Performance (Lower vertex count for curves).
@@ -67,6 +71,7 @@ impl Default for Tessellator {
             manual: manual::ManualTessellator,
             scratch_geometry: VertexBuffers::new(),
             glyph_cache: TextTessellationCache::new(),
+            swash_scale_context: ScaleContext::new(),
             quality: 1.0,
         }
     }
@@ -1137,6 +1142,7 @@ impl Tessellator {
             tessellator: &mut self.complex.fill,
             glyph_cache: &mut self.glyph_cache,
             scratch_geometry: &mut self.scratch_geometry,
+            swash_scale_context: &mut self.swash_scale_context,
 
             // Pass the global tessellator quality multiplier down to the text engine
             quality_multiplier: self.quality,
