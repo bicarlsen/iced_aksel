@@ -371,7 +371,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             if self.render_grid
                 && let Some(line) = grid_line
             {
-                self.draw_grid_line(line, &bounds, plot_bounds, buffer, pos_norm);
+                self.draw_grid_line(renderer, line, &bounds, plot_bounds, buffer, pos_norm);
             }
 
             if self.invisible {
@@ -416,7 +416,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
 
             // Draw Tick Marks (Axis style + local config)
             if let Some(line) = tick_line {
-                self.draw_tick_line(line, &bounds, buffer, pos_norm);
+                self.draw_tick_line(renderer, line, &bounds, buffer, pos_norm);
             }
         }
 
@@ -898,6 +898,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
     /// Renders a single tick mark into the mesh buffer using linear tessellators.
     fn draw_tick_line<Renderer>(
         &self,
+        renderer: &mut Renderer,
         line: TickLine,
         bounds: &Rectangle,
         buffer: &mut RenderBuffer<Renderer>,
@@ -912,59 +913,75 @@ impl<D: Float, Theme> Axis<D, Theme> {
         match self.position {
             Position::Bottom => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
-                buffer.add_primitive(Primitive::VerticalLine {
-                    x,
-                    y_start: bounds.y,
-                    y_end: bounds.y + length,
-                    stroke: ResolvedStroke {
-                        fill,
-                        thickness,
-                        style: StrokeStyle::Solid,
+                buffer.add_primitive(
+                    renderer,
+                    Primitive::VerticalLine {
+                        x,
+                        y_start: bounds.y,
+                        y_end: bounds.y + length,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
                     },
-                    snap: true,
-                });
+                    bounds,
+                );
             }
             Position::Top => {
                 let x = bounds.width.mul_add(pos_norm, bounds.x);
-                buffer.add_primitive(Primitive::VerticalLine {
-                    x,
-                    y_start: bounds.y,
-                    y_end: bounds.y + length,
-                    stroke: ResolvedStroke {
-                        fill,
-                        thickness,
-                        style: StrokeStyle::Solid,
+                buffer.add_primitive(
+                    renderer,
+                    Primitive::VerticalLine {
+                        x,
+                        y_start: bounds.y,
+                        y_end: bounds.y + length,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
                     },
-                    snap: true,
-                });
+                    bounds,
+                );
             }
             Position::Right => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                buffer.add_primitive(Primitive::HorizontalLine {
-                    y,
-                    x_start: bounds.x,
-                    x_end: bounds.x + length,
-                    stroke: ResolvedStroke {
-                        fill,
-                        thickness,
-                        style: StrokeStyle::Solid,
+                buffer.add_primitive(
+                    renderer,
+                    Primitive::HorizontalLine {
+                        y,
+                        x_start: bounds.x,
+                        x_end: bounds.x + length,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
                     },
-                    snap: true,
-                });
+                    bounds,
+                );
             }
             Position::Left => {
                 let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                buffer.add_primitive(Primitive::HorizontalLine {
-                    y,
-                    x_start: bounds.x,
-                    x_end: bounds.x + length,
-                    stroke: ResolvedStroke {
-                        fill,
-                        thickness,
-                        style: StrokeStyle::Solid,
+                buffer.add_primitive(
+                    renderer,
+                    Primitive::HorizontalLine {
+                        y,
+                        x_start: bounds.x,
+                        x_end: bounds.x + length,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
                     },
-                    snap: true,
-                });
+                    bounds,
+                );
             }
         }
     }
@@ -972,6 +989,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
     /// Renders a single grid line into the mesh buffer.
     fn draw_grid_line<Renderer>(
         &self,
+        renderer: &mut Renderer,
         line: GridLine,
         axis_bounds: &Rectangle,
         plot_bounds: &Rectangle,
@@ -984,8 +1002,6 @@ impl<D: Float, Theme> Axis<D, Theme> {
         let thickness = line.width.0;
         let fill = line.color;
 
-        // TODO: Switch to using primitives!
-
         match orientation {
             Orientation::Horizontal => {
                 let x = axis_bounds.width.mul_add(pos_norm, axis_bounds.x);
@@ -994,32 +1010,40 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    buffer.add_primitive(Primitive::VerticalLine {
-                        x,
-                        y_start: plot_bounds.y,
-                        y_end: plot_bounds.y + plot_bounds.height,
-                        stroke: ResolvedStroke {
-                            fill,
-                            thickness,
-                            style: StrokeStyle::Dashed {
-                                gap: gap_length,
-                                dash: line_length,
+                    buffer.add_primitive(
+                        renderer,
+                        Primitive::VerticalLine {
+                            x,
+                            y_start: plot_bounds.y,
+                            y_end: plot_bounds.y + plot_bounds.height,
+                            stroke: ResolvedStroke {
+                                fill,
+                                thickness,
+                                style: StrokeStyle::Dashed {
+                                    gap: gap_length,
+                                    dash: line_length,
+                                },
                             },
+                            snap: true,
                         },
-                        snap: true,
-                    });
+                        plot_bounds,
+                    );
                 } else {
-                    buffer.add_primitive(Primitive::VerticalLine {
-                        x,
-                        y_start: plot_bounds.y,
-                        y_end: plot_bounds.y + plot_bounds.height,
-                        stroke: ResolvedStroke {
-                            fill,
-                            thickness,
-                            style: StrokeStyle::Solid,
+                    buffer.add_primitive(
+                        renderer,
+                        Primitive::VerticalLine {
+                            x,
+                            y_start: plot_bounds.y,
+                            y_end: plot_bounds.y + plot_bounds.height,
+                            stroke: ResolvedStroke {
+                                fill,
+                                thickness,
+                                style: StrokeStyle::Solid,
+                            },
+                            snap: true,
                         },
-                        snap: true,
-                    });
+                        plot_bounds,
+                    );
                 }
             }
             Orientation::Vertical => {
@@ -1029,32 +1053,40 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    buffer.add_primitive(Primitive::HorizontalLine {
-                        y,
-                        x_start: plot_bounds.x,
-                        x_end: plot_bounds.x + plot_bounds.width,
-                        stroke: ResolvedStroke {
-                            fill,
-                            thickness,
-                            style: StrokeStyle::Dashed {
-                                dash: line_length,
-                                gap: gap_length,
+                    buffer.add_primitive(
+                        renderer,
+                        Primitive::HorizontalLine {
+                            y,
+                            x_start: plot_bounds.x,
+                            x_end: plot_bounds.x + plot_bounds.width,
+                            stroke: ResolvedStroke {
+                                fill,
+                                thickness,
+                                style: StrokeStyle::Dashed {
+                                    dash: line_length,
+                                    gap: gap_length,
+                                },
                             },
+                            snap: true,
                         },
-                        snap: true,
-                    });
+                        plot_bounds,
+                    );
                 } else {
-                    buffer.add_primitive(Primitive::HorizontalLine {
-                        y,
-                        x_start: plot_bounds.x,
-                        x_end: plot_bounds.x + plot_bounds.width,
-                        stroke: ResolvedStroke {
-                            fill,
-                            thickness,
-                            style: StrokeStyle::Solid,
+                    buffer.add_primitive(
+                        renderer,
+                        Primitive::HorizontalLine {
+                            y,
+                            x_start: plot_bounds.x,
+                            x_end: plot_bounds.x + plot_bounds.width,
+                            stroke: ResolvedStroke {
+                                fill,
+                                thickness,
+                                style: StrokeStyle::Solid,
+                            },
+                            snap: true,
                         },
-                        snap: true,
-                    });
+                        plot_bounds,
+                    );
                 }
             }
         }

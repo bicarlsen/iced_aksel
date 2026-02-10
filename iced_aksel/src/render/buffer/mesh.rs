@@ -1,7 +1,11 @@
-use crate::{Quality, render::primitive::Primitive, stroke::StrokeStyle};
+use crate::{
+    Quality,
+    render::{Renderer, primitive::Primitive},
+    stroke::StrokeStyle,
+};
 
 use iced_core::{Rectangle, Transformation};
-use iced_graphics::mesh::{Indexed, Mesh, Renderer, SolidVertex2D};
+use iced_graphics::mesh::{Indexed, Mesh, SolidVertex2D};
 
 mod tessellation;
 
@@ -62,6 +66,9 @@ pub struct MeshBatcher {
     /// The mesh-tessellation cache/builder.
     pub(crate) tessellator: Tessellator,
 
+    /// The last type of layer drawn by the batcher
+    last_draw_was_text: bool,
+
     /// A soft limit for vertices per batch.
     /// If exceeded, the `Context` (in `plot.rs`) will trigger a flush.
     vertex_limit: usize,
@@ -76,6 +83,7 @@ impl MeshBatcher {
                 total_vertices: 0,
                 total_indices: 0,
             },
+            last_draw_was_text: false,
             tessellator: Tessellator::new(),
             vertex_limit,
         }
@@ -147,7 +155,14 @@ impl MeshBatcher {
     }
 
     /// Renders a primitive into this mesh buffer using the tessellator.
-    pub fn add_primitive(&mut self, primitive: Primitive) {
+    pub fn add_primitive<R>(
+        &mut self,
+        renderer: &mut R,
+        primitive: Primitive,
+        clip_bounds: &Rectangle,
+    ) where
+        R: Renderer,
+    {
         match primitive {
             Primitive::Rectangle {
                 xy1: min,
@@ -360,36 +375,41 @@ impl MeshBatcher {
                 content,
                 position,
                 size,
-                rotation,
                 horizontal_alignment,
                 vertical_alignment,
                 fill,
-                quality,
                 line_height,
                 bounds,
                 wrapping,
+                shaping,
             } => {
-                let tolerance = quality
-                    .map(|q| q.max(0.001))
-                    .unwrap_or_else(|| self.tessellator.text_tolerance());
+                let text = iced_core::Text {
+                    content,
+                    bounds,
+                    size,
+                    line_height,
+                    font,
+                    align_x: horizontal_alignment,
+                    align_y: vertical_alignment,
+                    shaping,
+                    wrapping,
+                };
 
-                self.tessellator.draw_text(
-                    &mut self.data,
-                    crate::render::text::Text {
-                        font,
-                        content,
-                        position,
-                        size,
-                        rotation,
-                        horizontal_alignment,
-                        vertical_alignment,
-                        fill,
-                        tolerance,
-                        line_height: line_height.to_absolute(size),
-                        bounds,
-                        wrapping,
-                    },
-                );
+                renderer.start_layer(*clip_bounds);
+
+                if self
+                    .data
+                    .buffer
+                    .as_ref()
+                    .is_some_and(|buf| !buf.vertices.is_empty() || !buf.vertices.is_empty())
+                {
+                    // Make sure we flush any meshes before rendering text
+                    self.flush(renderer, clip_bounds);
+                }
+
+                renderer.fill_text(text, position, fill, *clip_bounds);
+
+                renderer.end_layer();
             }
         }
     }

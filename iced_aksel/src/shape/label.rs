@@ -1,11 +1,8 @@
 use crate::render::Primitive;
 use crate::{Measure, Shape, plot};
 use aksel::{Float, PlotPoint};
-use iced_core::{
-    Color, Font, Point, Size,
-    alignment::{Horizontal, Vertical},
-    text::Wrapping,
-};
+use iced_core::text::{self, LineHeight, Shaping};
+use iced_core::{Color, Font, Point, Size, alignment::Vertical, text::Wrapping};
 use std::fmt::Debug;
 
 /// Defines how text bounds should be interpreted.
@@ -85,28 +82,22 @@ pub struct Label<D> {
     pub position: PlotPoint<D>,
     /// Font-size of the label
     pub size: Measure<D>,
-    /// Text rotation in radians
-    pub rotation: f32, // Radians
     /// Horizontal alignment
-    pub horizontal_alignment: Horizontal,
+    pub horizontal_alignment: text::Alignment,
     /// Vertical alignment
     pub vertical_alignment: Vertical,
     /// Color of the text
     pub fill: Color,
-    /// Text tolerance quality override
-    pub quality: Option<f32>,
-    /// Letter spacing for the text
-    ///
-    /// TODO: Unused - Add this to rendering implementation!
-    pub letter_spacing: f32,
     /// Font override - Defaults to the default font of the application
     pub font: Option<Font>,
     /// Line height for the text (How much space **between** lines)
-    pub line_height: f32,
+    pub line_height: LineHeight,
     /// Bounding box of the text - If this is not set, no wrapping will occur, if set
     pub bounds: Bounds<D>,
     /// Wrapping of the text - Won't have an effect if no bounds have been set
     pub wrapping: Wrapping,
+    /// Shaping of the text
+    pub shaping: Shaping,
 }
 
 impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
@@ -115,16 +106,14 @@ impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
             content,
             position,
             size,
-            rotation,
             horizontal_alignment,
             vertical_alignment,
             fill,
-            quality,
-            letter_spacing,
             font,
             line_height,
             bounds,
             wrapping,
+            shaping,
         } = self;
 
         let font = font.unwrap_or_else(|| ctx.default_font());
@@ -133,7 +122,6 @@ impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
 
         // 2. Resolve Size (Screen Pixels vs Plot Units)
         let font_size_in_pixels = size.resolve_y(ctx);
-        let line_height = font_size_in_pixels + line_height;
 
         // 3. Resolve bounds
         let bounds = bounds.resolve(ctx, &position);
@@ -143,15 +131,14 @@ impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
             content,
             position: Point::new(screen_position.x, screen_position.y),
             size: font_size_in_pixels.into(),
-            rotation,
             horizontal_alignment,
             vertical_alignment,
             fill,
-            quality,
             font,
-            line_height: line_height.into(),
+            line_height,
             bounds,
             wrapping,
+            shaping,
         });
     }
 }
@@ -165,16 +152,14 @@ impl<D: Float> Label<D> {
             content: content.to_string(),
             position,
             size: Measure::Screen(12.0),
-            rotation: 0.0,
-            horizontal_alignment: Horizontal::Left,
+            horizontal_alignment: text::Alignment::Default,
             vertical_alignment: Vertical::Center,
             fill: Color::BLACK,
-            quality: None,
-            letter_spacing: 1.2,
             font: None,
-            line_height: 1.0,
+            line_height: LineHeight::Relative(1.0),
             bounds: Bounds::INFINITE,
             wrapping: Wrapping::None,
+            shaping: Shaping::Auto,
         }
     }
 
@@ -219,28 +204,14 @@ impl<D: Float> Label<D> {
         self
     }
 
-    /// Sets the rotation of the text in radians.
-    pub const fn rotation(mut self, radians: f32) -> Self {
-        self.rotation = radians;
-        self
-    }
-
     /// Sets the horizontal and vertical alignment relative to the position.
     pub fn align(
         mut self,
-        horizontal: impl Into<Horizontal>,
+        horizontal: impl Into<text::Alignment>,
         vertical: impl Into<Vertical>,
     ) -> Self {
         self.horizontal_alignment = horizontal.into();
         self.vertical_alignment = vertical.into();
-        self
-    }
-
-    /// Overrides the rendering quality (Level of Detail).
-    ///
-    /// See [`crate::Quality::Custom`] for more info
-    pub const fn quality(mut self, tolerance: f32) -> Self {
-        self.quality = Some(tolerance);
         self
     }
 }

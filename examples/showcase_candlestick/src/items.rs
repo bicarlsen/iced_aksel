@@ -50,8 +50,9 @@ pub struct CandleItems {
 impl PlotData<f64> for CandleItems {
     fn draw(&self, plot: &mut Plot<f64>, theme: &iced::Theme) {
         let palette = theme.extended_palette();
+
         // Create rectangles from candle data during draw
-        for (time, candle) in &self.candles {
+        for (idx, (time, candle)) in self.candles.iter().enumerate() {
             let x = *time as f64;
 
             let color = candle.color(palette);
@@ -69,6 +70,13 @@ impl PlotData<f64> for CandleItems {
                 Measure::Plot((candle.open - candle.close).abs()),
             )
             .fill(color);
+
+            if idx % 100 == 0 {
+                plot.add_shape(
+                    shape::Label::new("Test", PlotPoint { x, y: candle.high })
+                        .bounds(shape::Bounds::INFINITE),
+                );
+            }
 
             plot.add_shape(wick);
             plot.add_shape(body);

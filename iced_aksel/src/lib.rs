@@ -800,9 +800,11 @@ where
     /// Iterates over axes to find the inner-most spines and draws connecting squares at the corners.
     fn draw_spine_corners(
         &self,
+        renderer: &mut Renderer,
         layout: Layout<'_>,
         style: &style::Style,
         plot: Rectangle,
+        bounds: &Rectangle,
         buffer: &mut RenderBuffer<Renderer>,
     ) {
         // Track the "inner-most" spine properties for each side
@@ -869,42 +871,58 @@ where
 
         // Bottom-Left
         if let (Some((lw, lc)), Some((bw, _))) = (left, bottom) {
-            buffer.add_primitive(Primitive::Rectangle {
-                xy1: Point::new(plot.x - lw, plot.y + plot.height),
-                xy2: Point::new(plot.x, plot.y + plot.height + bw),
-                fill: Some(lc),
-                stroke: None,
-            });
+            buffer.add_primitive(
+                renderer,
+                Primitive::Rectangle {
+                    xy1: Point::new(plot.x - lw, plot.y + plot.height),
+                    xy2: Point::new(plot.x, plot.y + plot.height + bw),
+                    fill: Some(lc),
+                    stroke: None,
+                },
+                bounds,
+            );
         }
 
         // Top-Left
         if let (Some((lw, lc)), Some((tw, _))) = (left, top) {
-            buffer.add_primitive(Primitive::Rectangle {
-                xy1: Point::new(plot.x - lw, plot.y - tw),
-                xy2: Point::new(plot.x, plot.y),
-                fill: Some(lc),
-                stroke: None,
-            });
+            buffer.add_primitive(
+                renderer,
+                Primitive::Rectangle {
+                    xy1: Point::new(plot.x - lw, plot.y - tw),
+                    xy2: Point::new(plot.x, plot.y),
+                    fill: Some(lc),
+                    stroke: None,
+                },
+                bounds,
+            );
         }
 
         // Bottom-Right
         if let (Some((rw, rc)), Some((bw, _))) = (right, bottom) {
-            buffer.add_primitive(Primitive::Rectangle {
-                xy1: Point::new(plot.x + plot.width, plot.y + plot.height),
-                xy2: Point::new(plot.x + plot.width + rw, plot.y + plot.height + bw),
-                fill: Some(rc),
-                stroke: None,
-            });
+            buffer.add_primitive(
+                renderer,
+                Primitive::Rectangle {
+                    xy1: Point::new(plot.x + plot.width, plot.y + plot.height),
+                    xy2: Point::new(plot.x + plot.width + rw, plot.y + plot.height + bw),
+                    fill: Some(rc),
+                    stroke: None,
+                },
+                bounds,
+            );
         }
 
         // Top-Right
         if let (Some((rw, rc)), Some((tw, _))) = (right, top) {
-            buffer.add_primitive(Primitive::Rectangle {
-                xy1: Point::new(plot.x + plot.width, plot.y - tw),
-                xy2: Point::new(plot.x + plot.width + rw, plot.y),
-                fill: Some(rc),
-                stroke: None,
-            });
+            buffer.add_primitive(
+                renderer,
+                Primitive::Rectangle {
+                    xy1: Point::new(plot.x + plot.width, plot.y - tw),
+                    xy2: Point::new(plot.x + plot.width + rw, plot.y),
+                    fill: Some(rc),
+                    stroke: None,
+                },
+                bounds,
+            );
         }
     }
 }

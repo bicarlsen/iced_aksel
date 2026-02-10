@@ -2,7 +2,7 @@ use crate::stroke::ResolvedStroke;
 use iced_core::{
     Color, Font, Pixels, Point, Rectangle, Size,
     alignment::{Horizontal, Vertical},
-    text::{LineHeight, Wrapping},
+    text::{self, LineHeight, Shaping, Wrapping},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -101,18 +101,16 @@ pub enum Primitive {
         stroke: Option<ResolvedStroke>,
     },
     Text {
-        font: Font,
-        content: String,
         position: Point,
+        content: String,
+        bounds: Size,
         size: Pixels,
-        rotation: f32,
-        horizontal_alignment: Horizontal,
+        line_height: LineHeight,
+        font: Font,
+        horizontal_alignment: text::Alignment,
         vertical_alignment: Vertical,
         fill: Color,
-        /// Override the quality tolerance of the text
-        quality: Option<f32>,
-        line_height: LineHeight,
-        bounds: Size,
+        shaping: Shaping,
         wrapping: Wrapping,
     },
 }

@@ -44,10 +44,15 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
         }
     }
 
-    pub fn add_primitive(&mut self, primitive: Primitive) {
+    pub fn add_primitive(
+        &mut self,
+        renderer: &mut Renderer,
+        primitive: Primitive,
+        clip_bounds: &Rectangle,
+    ) {
         match self {
             Self::Mesh(buf) => {
-                buf.add_primitive(primitive);
+                buf.add_primitive(renderer, primitive, clip_bounds);
             }
             Self::Path(buf) => {
                 buf.add_primitive(primitive);
