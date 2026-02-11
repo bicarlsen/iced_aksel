@@ -236,7 +236,7 @@ impl ExampleApp {
             x_domain.1,
             (x_domain.1 - x_domain.0).min(CANDLES_AMOUNT as f64)
         ))
-            .size(16);
+        .size(16);
 
         // --- FPS Display ---
         let fps_display = text(format!("FPS: {:.1}", self.fps)).size(16);
@@ -270,7 +270,7 @@ impl ExampleApp {
             text("StdDev:"),
             bband_std_dev_input
         ]
-            .spacing(10);
+        .spacing(10);
 
         // --- Combine all settings into a column ---
         column![toggle_row, sma_row, bband_row].spacing(10).into()
