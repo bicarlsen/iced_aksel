@@ -18,7 +18,7 @@ const TRANSPARENT: PackedColor = [0., 0., 0., 0.];
 const INIT_CAPACITY: usize = 10_000;
 
 fn pack_color(color: Color) -> PackedColor {
-    [color.r, color.g, color.b, color.a]
+    color.into_linear()
 }
 
 #[derive(Debug)]
