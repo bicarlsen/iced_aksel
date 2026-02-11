@@ -89,7 +89,6 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
                 let (max_width, clip_rect) = if bounds.width.is_infinite() {
                     (f32::INFINITY, None)
                 } else {
-                    // --- THE FIX: Calculate Origin based on Alignment ---
                     let x_origin = match horizontal_alignment {
                         Horizontal::Left => position.x,
                         Horizontal::Center => position.x - (bounds.width / 2.0),
@@ -141,6 +140,7 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
                     draw_text(frame);
                 }
             });
+            // NOTE: Early return if text
             return;
         }
 
