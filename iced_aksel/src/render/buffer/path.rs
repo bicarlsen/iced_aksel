@@ -163,8 +163,7 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
             Primitive::Area { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Arc { fill, stroke, .. } => (*fill, stroke.as_ref()),
             Primitive::Spline { stroke, .. } => (None, Some(stroke)),
-            // If we missed a case, we draw nothing
-            _ => (None, None),
+            Primitive::Text { .. } => (None, None),
         };
 
         // B. Build Geometry (Using the method on Primitive we added)
@@ -204,11 +203,11 @@ fn create_iced_stroke<'a>(
         }
     };
 
-    iced_graphics::geometry::Stroke {
+    Stroke {
         style: Style::Solid(s.fill),
         width: s.thickness,
         line_cap,
-        line_join: LineJoin::Miter, // Miter makes sharp triangle corners look sharp
+        line_join: LineJoin::Miter,
         line_dash: LineDash {
             segments,
             offset: 0,
