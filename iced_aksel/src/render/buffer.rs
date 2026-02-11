@@ -15,13 +15,16 @@ use iced_core::Rectangle;
 
 mod mesh;
 mod path;
+mod shader;
 
 pub use mesh::{MeshBatcher, MeshData};
 pub use path::PathBatcher;
+pub use shader::ShaderBatcher;
 
 pub enum RenderBuffer<Renderer: crate::Renderer> {
     Mesh(Box<MeshBatcher>),
     Path(Box<PathBatcher<Renderer>>),
+    Shader(Box<ShaderBatcher>),
 }
 
 impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
@@ -41,6 +44,9 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
             Self::Mesh(buf) => {
                 buf.flush(renderer, clip_bounds);
             }
+            Self::Shader(buf) => {
+                buf.flush(renderer, clip_bounds);
+            }
         }
     }
 
@@ -50,6 +56,9 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
                 buf.add_primitive(primitive);
             }
             Self::Path(buf) => {
+                buf.add_primitive(primitive);
+            }
+            Self::Shader(buf) => {
                 buf.add_primitive(primitive);
             }
         }
@@ -62,6 +71,9 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
             }
             Self::Path(_buf) => {
                 // todo!("Set quality on path-buffer")
+            }
+            Self::Shader(_buf) => {
+                // todo!("Set quality on shader-buffer")
             }
         }
     }
