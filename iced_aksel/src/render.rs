@@ -56,6 +56,7 @@ impl Quality {
 pub enum Backend {
     Mesh,
     Path,
+    Shader,
 }
 
 /// Renderer requirements for plotting.
@@ -66,6 +67,7 @@ pub trait Renderer<Font = iced_core::Font>:
     + iced_core::text::Renderer<Font = Font>
     + iced_graphics::geometry::Renderer
     + iced_graphics::mesh::Renderer
+    + iced_wgpu::primitive::Renderer
 {
     fn preffered_backend(&self) -> Backend;
 }
@@ -85,12 +87,12 @@ where
 
 impl Renderer for iced_wgpu::Renderer {
     fn preffered_backend(&self) -> Backend {
-        Backend::Mesh
+        Backend::Shader
     }
 }
 
-impl Renderer for iced_tiny_skia::Renderer {
-    fn preffered_backend(&self) -> Backend {
-        Backend::Path
-    }
-}
+// impl Renderer for iced_tiny_skia::Renderer {
+//     fn preffered_backend(&self) -> Backend {
+//         Backend::Path
+//     }
+// }

@@ -36,6 +36,10 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
         Self::Path(Box::new(PathBatcher::new(limit)))
     }
 
+    pub fn new_shader() -> Self {
+        Self::Shader(Box::new(ShaderBatcher::new()))
+    }
+
     pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle, with_damage: bool) {
         match self {
             Self::Path(buf) => {

@@ -4,8 +4,8 @@ use iced_core::{
     alignment::{Horizontal, Vertical},
     text::{LineHeight, Wrapping},
 };
+use iced_graphics::geometry::path::Builder;
 use iced_graphics::geometry::path::arc::Elliptical;
-use iced_graphics::geometry::path::{Arc, Builder};
 use std::f32::consts::PI;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,21 +1,22 @@
 use bytemuck::{Pod, Zeroable};
-use iced::wgpu;
+use iced_wgpu::wgpu;
 use image::GenericImageView;
 
-// This ensures memory layout of 1's and 0's to allow GPU to always read it correctly
+use crate::render::buffer::shader::pipeline::LABEL_VERTEX_BUFFER;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct UnifiedVertex {
-    // We use f32;2 instead of vector to ensure memory layout explicitly
-    pub position: [f32; 3],
+    // We use [f32; N] instead of vector to ensure memory layout explicitly
+    pub position: [f32; 2],
     pub color: [f32; 4],
     pub uv: [f32; 2],
 }
 
 impl UnifiedVertex {
-    pub fn new_shape(pos: [f32; 3], color: [f32; 4], white_pixel_uv: [f32; 2]) -> Self {
+    pub const fn new_shape(pos: [f32; 2], color: [f32; 4], white_pixel_uv: [f32; 2]) -> Self {
         Self {
-            position: pos,
+            position: [pos[0], pos[1]],
             color,
             uv: white_pixel_uv,
         }
@@ -30,6 +31,15 @@ pub struct Uniforms {
     // Padding to align to 16 bytes
     pub _padding1: f32,
     pub _padding2: f32,
+}
+
+pub fn create_vertex_buffer(device: &wgpu::Device, needed_capacity: usize) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(LABEL_VERTEX_BUFFER),
+        size: (needed_capacity * std::mem::size_of::<UnifiedVertex>()) as u64,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
 }
 
 pub fn create_mini_atlas(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::TextureView {
@@ -145,22 +155,22 @@ pub fn create_pipeline(
                 array_stride: std::mem::size_of::<UnifiedVertex>() as wgpu::BufferAddress, // Now bigger
                 step_mode: wgpu::VertexStepMode::Vertex,
                 attributes: &[
-                    // Location 0: Position is now Float32x3
+                    // Location 0: Position (Float32x2)
                     wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x3,
+                        format: wgpu::VertexFormat::Float32x2,
                         offset: 0,
                         shader_location: 0,
                     },
-                    // Location 1: Color starts at offset 12 (3 * 4 bytes)
+                    // Location 1: Color starts at offset 8 (2 * 4 bytes)
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32x4,
-                        offset: 12,
+                        offset: 8,
                         shader_location: 1,
                     },
-                    // Location 2: UV starts at offset 28 (12 + 16)
+                    // Location 2: UV starts at offset 24 (8 + 16)
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32x2,
-                        offset: 28,
+                        offset: 24,
                         shader_location: 2,
                     },
                 ],
@@ -182,7 +192,11 @@ pub fn create_pipeline(
             ..Default::default()
         },
         depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
         multiview: None,
         cache: None,
     });

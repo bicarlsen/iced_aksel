@@ -1,5 +1,5 @@
 struct VertexInput{
-    @location(0) position: vec3<f32>,
+    @location(0) position: vec2<f32>,
     @location(1) color: vec4<f32>,
     @location(2) uv: vec2<f32>,
 }
@@ -35,7 +35,7 @@ fn vs_main(input: VertexInput) -> VertexOutput{
 
     // Note: GPU Y-coordinates usually go UP, but screen Y goes DOWN.
     // We flip Y here: 'y * -1.0'
-    out.position = vec4<f32>(x, y * -1.0, input.position.z, 1.0);
+    out.position = vec4<f32>(x, y * -1.0, 0.0, 1.0);
 
     // 2. Pass data through to the fragment shader
     out.color = input.color;

@@ -31,6 +31,7 @@ impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
             let mut buffer = match renderer.preffered_backend() {
                 Backend::Mesh => RenderBuffer::new_mesh(100_000),
                 Backend::Path => RenderBuffer::new_path(5000),
+                Backend::Shader => RenderBuffer::new_shader(),
             };
             buffer.set_quality(quality);
             self.buffer = Some(RefCell::new(buffer));

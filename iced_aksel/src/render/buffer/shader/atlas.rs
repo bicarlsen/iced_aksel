@@ -1,8 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::OnceLock};
 
 use etagere::AtlasAllocator;
 use iced_graphics::text::cosmic_text::{CacheKey, FontSystem, Placement, SwashCache, SwashContent};
 use iced_wgpu::wgpu;
+
+const LABEL_ATLAS_TEXTURE: &str = "Aksel Font Atlas";
+const ATLAS_SIZE: u32 = 1024;
+const WHITE_PIXEL: [u8; 4] = [255, 255, 255, 255];
+static WHITE_PIXEL_UV: OnceLock<[f32; 2]> = OnceLock::new();
 
 #[derive(Clone, Copy)]
 pub struct AtlasGlyph {
@@ -11,27 +16,23 @@ pub struct AtlasGlyph {
     uv_br: [f32; 2],
 }
 
-pub struct FontAtlas {
+pub struct TextureAtlas {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
-    pub width: u32,
-    pub height: u32,
-
     pub(crate) allocator: AtlasAllocator,
-
     cache: HashMap<CacheKey, AtlasGlyph>,
 }
 
-impl FontAtlas {
-    pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+impl TextureAtlas {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let size = wgpu::Extent3d {
-            width,
-            height,
+            width: ATLAS_SIZE,
+            height: ATLAS_SIZE,
             depth_or_array_layers: 1,
         };
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Aksel font altas"),
+            label: Some(LABEL_ATLAS_TEXTURE),
             size,
             mip_level_count: 1,
             sample_count: 1,
@@ -42,13 +43,34 @@ impl FontAtlas {
         });
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let allocator = AtlasAllocator::new(etagere::size2(width as i32, height as i32));
+        let mut allocator =
+            AtlasAllocator::new(etagere::size2(ATLAS_SIZE as i32, ATLAS_SIZE as i32));
+
+        // Write texture used for drawing shapes (A single white pixel)
+        let _ = allocator.allocate(etagere::size2(1, 1)).unwrap();
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &WHITE_PIXEL,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: None,
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
 
         Self {
             texture,
             view,
-            width,
-            height,
             allocator,
             cache: HashMap::new(),
         }
@@ -119,10 +141,10 @@ impl FontAtlas {
         );
 
         // Calculate UVs
-        let u_min = p_min.x as f32 / self.width as f32;
-        let v_min = p_min.y as f32 / self.height as f32;
-        let u_max = (p_min.x as f32 + width as f32) / self.width as f32;
-        let v_max = (p_min.y as f32 + height as f32) / self.height as f32;
+        let u_min = p_min.x as f32 / ATLAS_SIZE as f32;
+        let v_min = p_min.y as f32 / ATLAS_SIZE as f32;
+        let u_max = (p_min.x as f32 + width as f32) / ATLAS_SIZE as f32;
+        let v_max = (p_min.y as f32 + height as f32) / ATLAS_SIZE as f32;
 
         let result = AtlasGlyph {
             placement: image.placement,
@@ -133,5 +155,12 @@ impl FontAtlas {
         self.cache.insert(key, result);
 
         Some(result)
+    }
+
+    pub fn get_white_pixel_uv() -> [f32; 2] {
+        *WHITE_PIXEL_UV.get_or_init(|| {
+            let x = 0.5 / ATLAS_SIZE as f32;
+            [x, x]
+        })
     }
 }
