@@ -18,11 +18,11 @@ derive_more.workspace = true
 derivative.workspace = true
 earcutr.workspace = true
 etagere.workspace = true
-iced_core = "0.14"
-iced_graphics = { version = "0.14", features = ["geometry"] }
-iced_renderer = { version = "0.14", default-features = false, features = ["wgpu", "geometry", "wayland"] }
-iced_wgpu = "0.14"
-# iced_tiny_skia = "0.14"
+iced_core.workspace = true
+iced_graphics.workspace = true
+iced_renderer.workspace = true
+iced_wgpu.workspace = true
+iced_tiny_skia.workspace = true
 image.workspace = true
 indexmap.workspace = true
 lyon_tessellation.workspace = true

@@ -91,7 +91,7 @@ pub use crate::render::{LineArrows, LineExtensions};
 ///     }
 /// }
 /// ```
-pub trait Shape<D, Renderer>
+pub trait Shape<D, Renderer = iced_renderer::Renderer>
 where
     D: Float,
     Renderer: crate::Renderer,

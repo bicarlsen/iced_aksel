@@ -41,8 +41,6 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
         Self::Shader(Box::new(ShaderBatcher::new()))
     }
 
-    /// Flush all backends - works with any renderer
-    /// Uses runtime dispatch for shader backend (WGPU only)
     pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle, with_damage: bool)
     where
         Renderer: 'static, // Required for downcasting
@@ -55,14 +53,15 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
                 buf.flush(renderer, clip_bounds);
             }
             Self::Shader(buf) => {
-                // Shader buffers are only created for WGPU renderers (see memory.rs)
                 // Downcast to the concrete WGPU renderer type
                 let any_renderer = renderer as &mut dyn Any;
-                if let Some(wgpu_renderer) = any_renderer.downcast_mut::<iced_wgpu::Renderer>() {
-                    buf.flush(wgpu_renderer, clip_bounds);
+                if let Some(renderer) = any_renderer.downcast_mut::<iced_renderer::Renderer>() {
+                    buf.flush(renderer, clip_bounds);
                 } else {
                     // This should never happen if buffer creation logic is correct
-                    panic!("Shader buffer was created for non-WGPU renderer! Backend selection bug.");
+                    panic!(
+                        "Shader buffer was created for non-WGPU renderer! Backend selection bug."
+                    );
                 }
             }
         }

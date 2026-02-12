@@ -59,7 +59,7 @@ pub struct DragDelta {
 ///     }
 /// }
 /// ```
-pub trait PlotData<D, R, Theme = iced_core::Theme>
+pub trait PlotData<D, R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
     D: Float,
     R: crate::Renderer,
@@ -73,7 +73,7 @@ where
 /// Internal rendering context for shapes.
 ///
 /// Manages layer ordering and buffering for efficient rendering.
-pub struct Context<'a, D: Float, Renderer: crate::Renderer> {
+pub struct Context<'a, D: Float, Renderer: crate::Renderer = iced_renderer::Renderer> {
     transform: &'a Transform<'a, D, f32, f32>,
     clip_bounds: &'a iced_core::Rectangle,
     renderer: &'a mut Renderer,
@@ -108,7 +108,7 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
 ///
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
-pub struct Plot<'a, D: Float, R: crate::Renderer> {
+pub struct Plot<'a, D: Float, R: crate::Renderer = iced_renderer::Renderer> {
     context: Context<'a, D, R>,
 }
 

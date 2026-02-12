@@ -2,6 +2,8 @@ mod buffer;
 mod primitive;
 mod text;
 
+use std::any::Any;
+
 pub use buffer::RenderBuffer;
 pub use primitive::{LineArrows, LineExtensions, Primitive};
 pub use text::Text;
@@ -92,8 +94,6 @@ impl Renderer for iced_wgpu::Renderer {
 }
 
 // Implementation for tiny_skia renderer
-// Note: Only enabled when tiny-skia feature is active
-#[cfg(feature = "tiny-skia")]
 impl Renderer for iced_tiny_skia::Renderer {
     fn preffered_backend(&self) -> Backend {
         Backend::Path
