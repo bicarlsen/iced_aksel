@@ -2,8 +2,8 @@ use super::Primitive;
 
 use crate::stroke::{ResolvedStroke, StrokeStyle};
 use iced_core::alignment::{Horizontal, Vertical};
-use iced_core::text::{LineHeight, Shaping};
-use iced_core::{Point, Rectangle, Size, Vector};
+use iced_core::text::Shaping;
+use iced_core::{Point, Rectangle, Vector};
 use iced_graphics::geometry::{
     Cache, Frame, LineCap, LineDash, LineJoin, Path, Stroke, Style, Text,
 };
@@ -46,12 +46,12 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
         clip_bounds: &Rectangle,
         with_damage: bool,
     ) {
-        if !with_damage {
-            return;
+        if with_damage {
+            self.cache.clear();
         }
 
-        self.cache.clear();
-
+        // No matter what, if the buffer is empty, we should never draw - This means no primitives
+        // was added.
         if !self.buffer.is_empty() {
             let primitives =
                 std::mem::replace(&mut self.buffer, Vec::with_capacity(PRE_ALLOC_PATHS));
@@ -129,7 +129,7 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
                         line_height,
                         font,
                         align_x: horizontal_alignment.into(),
-                        align_y: vertical_alignment.into(),
+                        align_y: vertical_alignment,
                         shaping: Shaping::Advanced,
                         max_width,
                     });
