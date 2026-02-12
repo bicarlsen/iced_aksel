@@ -46,9 +46,11 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
         clip_bounds: &Rectangle,
         with_damage: bool,
     ) {
-        if with_damage {
-            self.cache.clear();
+        if !with_damage {
+            return;
         }
+
+        self.cache.clear();
 
         if !self.buffer.is_empty() {
             let primitives =

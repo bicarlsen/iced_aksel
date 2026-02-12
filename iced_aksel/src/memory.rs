@@ -1,18 +1,22 @@
-use std::cell::{RefCell, RefMut};
+use std::{
+    cell::{RefCell, RefMut},
+    u64,
+};
 
 use super::Action;
 use crate::{
-    Quality,
+    CacheSignature, Quality,
     render::{Backend, RenderBuffer},
 };
 
-use iced_core::mouse;
+use iced_core::{Point, Rectangle, Size, mouse};
 
 /// Internal chart memory
 pub struct Memory<AxisId, Renderer: crate::Renderer> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
     pub buffer: Option<RefCell<RenderBuffer<Renderer>>>,
+    pub last_signature: CacheSignature,
 }
 
 impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
@@ -21,6 +25,11 @@ impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
             action: Action::default(),
             previous_click: None,
             buffer: None,
+            last_signature: CacheSignature {
+                state_version: u64::MAX,
+                layout_bounds: Rectangle::new(Point::new(0., 0.), Size::ZERO),
+                layers: vec![],
+            },
         }
     }
 

@@ -39,7 +39,7 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
                 buf.flush(renderer, clip_bounds, with_damage);
             }
             Self::Mesh(buf) => {
-                buf.flush(renderer, clip_bounds);
+                buf.flush(renderer, clip_bounds, with_damage);
             }
         }
     }

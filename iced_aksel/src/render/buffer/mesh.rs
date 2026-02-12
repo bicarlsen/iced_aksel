@@ -1,7 +1,7 @@
 use crate::{Quality, render::primitive::Primitive, stroke::StrokeStyle};
 
 use iced_core::{Rectangle, Transformation};
-use iced_graphics::mesh::{Indexed, Mesh, Renderer, SolidVertex2D};
+use iced_graphics::mesh::{Cache, Indexed, Mesh, Renderer, SolidVertex2D};
 
 mod tessellation;
 
@@ -15,13 +15,10 @@ const PRE_ALLOC_INDICES: usize = 20_000;
 /// This struct holds the actual vertex and index buffers, separated from the
 /// tessellation logic. This allows the tessellator to operate on the data
 /// without borrowing conflicts.
+#[derive(Default)]
 pub struct MeshData {
     /// The actual data awaiting upload to the GPU.
     buffer: Option<Indexed<SolidVertex2D>>,
-
-    // Statistics for the debug overlay
-    total_vertices: usize,
-    total_indices: usize,
 }
 
 impl MeshData {
@@ -49,6 +46,21 @@ impl MeshData {
             indices: Vec::with_capacity(PRE_ALLOC_INDICES),
         })
     }
+
+    pub(crate) fn total_vertices(&self) -> usize {
+        if let Some(buf) = &self.buffer {
+            return buf.vertices.len();
+        };
+        0
+    }
+
+    pub(crate) fn to_mesh(self, clip_bounds: Rectangle) -> Option<Mesh> {
+        self.buffer.map(|buffers| Mesh::Solid {
+            buffers,
+            transformation: Transformation::IDENTITY,
+            clip_bounds,
+        })
+    }
 }
 
 /// A simplified container for GPU vertex and index data.
@@ -57,7 +69,8 @@ impl MeshData {
 /// flushing it to the renderer when it exceeds its capacity or when the frame ends.
 pub struct MeshBatcher {
     /// The raw mesh data storage.
-    pub(crate) data: MeshData,
+    pub(crate) buffer: Vec<Primitive>,
+    pub(crate) cached: Option<Cache>,
 
     /// The mesh-tessellation cache/builder.
     pub(crate) tessellator: Tessellator,
@@ -71,11 +84,8 @@ impl MeshBatcher {
     /// Creates a new buffer with a specific soft limit.
     pub fn new(vertex_limit: usize) -> Self {
         Self {
-            data: MeshData {
-                buffer: None,
-                total_vertices: 0,
-                total_indices: 0,
-            },
+            buffer: Vec::new(),
+            cached: None,
             tessellator: Tessellator::new(),
             vertex_limit,
         }
@@ -86,34 +96,6 @@ impl MeshBatcher {
         self.tessellator.set_quality(quality);
     }
 
-    /// Returns the number of vertices currently sitting in the pending buffer.
-    pub const fn vertices_count(&self) -> usize {
-        if let Some(buffer) = &self.data.buffer {
-            return buffer.vertices.len();
-        }
-        0
-    }
-
-    /// Returns the total vertices processed this frame (flushed + pending).
-    pub const fn total_vertices(&self) -> usize {
-        let current = if let Some(b) = &self.data.buffer {
-            b.vertices.len()
-        } else {
-            0
-        };
-        self.data.total_vertices + current
-    }
-
-    /// Returns the total indices processed this frame (flushed + pending).
-    pub const fn total_indices(&self) -> usize {
-        let current = if let Some(b) = &self.data.buffer {
-            b.indices.len()
-        } else {
-            0
-        };
-        self.data.total_indices + current
-    }
-
     /// Returns the soft limit configured for this buffer.
     pub const fn limit(&self) -> usize {
         self.vertex_limit
@@ -122,32 +104,42 @@ impl MeshBatcher {
     /// Flushes the pending geometry to the `iced` renderer.
     ///
     /// This consumes the current internal buffer and resets it.
-    pub(crate) fn flush<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
+    pub(crate) fn flush<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle, with_damage: bool)
     where
         R: Renderer,
     {
-        // We `take()` the buffer, effectively clearing it from `self`.
-        if let Some(buffer) = self.data.buffer.take() {
-            if buffer.indices.is_empty() {
-                return;
-            }
+        if with_damage {
+            self.cached = None;
+        }
 
-            let v_count = buffer.vertices.len();
-            let i_count = buffer.indices.len();
-
-            self.data.total_vertices += v_count;
-            self.data.total_indices += i_count;
-
-            renderer.draw_mesh(Mesh::Solid {
-                buffers: buffer,
-                transformation: Transformation::IDENTITY,
-                clip_bounds: *clip_bounds,
+        if !self.buffer.is_empty() && self.cached.is_none() {
+            let primitives = std::mem::replace(&mut self.buffer, Vec::new());
+            let mut meshes = Vec::new();
+            let mut current_buffer = MeshData::default();
+            primitives.into_iter().for_each(|primitive| {
+                Self::draw_primitive(&mut current_buffer, primitive, &mut self.tessellator);
+                if current_buffer.total_vertices() > self.vertex_limit {
+                    let buf = std::mem::replace(&mut current_buffer, MeshData::default());
+                    if let Some(mesh) = buf.to_mesh(*clip_bounds) {
+                        meshes.push(mesh);
+                    }
+                }
             });
+
+            self.cached = Some(Cache::new(meshes.into()));
+        }
+
+        if let Some(cached) = self.cached.clone() {
+            renderer.draw_mesh_cache(cached);
         }
     }
 
-    /// Renders a primitive into this mesh buffer using the tessellator.
     pub fn add_primitive(&mut self, primitive: Primitive) {
+        self.buffer.push(primitive);
+    }
+
+    /// Renders a primitive into this mesh buffer using the tessellator.
+    fn draw_primitive(buffer: &mut MeshData, primitive: Primitive, tessellator: &mut Tessellator) {
         match primitive {
             Primitive::Rectangle {
                 xy1: min,
@@ -155,15 +147,7 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                self.tessellator.draw_rectangle(
-                    &mut self.data,
-                    min.x,
-                    min.y,
-                    max.x,
-                    max.y,
-                    fill,
-                    stroke,
-                );
+                tessellator.draw_rectangle(buffer, min.x, min.y, max.x, max.y, fill, stroke);
             }
             Primitive::Ellipse {
                 center,
@@ -171,22 +155,14 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                self.tessellator
-                    .draw_ellipse(&mut self.data, center, radius, fill, stroke);
+                tessellator.draw_ellipse(buffer, center, radius, fill, stroke);
             }
             Primitive::Triangle {
                 points,
                 fill,
                 stroke,
             } => {
-                self.tessellator.draw_triangle(
-                    &mut self.data,
-                    points[0],
-                    points[1],
-                    points[2],
-                    fill,
-                    stroke,
-                );
+                tessellator.draw_triangle(buffer, points[0], points[1], points[2], fill, stroke);
             }
             Primitive::Polygon {
                 center,
@@ -196,15 +172,7 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                self.tessellator.draw_polygon(
-                    &mut self.data,
-                    center,
-                    radius,
-                    vertices,
-                    rotation,
-                    fill,
-                    stroke,
-                );
+                tessellator.draw_polygon(buffer, center, radius, vertices, rotation, fill, stroke);
             }
             Primitive::Line {
                 start,
@@ -214,15 +182,7 @@ impl MeshBatcher {
                 extensions,
                 arrows,
             } => {
-                self.tessellator.draw_line(
-                    &mut self.data,
-                    start,
-                    end,
-                    stroke,
-                    clip_bounds,
-                    extensions,
-                    arrows,
-                );
+                tessellator.draw_line(buffer, start, end, stroke, clip_bounds, extensions, arrows);
             }
             Primitive::HorizontalLine {
                 y,
@@ -233,7 +193,7 @@ impl MeshBatcher {
             } => match stroke.style {
                 StrokeStyle::Solid => {
                     linear::draw_horizontal_line(
-                        &mut self.data,
+                        buffer,
                         x_start,
                         x_end,
                         y,
@@ -243,7 +203,7 @@ impl MeshBatcher {
                     );
                 }
                 StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
-                    &mut self.data,
+                    buffer,
                     x_start,
                     x_end,
                     y,
@@ -264,7 +224,7 @@ impl MeshBatcher {
             } => match stroke.style {
                 StrokeStyle::Solid => {
                     linear::draw_vertical_line(
-                        &mut self.data,
+                        buffer,
                         x,
                         y_start,
                         y_end,
@@ -274,7 +234,7 @@ impl MeshBatcher {
                     );
                 }
                 StrokeStyle::Dashed { dash, gap } => linear::draw_vertical_dashed_line(
-                    &mut self.data,
+                    buffer,
                     x,
                     y_start,
                     y_end,
@@ -293,14 +253,7 @@ impl MeshBatcher {
                 extensions,
                 arrows,
             } => {
-                self.tessellator.draw_polyline(
-                    &mut self.data,
-                    points,
-                    stroke,
-                    clip_bounds,
-                    extensions,
-                    arrows,
-                );
+                tessellator.draw_polyline(buffer, points, stroke, clip_bounds, extensions, arrows);
             }
             Primitive::BezierCurve {
                 start,
@@ -309,22 +262,14 @@ impl MeshBatcher {
                 control_2,
                 stroke,
             } => {
-                self.tessellator.draw_bezier(
-                    &mut self.data,
-                    start,
-                    control_1,
-                    control_2,
-                    end,
-                    stroke,
-                );
+                tessellator.draw_bezier(buffer, start, control_1, control_2, end, stroke);
             }
             Primitive::Spline {
                 points,
                 stroke,
                 tension,
             } => {
-                self.tessellator
-                    .draw_spline(&mut self.data, points, stroke, tension);
+                tessellator.draw_spline(buffer, points, stroke, tension);
             }
             Primitive::Arc {
                 center,
@@ -335,8 +280,8 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                self.tessellator.draw_arc(
-                    &mut self.data,
+                tessellator.draw_arc(
+                    buffer,
                     center.x,
                     center.y,
                     radius_inner,
@@ -352,8 +297,7 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                self.tessellator
-                    .draw_area(&mut self.data, &points, fill, stroke);
+                tessellator.draw_area(buffer, &points, fill, stroke);
             }
             Primitive::Text {
                 font,
@@ -371,10 +315,10 @@ impl MeshBatcher {
             } => {
                 let tolerance = quality
                     .map(|q| q.max(0.001))
-                    .unwrap_or_else(|| self.tessellator.text_tolerance());
+                    .unwrap_or_else(|| tessellator.text_tolerance());
 
-                self.tessellator.draw_text(
-                    &mut self.data,
+                tessellator.draw_text(
+                    buffer,
                     crate::render::text::Text {
                         font,
                         content,

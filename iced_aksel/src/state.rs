@@ -33,6 +33,7 @@ use crate::Axis;
 #[derivative(Debug)]
 pub struct State<AxisId: Hash + Eq, Domain, Theme = iced_core::Theme> {
     axes: IndexMap<AxisId, Axis<Domain, Theme>>,
+    version: u64,
 }
 
 impl<AxisId, D, Theme> State<AxisId, D, Theme>
@@ -46,7 +47,18 @@ where
     pub fn new() -> Self {
         Self {
             axes: IndexMap::new(),
+            version: 0,
         }
+    }
+
+    /// Returns the current version of the State
+    pub(crate) fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// Increments the version of the State
+    const fn increment_version(&mut self) {
+        self.version = self.version.wrapping_add(1);
     }
 
     /// Builder-style method to add an axis during construction.
@@ -60,6 +72,7 @@ where
     ///     .with_axis("y", Axis::new(Linear::new(0.0, 100.0), axis::Position::Left));
     /// ```
     pub fn with_axis(mut self, id: impl Into<AxisId>, axis: Axis<D, Theme>) -> Self {
+        self.increment_version();
         self.axes.insert(id.into(), axis);
         self
     }
@@ -85,6 +98,7 @@ where
         id: impl Into<AxisId>,
         axis: Axis<D, Theme>,
     ) -> Option<Axis<D, Theme>> {
+        self.increment_version();
         self.axes.insert(id.into(), axis)
     }
 
@@ -92,6 +106,7 @@ where
     ///
     /// Returns the removed axis if it existed.
     pub fn remove_axis(&mut self, id: &AxisId) -> Option<Axis<D, Theme>> {
+        self.increment_version();
         self.axes.swap_remove(id)
     }
 
@@ -147,6 +162,7 @@ where
     /// state.axis_mut(&"x").pan(0.1);
     /// ```
     pub fn axis_mut_opt(&mut self, id: &AxisId) -> Option<&mut Axis<D, Theme>> {
+        self.increment_version();
         self.axes.get_mut(id)
     }
 
@@ -154,6 +170,7 @@ where
     ///
     /// Panics if the axis doesn't exist.
     pub fn axis_mut(&mut self, id: &AxisId) -> &mut Axis<D, Theme> {
+        self.increment_version();
         self.axes.get_mut(id).unwrap()
     }
 
@@ -161,6 +178,7 @@ where
     ///
     /// Useful when you need to modify multiple axes simultaneously.
     pub fn axes_iter_mut(&mut self) -> IterMut<'_, AxisId, Axis<D, Theme>> {
+        self.increment_version();
         self.axes.iter_mut()
     }
 
@@ -175,11 +193,13 @@ where
 
     /// Returns a mutable reference to the internal axis map.
     pub const fn axes_mut(&mut self) -> &mut IndexMap<AxisId, Axis<D, Theme>> {
+        self.increment_version();
         &mut self.axes
     }
 
     /// Removes all axes except those in the provided list.
     pub fn retain_axes(&mut self, active_axes: &[AxisId]) {
+        self.increment_version();
         self.axes.retain(|k, _| active_axes.contains(k));
     }
 
@@ -209,6 +229,7 @@ where
         normalized_delta_x: f32,
         normalized_delta_y: f32,
     ) {
+        self.increment_version();
         if let Some(axis) = self.axes.get_mut(&x_scale) {
             axis.pan(normalized_delta_x);
         }
@@ -239,6 +260,7 @@ where
         y_anchor_norm: f32,
         factor: f32,
     ) {
+        self.increment_version();
         if let Some(axis) = self.axes.get_mut(&x_scale) {
             axis.zoom(factor, Some(x_anchor_norm));
         }
@@ -258,6 +280,7 @@ where
     /// state.set_domain(&"x", 0.0, 200.0);
     /// ```
     pub fn set_domain(&mut self, id: &AxisId, min: D, max: D) {
+        self.increment_version();
         if let Some(axis) = self.axes.get_mut(id) {
             axis.set_domain(min, max);
         }
