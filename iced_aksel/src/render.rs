@@ -67,7 +67,6 @@ pub trait Renderer<Font = iced_core::Font>:
     + iced_core::text::Renderer<Font = Font>
     + iced_graphics::geometry::Renderer
     + iced_graphics::mesh::Renderer
-    + iced_wgpu::primitive::Renderer
 {
     fn preffered_backend(&self) -> Backend;
 }
@@ -85,14 +84,18 @@ where
     }
 }
 
+// Implementation for WGPU renderer
 impl Renderer for iced_wgpu::Renderer {
     fn preffered_backend(&self) -> Backend {
         Backend::Shader
     }
 }
 
-// impl Renderer for iced_tiny_skia::Renderer {
-//     fn preffered_backend(&self) -> Backend {
-//         Backend::Path
-//     }
-// }
+// Implementation for tiny_skia renderer
+// Note: Only enabled when tiny-skia feature is active
+#[cfg(feature = "tiny-skia")]
+impl Renderer for iced_tiny_skia::Renderer {
+    fn preffered_backend(&self) -> Backend {
+        Backend::Path
+    }
+}

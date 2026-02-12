@@ -12,6 +12,7 @@
 
 use super::{Primitive, Quality};
 use iced_core::Rectangle;
+use std::any::Any;
 
 mod mesh;
 mod path;
@@ -40,7 +41,12 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
         Self::Shader(Box::new(ShaderBatcher::new()))
     }
 
-    pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle, with_damage: bool) {
+    /// Flush all backends - works with any renderer
+    /// Uses runtime dispatch for shader backend (WGPU only)
+    pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle, with_damage: bool)
+    where
+        Renderer: 'static, // Required for downcasting
+    {
         match self {
             Self::Path(buf) => {
                 buf.flush(renderer, clip_bounds, with_damage);
@@ -49,7 +55,15 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
                 buf.flush(renderer, clip_bounds);
             }
             Self::Shader(buf) => {
-                buf.flush(renderer, clip_bounds);
+                // Shader buffers are only created for WGPU renderers (see memory.rs)
+                // Downcast to the concrete WGPU renderer type
+                let any_renderer = renderer as &mut dyn Any;
+                if let Some(wgpu_renderer) = any_renderer.downcast_mut::<iced_wgpu::Renderer>() {
+                    buf.flush(wgpu_renderer, clip_bounds);
+                } else {
+                    // This should never happen if buffer creation logic is correct
+                    panic!("Shader buffer was created for non-WGPU renderer! Backend selection bug.");
+                }
             }
         }
     }

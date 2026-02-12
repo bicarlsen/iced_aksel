@@ -81,8 +81,7 @@
 use aksel::ScreenRect;
 use derive_more::{Display, Error};
 use iced_core::{
-    Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Point, Rectangle, Shell, Size,
-    Widget,
+    Color, Element, Event, Font, Layout, Length, Padding, Point, Rectangle, Shell, Size, Widget,
     layout::{self, Limits, Node},
     mouse::{self, ScrollDelta},
     renderer::Style,
@@ -210,7 +209,7 @@ pub struct Chart<
     Domain,
     Message,
     Theme = iced_core::Theme,
-    Renderer = iced_renderer::Renderer,
+    Renderer = iced_wgpu::Renderer,
 > where
     AxisId: Hash + Eq + Clone + Debug,
     Domain: Float,
@@ -1016,7 +1015,7 @@ where
         layout: layout::Layout<'_>,
         cursor: mouse::Cursor,
         renderer: &Renderer,
-        _clipboard: &mut dyn Clipboard,
+        _clipboard: &mut dyn iced_core::Clipboard,
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {

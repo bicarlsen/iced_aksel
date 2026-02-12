@@ -1,5 +1,6 @@
 use crate::render::Primitive;
 use iced_core::Rectangle;
+use iced_wgpu::primitive::Renderer as PrimitiveRenderer;
 
 mod atlas;
 mod data;
@@ -15,9 +16,12 @@ impl ShaderBatcher {
         Self { mesh: None }
     }
 
-    pub fn flush<R: crate::Renderer>(&mut self, renderer: &mut R, clip_bounds: &Rectangle) {
+    /// Flush shader primitives using the WGPU renderer
+    /// This only works with iced_wgpu::Renderer specifically
+    pub fn flush(&mut self, renderer: &mut iced_wgpu::Renderer, clip_bounds: &Rectangle) {
         if let Some(primitive) = self.mesh.take() {
-            renderer.draw_primitive(*clip_bounds, primitive);
+            // Use the primitive::Renderer trait method
+            PrimitiveRenderer::draw_primitive(renderer, *clip_bounds, primitive);
         }
     }
 
