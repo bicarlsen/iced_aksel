@@ -1,7 +1,4 @@
-use std::{
-    cell::{RefCell, RefMut},
-    u64,
-};
+use std::cell::{RefCell, RefMut};
 
 use super::Action;
 use crate::{
@@ -34,7 +31,7 @@ impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
             buffer.borrow_mut().set_quality(quality);
         } else {
             let mut buffer = match renderer.preffered_backend() {
-                Backend::Mesh => RenderBuffer::new_mesh(100_000),
+                Backend::Mesh => RenderBuffer::new_mesh(),
                 Backend::Path => RenderBuffer::new_path(5000),
             };
             buffer.set_quality(quality);

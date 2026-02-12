@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{Quality, render::primitive::Primitive, stroke::StrokeStyle};
 
 use iced_core::{Rectangle, Transformation};
@@ -47,14 +49,7 @@ impl MeshData {
         })
     }
 
-    pub(crate) fn total_vertices(&self) -> usize {
-        if let Some(buf) = &self.buffer {
-            return buf.vertices.len();
-        };
-        0
-    }
-
-    pub(crate) fn to_mesh(self, clip_bounds: Rectangle) -> Option<Mesh> {
+    pub(crate) fn into_mesh(self, clip_bounds: Rectangle) -> Option<Mesh> {
         self.buffer.map(|buffers| Mesh::Solid {
             buffers,
             transformation: Transformation::IDENTITY,
@@ -69,36 +64,26 @@ impl MeshData {
 /// flushing it to the renderer when it exceeds its capacity or when the frame ends.
 pub struct MeshBatcher {
     /// The raw mesh data storage.
-    pub(crate) buffer: Vec<Primitive>,
-    pub(crate) cached: Option<Cache>,
+    buffer: Vec<Primitive>,
+    cached: Cache,
 
     /// The mesh-tessellation cache/builder.
     pub(crate) tessellator: Tessellator,
-
-    /// A soft limit for vertices per batch.
-    /// If exceeded, the `Context` (in `plot.rs`) will trigger a flush.
-    vertex_limit: usize,
 }
 
 impl MeshBatcher {
     /// Creates a new buffer with a specific soft limit.
-    pub fn new(vertex_limit: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             buffer: Vec::new(),
-            cached: None,
+            cached: Cache::new(Arc::new([])),
             tessellator: Tessellator::new(),
-            vertex_limit,
         }
     }
 
     /// Sets the quality of the internal renderer
     pub fn set_quality(&mut self, quality: Quality) {
         self.tessellator.set_quality(quality);
-    }
-
-    /// Returns the soft limit configured for this buffer.
-    pub const fn limit(&self) -> usize {
-        self.vertex_limit
     }
 
     /// Flushes the pending geometry to the `iced` renderer.
@@ -108,30 +93,22 @@ impl MeshBatcher {
     where
         R: Renderer,
     {
+        // If the buffer is filled with primitives, and nothing is cached - Rerender the cache
         if with_damage {
-            self.cached = None;
-        }
-
-        if !self.buffer.is_empty() && self.cached.is_none() {
-            let primitives = std::mem::replace(&mut self.buffer, Vec::new());
-            let mut meshes = Vec::new();
-            let mut current_buffer = MeshData::default();
-            primitives.into_iter().for_each(|primitive| {
-                Self::draw_primitive(&mut current_buffer, primitive, &mut self.tessellator);
-                if current_buffer.total_vertices() > self.vertex_limit {
-                    let buf = std::mem::replace(&mut current_buffer, MeshData::default());
-                    if let Some(mesh) = buf.to_mesh(*clip_bounds) {
-                        meshes.push(mesh);
-                    }
-                }
+            let mut buffer = MeshData::default();
+            self.buffer.drain(..).for_each(|primitive| {
+                Self::draw_primitive(&mut buffer, primitive, &mut self.tessellator);
             });
 
-            self.cached = Some(Cache::new(meshes.into()));
+            if let Some(mesh) = buffer.into_mesh(*clip_bounds) {
+                self.cached.update([mesh].into());
+            }
+        } else {
+            // Clear the buffer, but keep the allocated space for next frame
+            self.buffer.clear();
         }
 
-        if let Some(cached) = self.cached.clone() {
-            renderer.draw_mesh_cache(cached);
-        }
+        renderer.draw_mesh_cache(self.cached.clone());
     }
 
     pub fn add_primitive(&mut self, primitive: Primitive) {

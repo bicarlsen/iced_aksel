@@ -25,8 +25,8 @@ pub enum RenderBuffer<Renderer: crate::Renderer> {
 }
 
 impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
-    pub fn new_mesh(limit: usize) -> Self {
-        Self::Mesh(Box::new(MeshBatcher::new(limit)))
+    pub fn new_mesh() -> Self {
+        Self::Mesh(Box::new(MeshBatcher::new()))
     }
 
     pub fn new_path(limit: usize) -> Self {
