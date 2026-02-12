@@ -1,16 +1,15 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use super::atlas::TextureAtlas;
 use super::data::{self, UnifiedVertex};
-use super::pipeline::{AkselPipeline, LABEL_VERTEX_BUFFER};
-use bytemuck::{Pod, Zeroable};
-use iced_core::{Color, text::Shaping};
-use iced_graphics::text::{
-    self,
-    cosmic_text::{Buffer, Metrics},
-    font_system,
-};
+use super::pipeline::AkselPipeline;
+use iced_core::Color;
+use iced_graphics::cache;
 use iced_wgpu::wgpu;
 
 use crate::render::Primitive;
+
+static MESH_VERSION: AtomicU64 = AtomicU64::new(0);
 
 type PackedColor = [f32; 4];
 
@@ -22,15 +21,21 @@ fn pack_color(color: Color) -> PackedColor {
 }
 
 #[derive(Debug)]
-pub struct AkselMesh(Vec<UnifiedVertex>);
+pub struct AkselMesh {
+    vertices: Vec<UnifiedVertex>,
+    version: u64,
+}
 
 impl AkselMesh {
     pub fn new() -> Self {
-        Self(Vec::with_capacity(INIT_CAPACITY))
+        Self {
+            vertices: Vec::with_capacity(INIT_CAPACITY),
+            version: MESH_VERSION.fetch_add(1, Ordering::Relaxed),
+        }
     }
 
     pub fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2]) {
-        self.0.push(UnifiedVertex {
+        self.vertices.push(UnifiedVertex {
             position,
             color,
             uv,
@@ -169,13 +174,17 @@ impl iced_wgpu::Primitive for AkselMesh {
         bounds: &iced_core::Rectangle,
         viewport: &iced_graphics::Viewport,
     ) {
-        let needed_capacity = self.0.len();
+        let needed_capacity = self.vertices.len();
         if needed_capacity > pipeline.vertex_capacity {
-            pipeline.vertex_buffer = data::create_vertex_buffer(device, needed_capacity);
+            pipeline.vertex_buffer = data::create_renderer_vertex_buffer(device, needed_capacity);
             pipeline.vertex_capacity = needed_capacity;
         }
 
-        queue.write_buffer(&pipeline.vertex_buffer, 0, bytemuck::cast_slice(&self.0));
+        queue.write_buffer(
+            &pipeline.vertex_buffer,
+            0,
+            bytemuck::cast_slice(&self.vertices),
+        );
 
         // Update uniform buffer with screen dimensions
         let uniforms = data::Uniforms {
@@ -187,13 +196,72 @@ impl iced_wgpu::Primitive for AkselMesh {
         queue.write_buffer(&pipeline.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
         pipeline.vertex_count = needed_capacity as u32;
+
+        let width = viewport.physical_width();
+        let height = viewport.physical_height();
+
+        if pipeline.cache_texture.is_none() || pipeline.cache_size != (width, height) {
+            let cache_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Aksel Cache Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: pipeline.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+
+            let cache_view = cache_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let cache_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Aksel Cache Bind Group"),
+                layout: &pipeline.blit_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&cache_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&pipeline.sampler),
+                    },
+                ],
+            });
+
+            pipeline.cache_texture = Some(cache_texture);
+            pipeline.cache_view = Some(cache_view);
+            pipeline.cache_bind_group = Some(cache_bind_group);
+            pipeline.cache_size = (width, height);
+            pipeline.cache_version.store(0, Ordering::Relaxed);
+        }
+    }
+
+    fn render(
+        &self,
+        pipeline: &Self::Pipeline,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        _clip_bounds: &iced_core::Rectangle<u32>,
+    ) {
+        if pipeline.vertex_count == 0 {
+            return;
+        }
+
+        // Safety: Always initialized in `prepare` method
+        let cache_view = pipeline.cache_view.as_ref().unwrap();
     }
 
     fn draw(&self, pipeline: &Self::Pipeline, render_pass: &mut wgpu::RenderPass<'_>) -> bool {
-        render_pass.set_pipeline(&pipeline.pipeline);
-        render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
-        render_pass.draw(0..pipeline.vertex_count, 0..1);
-        true // TODO: With caching, this should probably not return true always?
+        // render_pass.set_pipeline(&pipeline.pipeline);
+        // render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
+        // render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
+        // render_pass.draw(0..pipeline.vertex_count, 0..1);
+        false
     }
 }

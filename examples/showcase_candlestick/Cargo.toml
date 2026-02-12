@@ -6,13 +6,13 @@ publish = false
 
 [dependencies]
 chrono.workspace = true
-iced = { version = "0.14", default-features = false, features = ["wgpu", "tokio", "wayland"] }
 rand.workspace = true
+iced.workspace = true
 
 iced_aksel = { path = "../../iced_aksel/" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-iced = { version = "0.14", features = ["web-colors", "thread-pool", "webgl", "fira-sans"] }
+iced = { workspace = true, features = ["web-colors", "thread-pool", "webgl", "fira-sans"] }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [lints]

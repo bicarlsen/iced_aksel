@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use iced_wgpu::wgpu;
 use image::GenericImageView;
 
-use crate::render::buffer::shader::pipeline::LABEL_VERTEX_BUFFER;
+use crate::render::buffer::shader::pipeline::LABEL_RENDERER_VERTEX_BUFFER;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -33,9 +33,12 @@ pub struct Uniforms {
     pub _padding2: f32,
 }
 
-pub fn create_vertex_buffer(device: &wgpu::Device, needed_capacity: usize) -> wgpu::Buffer {
+pub fn create_renderer_vertex_buffer(
+    device: &wgpu::Device,
+    needed_capacity: usize,
+) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(LABEL_VERTEX_BUFFER),
+        label: Some(LABEL_RENDERER_VERTEX_BUFFER),
         size: (needed_capacity * std::mem::size_of::<UnifiedVertex>()) as u64,
         usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
@@ -90,21 +93,20 @@ pub fn create_mini_atlas(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Te
 
 pub fn create_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Uniform Buffer"),
+        label: Some("Aksel Uniform Buffer"),
         size: std::mem::size_of::<Uniforms>() as u64, // 8 bytes (two f32s)
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
 }
 
-pub fn create_pipeline(
+pub fn create_renderer_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     shader_module: &wgpu::ShaderModule,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
-    // 1. Define the "Plug Sockets" (Bind group layout)
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("Uber Shader Layout"),
+        label: Some("Aksel Renderer Bind Group Layout"),
         entries: &[
             // Binding 0: The Uniform Buffer (Screen Size)
             wgpu::BindGroupLayoutEntry {
@@ -139,13 +141,13 @@ pub fn create_pipeline(
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Uber Pipeline Layout"),
+        label: Some("Aksel Renderer Pipeline Layout"),
         bind_group_layouts: &[&bind_group_layout],
         push_constant_ranges: &[],
     });
 
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("My Pipeline"),
+        label: Some("Aksel Renderer Pipeline"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: shader_module,
