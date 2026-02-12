@@ -177,7 +177,7 @@ type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 struct CacheSignature {
     state_version: u64,
     layout_bounds: Rectangle,
@@ -1046,9 +1046,12 @@ where
         };
 
         // Check if we need to redraw
-        if memory.last_signature != current_signature {
+        if memory.last_signature.as_ref() != Some(&current_signature) {
             self.is_damaged = true;
-            memory.last_signature = current_signature;
+            println!("Damage!");
+            println!("Prev: {:#?}", memory.last_signature);
+            println!("New: {:#?}", current_signature);
+            memory.last_signature = Some(current_signature);
         }
 
         // Only handle events if the cursor is near the chart

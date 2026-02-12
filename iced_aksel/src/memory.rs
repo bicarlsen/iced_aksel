@@ -9,14 +9,14 @@ use crate::{
     render::{Backend, RenderBuffer},
 };
 
-use iced_core::{Point, Rectangle, Size, mouse};
+use iced_core::mouse;
 
 /// Internal chart memory
 pub struct Memory<AxisId, Renderer: crate::Renderer> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
     pub buffer: Option<RefCell<RenderBuffer<Renderer>>>,
-    pub last_signature: CacheSignature,
+    pub last_signature: Option<CacheSignature>,
 }
 
 impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
@@ -25,11 +25,7 @@ impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
             action: Action::default(),
             previous_click: None,
             buffer: None,
-            last_signature: CacheSignature {
-                state_version: u64::MAX,
-                layout_bounds: Rectangle::new(Point::new(0., 0.), Size::ZERO),
-                layers: vec![],
-            },
+            last_signature: None,
         }
     }
 

@@ -52,7 +52,7 @@ where
     }
 
     /// Returns the current version of the State
-    pub(crate) fn version(&self) -> u64 {
+    pub(crate) const fn version(&self) -> u64 {
         self.version
     }
 
