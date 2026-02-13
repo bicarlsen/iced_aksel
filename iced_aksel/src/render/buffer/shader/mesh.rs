@@ -18,8 +18,8 @@ const TRANSPARENT: PackedColor = [0., 0., 0., 0.];
 const INIT_CAPACITY: usize = 10_000;
 const LABEL_CACHE_RENDER: &str = "Aksel Cache Render";
 
-fn pack_color(color: Color) -> PackedColor {
-    color.into_linear()
+const fn pack_color(color: Color) -> PackedColor {
+    [color.r, color.g, color.b, color.a]
 }
 
 #[derive(Default)]
@@ -264,40 +264,47 @@ impl iced_wgpu::Primitive for ShaderCache {
         bounds: &iced_core::Rectangle,
         viewport: &iced_graphics::Viewport,
     ) {
-        let mut vertices = VertexBuffer::default();
+        let cached_version = pipeline.cache_version.load(Ordering::Relaxed);
+        let needs_prepare = self.version != cached_version;
 
-        let mut lock = font_system().write().expect("Failed to get font_system");
-        let font_system = lock.raw();
-        self.primitives.iter().for_each(|primitive| {
-            vertices.draw_primitive(
-                primitive,
-                pipeline,
-                queue,
-                font_system,
-                viewport.scale_factor(),
-            )
-        });
-        drop(lock);
+        // Only tessellate and upload if version changed
+        if needs_prepare {
+            let mut vertices = VertexBuffer::default();
 
-        let needed_capacity = vertices.len();
-        if needed_capacity > pipeline.vertex_capacity {
-            pipeline.vertex_buffer = data::create_renderer_vertex_buffer(device, needed_capacity);
-            pipeline.vertex_capacity = needed_capacity;
+            let mut lock = font_system().write().expect("Failed to get font_system");
+            let font_system = lock.raw();
+            self.primitives.iter().for_each(|primitive| {
+                vertices.draw_primitive(
+                    primitive,
+                    pipeline,
+                    queue,
+                    font_system,
+                    viewport.scale_factor(),
+                )
+            });
+            drop(lock);
+
+            let needed_capacity = vertices.len();
+            if needed_capacity > pipeline.vertex_capacity {
+                pipeline.vertex_buffer = data::create_renderer_vertex_buffer(device, needed_capacity);
+                pipeline.vertex_capacity = needed_capacity;
+            }
+
+            queue.write_buffer(&pipeline.vertex_buffer, 0, vertices.as_bytes());
+
+            // Update uniform buffer with screen dimensions
+            let uniforms = data::Uniforms {
+                screen_width: viewport.physical_width() as f32,
+                screen_height: viewport.physical_height() as f32,
+                _padding1: 0.0,
+                _padding2: 0.0,
+            };
+            queue.write_buffer(&pipeline.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+
+            pipeline.vertex_count = needed_capacity as u32;
         }
 
-        queue.write_buffer(&pipeline.vertex_buffer, 0, vertices.as_bytes());
-
-        // Update uniform buffer with screen dimensions
-        let uniforms = data::Uniforms {
-            screen_width: viewport.physical_width() as f32,
-            screen_height: viewport.physical_height() as f32,
-            _padding1: 0.0,
-            _padding2: 0.0,
-        };
-        queue.write_buffer(&pipeline.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
-
-        pipeline.vertex_count = needed_capacity as u32;
-
+        // Always check texture sizes (handles window resize)
         let width = viewport.physical_width();
         let height = viewport.physical_height();
 

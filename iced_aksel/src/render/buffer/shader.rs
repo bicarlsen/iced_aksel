@@ -12,6 +12,7 @@ pub struct ShaderBatcher {
     buffer: Vec<Primitive>,
     cache: mesh::ShaderCache,
     text_buffer: cosmic_text::Buffer,
+    cache_updated: bool, // Track if cache has been updated for current buffer
 }
 
 impl ShaderBatcher {
@@ -23,12 +24,14 @@ impl ShaderBatcher {
             //
             // Proper metrics need to be set when drawing the text
             text_buffer: cosmic_text::Buffer::new_empty(cosmic_text::Metrics::new(1.0, 1.0)),
+            cache_updated: false,
         }
     }
 
     /// Clear the buffer, triggering a redraw
     pub fn clear(&mut self) {
         self.buffer.clear();
+        self.cache_updated = false; // Mark that cache needs updating when buffer is refilled
     }
 
     /// Check if the buffer is empty (Should redraw)
@@ -37,10 +40,11 @@ impl ShaderBatcher {
     }
 
     pub fn draw(&mut self, renderer: &mut impl PrimitiveRenderer, clip_bounds: &Rectangle) {
-        // Invalidate and update cache if the buffer has received new primitives
-        if !self.is_empty() {
+        // Only update cache when buffer was just filled (not already cached)
+        if !self.is_empty() && !self.cache_updated {
             let primitives = self.buffer.clone();
             self.cache.update(primitives.into());
+            self.cache_updated = true;
         }
 
         renderer.draw_primitive(*clip_bounds, self.cache.clone());

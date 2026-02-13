@@ -104,6 +104,7 @@ pub fn create_renderer_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     shader_module: &wgpu::ShaderModule,
+    sample_count: u32,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Aksel Renderer Bind Group Layout"),
@@ -195,7 +196,7 @@ pub fn create_renderer_pipeline(
         },
         depth_stencil: None,
         multisample: wgpu::MultisampleState {
-            count: 1,
+            count: sample_count,
             mask: !0,
             alpha_to_coverage_enabled: false,
         },

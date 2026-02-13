@@ -86,8 +86,9 @@ impl Pipeline for AkselPipeline {
         // Init text caches
         let atlas = TextureAtlas::new(device, queue);
 
+        // Use the iced-provided format for all rendering to avoid color space conversion issues
         let (pipeline, bind_group_layout) =
-            data::create_renderer_pipeline(device, format, &shader_module);
+            data::create_renderer_pipeline(device, format, &shader_module, MSAA_SAMPLE_COUNT);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(LABEL_RENDERER_BIND_GROUP),
             layout: &bind_group_layout,
@@ -162,11 +163,7 @@ impl Pipeline for AkselPipeline {
             }),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: MSAA_SAMPLE_COUNT,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
+            multisample: wgpu::MultisampleState::default(), // No MSAA for blit (count: 1)
             multiview: None,
             cache: None,
         });
@@ -187,7 +184,7 @@ impl Pipeline for AkselPipeline {
             vertex_capacity: VERTEX_BUFFER_INIT_CAPACITY,
 
             sample_count: MSAA_SAMPLE_COUNT,
-            format: MSAA_FORMAT,
+            format, // Use iced format for all textures to avoid color space issues
             msaa_view: None,
             msaa_texture: None,
 
@@ -197,7 +194,7 @@ impl Pipeline for AkselPipeline {
             cache_size: (0, 0),
             cache_version: AtomicU64::new(0),
 
-            blit_pipeline,
+            blit_pipeline, // Uses same format as renderer for consistent color space
             blit_bind_group_layout,
         }
     }
