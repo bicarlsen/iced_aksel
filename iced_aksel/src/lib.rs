@@ -86,7 +86,6 @@ use iced_core::{
     layout::{self, Limits, Node},
     mouse::{self, ScrollDelta},
     renderer::Style,
-    text::{LineHeight, Shaping, Wrapping},
     touch,
     widget::{Tree, tree},
 };
@@ -111,6 +110,7 @@ pub mod stroke;
 pub mod style;
 
 pub use axis::Axis;
+pub use layer::{Cached, NEXT_LAYER_ID};
 pub use measure::Measure;
 pub use plot::{Plot, PlotData};
 pub use render::{Quality, Renderer};
@@ -177,6 +177,13 @@ type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
 
+#[derive(Debug, PartialEq)]
+struct CacheSignature {
+    state_version: u64,
+    layout_bounds: Rectangle,
+    layers: Vec<(Option<u64>, u64)>,
+}
+
 /// The main charting widget that renders axes and plot data.
 ///
 /// `Chart` manages the layout and rendering of axes, grid lines, and data layers.
@@ -227,7 +234,7 @@ pub struct Chart<
     padding: Padding,
     quality: Quality,
     markers: Vec<MarkerRequest<'a, AxisId, Domain, Theme>>,
-    damaged: bool,
+    is_damaged: bool,
 
     // Fonts
     axis_font: Option<Font>,
@@ -277,7 +284,7 @@ where
             padding: Padding::new(0.),
             quality: Quality::Medium,
             markers: Vec::with_capacity(state.axes().len()),
-            damaged: false,
+            is_damaged: false,
 
             // Handlers and fonts default to None
             axis_font: None,
@@ -326,11 +333,6 @@ where
     /// Sets the font used to render the [`Axis`] labels and [`axis::Marker`]
     pub const fn axes_font(mut self, font: Font) -> Self {
         self.axis_font = Some(font);
-        self
-    }
-
-    pub const fn damage(mut self, damage: bool) -> Self {
-        self.damaged = damage;
         self
     }
 
@@ -1032,6 +1034,26 @@ where
             return;
         }
 
+        // Construct current cache signature
+        let current_signature = CacheSignature {
+            state_version: self.state.version(),
+            layout_bounds: layout.bounds(),
+            layers: self
+                .layers
+                .iter()
+                .map(|l| (l.items.id(), l.items.version()))
+                .collect(),
+        };
+
+        // Check if we need to redraw
+        if memory.last_signature.as_ref() != Some(&current_signature) {
+            self.is_damaged = true;
+            println!("Damage!");
+            println!("Prev: {:#?}", memory.last_signature);
+            println!("New: {:#?}", current_signature);
+            memory.last_signature = Some(current_signature);
+        }
+
         // Only handle events if the cursor is near the chart
         let bounds = layout.bounds();
         if cursor.position_over(bounds).is_none() {
@@ -1196,44 +1218,7 @@ where
         //     );
         // }
 
-        // 5. Draw Debug Overlay (if enabled)
-        if self.debug
-            && let RenderBuffer::Mesh(mesh_buffer) = &*buffer
-        {
-            renderer.start_layer(bounds);
-
-            let v_count = mesh_buffer.total_vertices();
-            let i_count = mesh_buffer.total_indices();
-
-            // Color Coding: Green (Good), Yellow (Heavy), Red (Critical)
-            let color = if v_count < 50_000 {
-                Color::from_rgb(0.0, 0.7, 0.0) // Dark Green
-            } else if v_count < 200_000 {
-                Color::from_rgb(0.9, 0.7, 0.0) // Orange/Yellow
-            } else {
-                Color::from_rgb(0.9, 0.0, 0.0) // Red
-            };
-
-            let text_content = format!("Vertices: {} | Indices: {}", v_count, i_count);
-            let position = [bounds.x + 10.0, bounds.y + 10.0];
-
-            let text = iced_core::Text {
-                content: text_content,
-                bounds: Size::new(500., 500.),
-                size: 32.into(),
-                line_height: LineHeight::default(),
-                font: renderer.default_font(),
-                align_x: iced_core::text::Alignment::Left,
-                align_y: iced_core::alignment::Vertical::Top,
-                shaping: Shaping::Basic,
-                wrapping: Wrapping::None,
-            };
-
-            renderer.fill_text(text, position.into(), color, bounds);
-            renderer.end_layer();
-        }
-
-        buffer.flush(renderer, &bounds, self.damaged);
+        buffer.flush(renderer, &bounds, self.is_damaged);
     }
 }
 

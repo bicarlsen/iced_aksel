@@ -5,7 +5,7 @@ use iced::{
     widget::{column, container},
 };
 use iced_aksel::{
-    Axis, Chart, Measure, PlotPoint, Quality, State, Stroke,
+    Axis, Cached, Chart, Measure, PlotPoint, Quality, State, Stroke,
     axis::{self},
     plot::{Plot, PlotData},
     scale::Linear,
@@ -31,7 +31,7 @@ fn main() -> iced::Result {
 // -----------------------------------------------------------------------------
 struct GridTestApp {
     chart_state: State<&'static str, f64>,
-    data: GridData,
+    data: Cached<GridData>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,7 +57,7 @@ impl GridTestApp {
         (
             Self {
                 chart_state: state,
-                data: GridData {},
+                data: Cached::new(GridData {}),
             },
             iced::Task::none(),
         )

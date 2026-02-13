@@ -29,8 +29,8 @@ pub enum RenderBuffer<Renderer: crate::Renderer> {
 }
 
 impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
-    pub fn new_mesh(limit: usize) -> Self {
-        Self::Mesh(Box::new(MeshBatcher::new(limit)))
+    pub fn new_mesh() -> Self {
+        Self::Mesh(Box::new(MeshBatcher::new()))
     }
 
     pub fn new_path(limit: usize) -> Self {
@@ -50,7 +50,7 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
                 buf.flush(renderer, clip_bounds, with_damage);
             }
             Self::Mesh(buf) => {
-                buf.flush(renderer, clip_bounds);
+                buf.flush(renderer, clip_bounds, with_damage);
             }
             Self::Shader(buf) => {
                 // Downcast to the concrete WGPU renderer type

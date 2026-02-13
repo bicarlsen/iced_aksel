@@ -1,10 +1,9 @@
-use std::cell::RefCell;
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use chrono::{Datelike, TimeZone, Timelike};
 use iced::mouse::ScrollDelta;
 use iced_aksel::{
-    Axis, Chart, Measure, State,
+    Axis, Cached, Chart, Measure, State,
     axis::{MarkerPosition, Position, TickContext, TickResult},
     plot::DragDelta,
     scale::Linear,
@@ -108,19 +107,18 @@ pub struct CandlestickChart {
     pub settings: ChartSettings,
     /// The raw candle data, mapped by timestamp.
     data: BTreeMap<i64, Candle>,
-    damaged: RefCell<bool>,
 
     /// The single state managing all axes (X, Y-Price, Y-Volume).
     pub state: State<AxisId, f64>,
 
     /// Items for price candlesticks (X -> Y_AXIS_ID).
-    candle_items: CandleItems,
+    candle_items: Cached<CandleItems>,
     /// Items for volume bars (X -> Y_VOL_AXIS_ID).
-    volume_items: VolumeItems,
+    volume_items: Cached<VolumeItems>,
     /// Items for SMA line (X -> Y_AXIS_ID).
-    sma_items: SmaItems,
+    sma_items: Cached<SmaItems>,
     /// Items for Bollinger Band lines (X -> Y_AXIS_ID).
-    bband_items: BbandsItems,
+    bband_items: Cached<BbandsItems>,
 }
 
 impl CandlestickChart {
@@ -149,29 +147,27 @@ impl CandlestickChart {
                 ..settings
             },
             data: candle_data,
-            damaged: true.into(),
             state,
-            candle_items: CandleItems {
+            candle_items: Cached::new(CandleItems {
                 candles: Vec::new(),
                 candle_width: Measure::Plot(1.0),
-            },
-            volume_items: VolumeItems {
+            }),
+            volume_items: Cached::new(VolumeItems {
                 candles: Vec::new(),
                 bar_width: Measure::Plot(2.0),
-            },
-            sma_items: SmaItems { points: Vec::new() },
-            bband_items: BbandsItems {
+            }),
+            sma_items: Cached::new(SmaItems { points: Vec::new() }),
+            bband_items: Cached::new(BbandsItems {
                 upper: Vec::new(),
                 middle: Vec::new(),
                 lower: Vec::new(),
-            },
+            }),
         }
     }
 
     /// Returns the single `Chart` widget containing all layers.
     pub fn view(&self) -> Chart<'_, AxisId, f64, crate::Message> {
-        let chart = Chart::new(&self.state)
-            .damage(*self.damaged.borrow())
+        Chart::new(&self.state)
             .plot_data(&self.candle_items, X_AXIS_ID, Y_AXIS_ID)
             .plot_data(&self.volume_items, X_AXIS_ID, Y_VOL_AXIS_ID)
             .plot_data(&self.sma_items, X_AXIS_ID, Y_AXIS_ID)
@@ -187,37 +183,28 @@ impl CandlestickChart {
             })
             .marker(&Y_AXIS_ID, MarkerPosition::Cursor, |ctx| {
                 Some(ctx.marker(format!("{:.2}", ctx.value)))
-            });
-
-        *self.damaged.borrow_mut() = false;
-
-        chart
+            })
     }
 
     /// Handles incoming messages and updates the chart state.
     pub fn handle_message(&mut self, message: Message) {
         match message {
             Message::UpdateChart => {
-                self.damaged = true.into();
                 self.rebuild_layers();
             }
             Message::OnPlotDrag(delta) => {
-                self.damaged = true.into();
                 self.handle_plot_drag(delta);
                 self.rebuild_layers();
             }
             Message::OnPlotScroll(cursor_pos, delta) => {
-                self.damaged = true.into();
                 self.handle_plot_scroll(cursor_pos, delta);
                 self.rebuild_layers();
             }
             Message::OnAxisDrag(id, delta) => {
-                self.damaged = true.into();
                 self.handle_axis_drag(id, delta);
                 self.rebuild_layers();
             }
             Message::OnAxisDoubleClick(id) => {
-                self.damaged = true.into();
                 if id == Y_AXIS_ID {
                     self.settings.y_lock = true;
                     self.update_y_lock_domain();
@@ -332,15 +319,17 @@ impl CandlestickChart {
             .collect();
 
         // --- Update candle items ---
-        self.candle_items.candles = visible_candles.clone();
-        self.candle_items.candle_width = candle_width;
+        let candle_items = self.candle_items.edit();
+        candle_items.candles = visible_candles.clone();
+        candle_items.candle_width = candle_width;
 
         // --- Update volume items (if enabled) ---
+        let volume_items = self.volume_items.edit();
         if self.settings.show_volume {
-            self.volume_items.candles = visible_candles;
-            self.volume_items.bar_width = candle_width * 1.8;
+            volume_items.candles = visible_candles;
+            volume_items.bar_width = candle_width * 1.8;
         } else {
-            self.volume_items.candles.clear();
+            volume_items.candles.clear();
         }
 
         let calculation_candles: Vec<(i64, Candle)> = self
@@ -350,26 +339,28 @@ impl CandlestickChart {
             .collect();
 
         // --- Update Bollinger Bands items (if enabled) ---
+        let bband_items = self.bband_items.edit();
         if self.settings.show_bband {
             let (upper, middle, lower) = calculate_bbands(
                 &calculation_candles,
                 self.settings.bband_period,
                 self.settings.bband_std_dev,
             );
-            self.bband_items.upper = upper;
-            self.bband_items.middle = middle;
-            self.bband_items.lower = lower;
+            bband_items.upper = upper;
+            bband_items.middle = middle;
+            bband_items.lower = lower;
         } else {
-            self.bband_items.upper.clear();
-            self.bband_items.middle.clear();
-            self.bband_items.lower.clear();
+            bband_items.upper.clear();
+            bband_items.middle.clear();
+            bband_items.lower.clear();
         }
 
         // --- Update SMA items (if enabled) ---
+        let sma_items = self.sma_items.edit();
         if self.settings.show_sma {
-            self.sma_items.points = calculate_sma(&calculation_candles, self.settings.sma_period);
+            sma_items.points = calculate_sma(&calculation_candles, self.settings.sma_period);
         } else {
-            self.sma_items.points.clear();
+            sma_items.points.clear();
         }
     }
 

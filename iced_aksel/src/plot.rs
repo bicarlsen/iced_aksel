@@ -68,6 +68,21 @@ where
     ///
     /// Use `plot.add_shape()` to add visual elements to the chart.
     fn draw(&self, plot: &mut Plot<D, R>, theme: &Theme);
+
+    /// 0 = Always dirty (Default).
+    /// >0 = Cached.
+    ///
+    fn version(&self) -> u64 {
+        0
+    }
+
+    /// The id of the layer. Primarily used by the [`Cached`](crate::Cached) struct
+    ///
+    /// To avoid conflicts, if you implement this yourself, use the
+    /// [`NEXT_LAYER_ID`](crate::NEXT_LAYER_ID) to generate the
+    fn id(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// Internal rendering context for shapes.
@@ -173,12 +188,5 @@ where
     /// ```
     pub fn add_shape<S: Shape<D, R>>(&mut self, shape: S) {
         shape.render(&mut self.context);
-
-        // If mesh buffer and exceeds limit, render the mesh
-        if let RenderBuffer::Mesh(buffer) = self.context.buffer
-            && buffer.vertices_count() >= buffer.limit()
-        {
-            buffer.flush(self.context.renderer, self.context.clip_bounds);
-        }
     }
 }

@@ -2,7 +2,7 @@ use std::cell::{RefCell, RefMut};
 
 use super::Action;
 use crate::{
-    Quality,
+    CacheSignature, Quality,
     render::{Backend, RenderBuffer},
 };
 
@@ -13,6 +13,7 @@ pub struct Memory<AxisId, Renderer: crate::Renderer> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
     pub buffer: Option<RefCell<RenderBuffer<Renderer>>>,
+    pub last_signature: Option<CacheSignature>,
 }
 
 impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
@@ -21,6 +22,7 @@ impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
             action: Action::default(),
             previous_click: None,
             buffer: None,
+            last_signature: None,
         }
     }
 
@@ -29,7 +31,7 @@ impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
             buffer.borrow_mut().set_quality(quality);
         } else {
             let mut buffer = match renderer.preffered_backend() {
-                Backend::Mesh => RenderBuffer::new_mesh(100_000),
+                Backend::Mesh => RenderBuffer::new_mesh(),
                 Backend::Path => RenderBuffer::new_path(5000),
                 Backend::Shader => RenderBuffer::new_shader(),
             };
