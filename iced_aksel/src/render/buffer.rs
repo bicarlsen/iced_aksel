@@ -41,16 +41,35 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
         Self::Shader(Box::new(ShaderBatcher::new()))
     }
 
-    pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle, with_damage: bool)
-    where
-        Renderer: 'static, // Required for downcasting
-    {
+    pub fn clear(&mut self) {
         match self {
             Self::Path(buf) => {
-                buf.flush(renderer, clip_bounds, with_damage);
+                buf.clear();
             }
             Self::Mesh(buf) => {
-                buf.flush(renderer, clip_bounds, with_damage);
+                buf.clear();
+            }
+            Self::Shader(buf) => {
+                buf.clear();
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Mesh(buf) => buf.is_empty(),
+            Self::Path(buf) => buf.is_empty(),
+            Self::Shader(buf) => buf.is_empty(),
+        }
+    }
+
+    pub fn draw(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
+        match self {
+            Self::Path(buf) => {
+                buf.draw(renderer, clip_bounds);
+            }
+            Self::Mesh(buf) => {
+                buf.draw(renderer, clip_bounds);
             }
             Self::Shader(buf) => {
                 // Downcast to the concrete WGPU renderer type
@@ -59,7 +78,7 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
                 // iced_wgpu::primitive::Renderer trait.
                 let any_renderer = renderer as &mut dyn Any;
                 if let Some(renderer) = any_renderer.downcast_mut::<iced_renderer::Renderer>() {
-                    buf.flush(renderer, clip_bounds, with_damage);
+                    buf.draw(renderer, clip_bounds);
                 } else {
                     // This should never happen if buffer creation logic is correct
                     panic!("Shader backend was selected for a non-wgpu compatible backend!");

@@ -1,9 +1,10 @@
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::atlas::TextureAtlas;
 use super::data::{self, UnifiedVertex};
 use super::pipeline::AkselPipeline;
-use iced_core::{text::Shaping, Color};
+use iced_core::{Color, text::Shaping};
 use iced_graphics::text::{self, cosmic_text, font_system};
 use iced_wgpu::wgpu;
 
@@ -15,39 +16,40 @@ type PackedColor = [f32; 4];
 
 const TRANSPARENT: PackedColor = [0., 0., 0., 0.];
 const INIT_CAPACITY: usize = 10_000;
+const LABEL_CACHE_RENDER: &str = "Aksel Cache Render";
 
 fn pack_color(color: Color) -> PackedColor {
     color.into_linear()
 }
 
-#[derive(Debug)]
-pub struct AkselMesh {
-    vertices: Vec<UnifiedVertex>,
-    version: u64,
-}
+#[derive(Default)]
+struct VertexBuffer(Vec<UnifiedVertex>);
 
-impl AkselMesh {
-    pub fn new() -> Self {
-        Self {
-            vertices: Vec::with_capacity(INIT_CAPACITY),
-            version: MESH_VERSION.fetch_add(1, Ordering::Relaxed),
-        }
+impl VertexBuffer {
+    fn as_bytes(&self) -> &[u8] {
+        bytemuck::cast_slice(&self.0)
     }
 
-    pub fn clear(&mut self) {
-        self.version = self.version.wrapping_add(1);
-        self.vertices.clear();
+    const fn len(&self) -> usize {
+        self.0.len()
     }
 
-    pub(crate) fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2]) {
-        self.vertices.push(UnifiedVertex {
+    fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2]) {
+        self.0.push(UnifiedVertex {
             position,
             color,
             uv,
         })
     }
 
-    pub fn draw_primitive(&mut self, primitive: Primitive, pipeline: AkselPipeline, text_buffer: &mut cosmic_text::Buffer) {
+    fn draw_primitive(
+        &mut self,
+        primitive: &Primitive,
+        pipeline: &mut AkselPipeline,
+        queue: &wgpu::Queue,
+        font_system: &mut cosmic_text::FontSystem,
+        scale_factor: f32,
+    ) {
         match primitive {
             Primitive::Rectangle {
                 xy1,
@@ -84,7 +86,7 @@ impl AkselMesh {
                 let dy = end.y - start.y;
 
                 // Calculate length
-                let len = (dx * dx + dy * dy).sqrt();
+                let len = dx.hypot(dy);
 
                 if len == 0.0 {
                     return; // No 0-division!
@@ -136,26 +138,92 @@ impl AkselMesh {
                 bounds,
                 wrapping,
             } => {
-                let mut lock = font_system().write().expect("Failed to get font_system");
-                let font_system = lock.raw();
-                text_buffer.set_metrics_and_size(font_system, cosmic_text::Metrics::new(size.into(), line_height.to_absolute(size.into()).into()), Some(bounds.width), Some(bounds.height));
-                text_buffer.set_wrap(font_system, text::to_wrap(wrapping));
-                text_buffer.shape_until_scroll(font_system, false);
-                text_buffer.set_text(
+                let color = pack_color(*fill);
+                pipeline.text_buffer.set_metrics_and_size(
                     font_system,
-                    &content,
-                    &text::to_attributes(font),
-                    text::to_shaping(Shaping::Auto, &content),
+                    cosmic_text::Metrics::new(
+                        (*size).into(),
+                        line_height.to_absolute(*size).into(),
+                    ),
+                    Some(bounds.width),
+                    Some(bounds.height),
+                );
+                pipeline
+                    .text_buffer
+                    .set_wrap(font_system, text::to_wrap(*wrapping));
+                pipeline.text_buffer.shape_until_scroll(font_system, false);
+                pipeline.text_buffer.set_text(
+                    font_system,
+                    content,
+                    &text::to_attributes(*font),
+                    text::to_shaping(Shaping::Auto, content),
                     None, // TODO: ?
                 );
 
-                for run in text_buffer.layout_runs() {
+                for run in pipeline.text_buffer.layout_runs() {
                     for glyph in run.glyphs {
                         // TODO: Offset and/or scale properly?
                         let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
                         let cache_key = physical_glyph.cache_key;
 
-                        if let Some((placement, uv_tl, uv_br)) = pipeline
+                        if let Some(mut atlas_glyph) =
+                            pipeline.atlas.get_glyph(queue, font_system, cache_key)
+                        {
+                            let logical_position = atlas_glyph.get_logical_position(
+                                scale_factor,
+                                position,
+                                &physical_glyph,
+                                &run,
+                            );
+
+                            // T1
+                            self.push_vertex(
+                                [logical_position.x, logical_position.y],
+                                color,
+                                [atlas_glyph.uv_tl[0], atlas_glyph.uv_tl[1]],
+                            );
+                            self.push_vertex(
+                                [
+                                    logical_position.x + logical_position.width,
+                                    logical_position.y,
+                                ],
+                                color,
+                                [atlas_glyph.uv_br[0], atlas_glyph.uv_tl[1]],
+                            );
+                            self.push_vertex(
+                                [
+                                    logical_position.x,
+                                    logical_position.y + logical_position.height,
+                                ],
+                                color,
+                                [atlas_glyph.uv_tl[0], atlas_glyph.uv_br[1]],
+                            );
+                            // T2
+                            self.push_vertex(
+                                [
+                                    logical_position.x + logical_position.width,
+                                    logical_position.y,
+                                ],
+                                color,
+                                [atlas_glyph.uv_br[0], atlas_glyph.uv_tl[1]],
+                            );
+                            self.push_vertex(
+                                [
+                                    logical_position.x + logical_position.width,
+                                    logical_position.y + logical_position.height,
+                                ],
+                                color,
+                                [atlas_glyph.uv_br[0], atlas_glyph.uv_br[1]],
+                            );
+                            self.push_vertex(
+                                [
+                                    logical_position.x,
+                                    logical_position.y + logical_position.height,
+                                ],
+                                color,
+                                [atlas_glyph.uv_tl[0], atlas_glyph.uv_br[1]],
+                            );
+                        }
                     }
                 }
             }
@@ -165,7 +233,27 @@ impl AkselMesh {
     }
 }
 
-impl iced_wgpu::Primitive for AkselMesh {
+#[derive(Debug, Clone)]
+pub struct ShaderCache {
+    primitives: Arc<[Primitive]>,
+    version: u64,
+}
+
+impl ShaderCache {
+    pub fn new() -> Self {
+        Self {
+            primitives: Arc::new([]),
+            version: MESH_VERSION.fetch_add(1, Ordering::Relaxed),
+        }
+    }
+
+    pub fn update(&mut self, data: Arc<[Primitive]>) {
+        self.version = self.version.wrapping_add(1);
+        self.primitives = data;
+    }
+}
+
+impl iced_wgpu::Primitive for ShaderCache {
     type Pipeline = AkselPipeline;
 
     fn prepare(
@@ -176,17 +264,28 @@ impl iced_wgpu::Primitive for AkselMesh {
         bounds: &iced_core::Rectangle,
         viewport: &iced_graphics::Viewport,
     ) {
-        let needed_capacity = self.vertices.len();
+        let mut vertices = VertexBuffer::default();
+
+        let mut lock = font_system().write().expect("Failed to get font_system");
+        let font_system = lock.raw();
+        self.primitives.iter().for_each(|primitive| {
+            vertices.draw_primitive(
+                primitive,
+                pipeline,
+                queue,
+                font_system,
+                viewport.scale_factor(),
+            )
+        });
+        drop(lock);
+
+        let needed_capacity = vertices.len();
         if needed_capacity > pipeline.vertex_capacity {
             pipeline.vertex_buffer = data::create_renderer_vertex_buffer(device, needed_capacity);
             pipeline.vertex_capacity = needed_capacity;
         }
 
-        queue.write_buffer(
-            &pipeline.vertex_buffer,
-            0,
-            bytemuck::cast_slice(&self.vertices),
-        );
+        queue.write_buffer(&pipeline.vertex_buffer, 0, vertices.as_bytes());
 
         // Update uniform buffer with screen dimensions
         let uniforms = data::Uniforms {
@@ -202,7 +301,29 @@ impl iced_wgpu::Primitive for AkselMesh {
         let width = viewport.physical_width();
         let height = viewport.physical_height();
 
-        if pipeline.cache_texture.is_none() || pipeline.cache_size != (width, height) {
+        let size_mismatch = pipeline.cache_size != (width, height);
+
+        if size_mismatch || pipeline.msaa_texture.is_none() {
+            let msaa_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Aksel MSAA Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: pipeline.sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format: pipeline.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            pipeline.msaa_view =
+                Some(msaa_texture.create_view(&wgpu::TextureViewDescriptor::default()));
+            pipeline.msaa_texture = Some(msaa_texture);
+        }
+
+        if size_mismatch || pipeline.cache_texture.is_none() {
             let cache_texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Aksel Cache Texture"),
                 size: wgpu::Extent3d {
@@ -241,6 +362,8 @@ impl iced_wgpu::Primitive for AkselMesh {
             pipeline.cache_bind_group = Some(cache_bind_group);
             pipeline.cache_size = (width, height);
             pipeline.cache_version.store(0, Ordering::Relaxed);
+
+            // Clear the internal vertices buffer
         }
     }
 
@@ -257,6 +380,57 @@ impl iced_wgpu::Primitive for AkselMesh {
 
         // Safety: Always initialized in `prepare` method
         let cache_view = pipeline.cache_view.as_ref().unwrap();
+        let cache_bind_group = pipeline.cache_bind_group.as_ref().unwrap();
+
+        let cached_version = pipeline.cache_version.load(Ordering::Relaxed);
+        let needs_render = self.version != cached_version;
+
+        if needs_render {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(LABEL_CACHE_RENDER),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: pipeline.msaa_view.as_ref().unwrap_or(cache_view),
+                    resolve_target: pipeline.msaa_view.as_ref().map(|_| cache_view),
+                    ops: wgpu::Operations {
+                        // Clear and store the new texture
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            render_pass.set_pipeline(&pipeline.pipeline);
+            render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
+            render_pass.draw(0..pipeline.vertex_count, 0..1);
+
+            pipeline
+                .cache_version
+                .store(self.version, Ordering::Relaxed);
+        }
+
+        // Blit cached texture
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Askel Cache Blit"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load, // Preserve the pre-rendered content
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        render_pass.set_pipeline(&pipeline.blit_pipeline);
+        render_pass.set_bind_group(0, cache_bind_group, &[]);
+        render_pass.draw(0..3, 0..1); // Draw full-screen triangle (3 vertices)
     }
 
     fn draw(&self, pipeline: &Self::Pipeline, render_pass: &mut wgpu::RenderPass<'_>) -> bool {

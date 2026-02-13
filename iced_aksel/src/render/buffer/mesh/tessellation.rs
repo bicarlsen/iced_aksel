@@ -565,29 +565,26 @@ impl Tessellator {
     /// Supports dashed lines (via `StrokeStyle`), infinite extensions on the first/last segments,
     /// and arrowheads at the ends.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_polyline<I>(
+    pub fn draw_polyline<'a>(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
-        points: I,
+        mut points: Vec<Point>,
         stroke: ResolvedStroke,
         clip_bounds: Rectangle,
         extensions: LineExtensions,
         arrows: LineArrows,
-    ) where
-        I: IntoIterator<Item = Point>,
-    {
+    ) {
         if stroke.thickness < 0.1 {
             return;
         }
 
-        let mut point_list: Vec<Point> = points.into_iter().collect();
-        if point_list.len() < 2 {
+        if points.len() < 2 {
             return;
         }
 
-        let last_idx = point_list.len() - 1;
-        let p0 = point_list[0];
-        let pn = point_list[last_idx];
+        let last_idx = points.len() - 1;
+        let p0 = points[0];
+        let pn = points[last_idx];
 
         // 1. Handle Infinite Extensions
         if extensions.start || extensions.end {
@@ -595,43 +592,43 @@ impl Tessellator {
             let bounds = Bounds::new(clip_bounds, margin);
 
             if extensions.start {
-                let p1 = point_list[1];
+                let p1 = points[1];
                 if let Some((edge_start, _)) = clip_infinite_line(p0, p1, bounds) {
-                    point_list[0] = edge_start;
+                    points[0] = edge_start;
                 }
             }
             if extensions.end {
-                let p_prev = point_list[last_idx - 1];
+                let p_prev = points[last_idx - 1];
                 if let Some((_, edge_end)) = clip_infinite_line(p_prev, pn, bounds) {
-                    point_list[last_idx] = edge_end;
+                    points[last_idx] = edge_end;
                 }
             }
         }
 
         // 2. Handle Arrow Retraction
         if arrows.start && !extensions.start {
-            let p1 = point_list[1];
+            let p1 = points[1];
             let dir = normalize(p1 - p0);
-            point_list[0] = p0 + dir * (stroke.thickness * arrows.size);
+            points[0] = p0 + dir * (stroke.thickness * arrows.size);
         }
         if arrows.end && !extensions.end {
-            let p_prev = point_list[last_idx - 1];
+            let p_prev = points[last_idx - 1];
             let dir = normalize(pn - p_prev);
-            point_list[last_idx] = pn - dir * (stroke.thickness * arrows.size);
+            points[last_idx] = pn - dir * (stroke.thickness * arrows.size);
         }
 
         // 3. Draw Path
         // Polyline stroking involves complex joints (miters) between segments.
         // We ALWAYS use Lyon here because doing miter joints manually is extremely complex
         // and error-prone (as seen with the triangle artifacts).
-        let lyon_points = point_list
+        let lyon_points = points
             .iter()
             .map(|p| lyon_tessellation::math::Point::new(p.x, p.y));
         self.stroke_polyline(buffer, lyon_points, stroke, false);
 
         // 4. Draw Arrowheads
         if arrows.start && !extensions.start {
-            let p1 = point_list[1];
+            let p1 = points[1];
             // Use direction from the original start point (p0) to p1
             // Even if p0 was retracted in the list, the visual direction is the same.
             let direction = normalize(p1 - p0);
@@ -645,7 +642,7 @@ impl Tessellator {
             );
         }
         if arrows.end && !extensions.end {
-            let p_prev = point_list[last_idx - 1];
+            let p_prev = points[last_idx - 1];
             let direction = normalize(pn - p_prev);
             self.manual.draw_arrowhead(
                 buffer,
@@ -711,47 +708,44 @@ impl Tessellator {
     /// * `points`: The data points the line must pass through.
     /// * `tension`: `0.0` for smooth curves, `1.0` for straight lines.
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_spline<I>(
+    pub fn draw_spline(
         &mut self,
         buffer: &mut crate::render::buffer::MeshData,
-        points: I,
+        points: &Vec<Point>,
         stroke: ResolvedStroke,
         tension: f32,
-    ) where
-        I: IntoIterator<Item = Point>,
-    {
+    ) {
         if stroke.thickness < 0.1 {
             return;
         }
 
-        let pts: Vec<Point> = points.into_iter().collect();
-        if pts.len() < 2 {
+        if points.len() < 2 {
             return;
         }
 
         let mut builder = Path::builder();
-        let first = pts[0];
+        let first = points[0];
 
         // Start the path at the first point
         builder.begin(lyon_tessellation::math::Point::new(first.x, first.y));
 
-        for i in 0..pts.len() - 1 {
+        for i in 0..points.len() - 1 {
             // Define the 4 points window: p0, p1, p2, p3
             // We are drawing the curve from p1 to p2.
-            let p1 = pts[i];
-            let p2 = pts[i + 1];
+            let p1 = points[i];
+            let p2 = points[i + 1];
 
             // Handle start boundary: simpler to mirror p1 around p0, or just repeat p0
             let p0 = if i == 0 {
                 // Virtual point before start: Extend the line backwards
                 p1 - (p2 - p1)
             } else {
-                pts[i - 1]
+                points[i - 1]
             };
 
             // Handle end boundary
-            let p3 = if i + 2 < pts.len() {
-                pts[i + 2]
+            let p3 = if i + 2 < points.len() {
+                points[i + 2]
             } else {
                 // Virtual point after end: Extend the line forwards
                 p2 + (p2 - p1)

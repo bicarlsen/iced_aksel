@@ -22,7 +22,7 @@ pub struct LineArrows {
 }
 
 // Describes a **shared** primitive interface between the Mesh and Path backends.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Primitive {
     Rectangle {
         xy1: Point,

@@ -1,7 +1,9 @@
 use std::{collections::HashMap, sync::OnceLock};
 
 use etagere::AtlasAllocator;
-use iced_graphics::text::cosmic_text::{CacheKey, FontSystem, Placement, SwashCache, SwashContent};
+use iced_graphics::text::cosmic_text::{
+    self, CacheKey, FontSystem, Placement, SwashCache, SwashContent,
+};
 use iced_wgpu::wgpu;
 
 const LABEL_ATLAS_TEXTURE: &str = "Aksel Font Atlas";
@@ -12,8 +14,33 @@ static WHITE_PIXEL_UV: OnceLock<[f32; 2]> = OnceLock::new();
 #[derive(Clone, Copy)]
 pub struct AtlasGlyph {
     placement: Placement,
-    uv_tl: [f32; 2],
-    uv_br: [f32; 2],
+    pub uv_tl: [f32; 2],
+    pub uv_br: [f32; 2],
+}
+
+impl AtlasGlyph {
+    pub fn get_logical_position(
+        &mut self,
+        scale_factor: f32,
+        physical_position: &iced_core::Point,
+        physical_glyph: &cosmic_text::PhysicalGlyph,
+        run: &cosmic_text::LayoutRun,
+    ) -> iced_core::Rectangle {
+        let width = self.placement.width as f32 / scale_factor;
+        let height = self.placement.height as f32 / scale_factor;
+        let left = self.placement.left as f32 / scale_factor;
+        let top = self.placement.top as f32 / scale_factor;
+        let glyph_x = physical_glyph.x as f32 / scale_factor;
+        let glyph_y = physical_glyph.y as f32 / scale_factor;
+        let line_y = run.line_y / scale_factor;
+
+        iced_core::Rectangle {
+            x: physical_position.x + glyph_x + left,
+            y: physical_position.y + line_y + glyph_y - top,
+            width,
+            height,
+        }
+    }
 }
 
 pub struct TextureAtlas {
@@ -21,6 +48,7 @@ pub struct TextureAtlas {
     pub view: wgpu::TextureView,
     pub(crate) allocator: AtlasAllocator,
     cache: HashMap<CacheKey, AtlasGlyph>,
+    swash_cache: SwashCache,
 }
 
 impl TextureAtlas {
@@ -73,6 +101,7 @@ impl TextureAtlas {
             view,
             allocator,
             cache: HashMap::new(),
+            swash_cache: SwashCache::new(),
         }
     }
 
@@ -80,7 +109,6 @@ impl TextureAtlas {
         &mut self,
         queue: &wgpu::Queue,
         font_system: &mut FontSystem,
-        swash_cache: &mut SwashCache,
         key: CacheKey,
     ) -> Option<AtlasGlyph> {
         // Check for cached glyph first
@@ -89,7 +117,7 @@ impl TextureAtlas {
         }
 
         // Render glyph pixels with cosmic-text
-        let image = swash_cache.get_image_uncached(font_system, key)?;
+        let image = self.swash_cache.get_image_uncached(font_system, key)?;
         let width = image.placement.width;
         let height = image.placement.height;
 

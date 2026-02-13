@@ -69,6 +69,7 @@ pub trait Renderer<Font = iced_core::Font>:
     + iced_core::text::Renderer<Font = Font>
     + iced_graphics::geometry::Renderer
     + iced_graphics::mesh::Renderer
+    + 'static
 {
     fn preffered_backend(&self) -> Backend;
 }

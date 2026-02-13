@@ -1,6 +1,6 @@
 use std::sync::atomic::AtomicU64;
 
-use iced_graphics::text::cosmic_text::{self, SwashCache};
+use iced_graphics::text::cosmic_text;
 use iced_wgpu::{primitive::Pipeline, wgpu};
 
 use super::{atlas::TextureAtlas, data};
@@ -20,6 +20,7 @@ pub const LABEL_BLIT_MODULE: &str = "Aksel Blit Shader Module";
 pub const LABEL_BLIT_BIND_GROUP_LAYOUT: &str = "Aksel Blit Bind Group Layout";
 pub const LABEL_BLIT_PIPELINE_LAYOUT: &str = "Aksel Blit Pipeline Layout";
 pub const LABEL_BLIT_PIPELINE: &str = "Aksel Blit Pipeline";
+pub const LABEL_MSAA_TEXTURE: &str = "Aksel MSAA Texture";
 
 pub const VERTEX_BUFFER_INIT_CAPACITY: usize = 100;
 pub const VERTEX_BUFFER_SIZE: usize =
@@ -38,7 +39,6 @@ pub struct AkselPipeline {
     pub vertex_buffer: wgpu::Buffer,
     pub uniform_buffer: wgpu::Buffer,
 
-    pub swash_cache: SwashCache,
     pub atlas: TextureAtlas,
 
     pub vertex_count: u32,
@@ -47,6 +47,8 @@ pub struct AkselPipeline {
     // MSAA
     pub sample_count: u32,
     pub format: wgpu::TextureFormat,
+    pub msaa_view: Option<wgpu::TextureView>,
+    pub msaa_texture: Option<wgpu::Texture>,
 
     // Caching
     pub cache_texture: Option<wgpu::Texture>,
@@ -82,7 +84,6 @@ impl Pipeline for AkselPipeline {
         });
 
         // Init text caches
-        let swash_cache = SwashCache::new();
         let atlas = TextureAtlas::new(device, queue);
 
         let (pipeline, bind_group_layout) =
@@ -181,13 +182,14 @@ impl Pipeline for AkselPipeline {
             }),
             vertex_buffer,
             uniform_buffer,
-            swash_cache,
             atlas,
             vertex_count: 0,
             vertex_capacity: VERTEX_BUFFER_INIT_CAPACITY,
 
             sample_count: MSAA_SAMPLE_COUNT,
             format: MSAA_FORMAT,
+            msaa_view: None,
+            msaa_texture: None,
 
             cache_texture: None,
             cache_view: None,

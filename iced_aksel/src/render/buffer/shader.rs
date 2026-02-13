@@ -9,15 +9,16 @@ mod mesh;
 mod pipeline;
 
 pub struct ShaderBatcher {
-    cache: mesh::AkselMesh,
     buffer: Vec<Primitive>,
+    cache: mesh::ShaderCache,
     text_buffer: cosmic_text::Buffer,
 }
 
 impl ShaderBatcher {
     pub fn new() -> Self {
         Self {
-            cache: mesh::AkselMesh::new(),
+            buffer: Vec::new(),
+            cache: mesh::ShaderCache::new(),
             // Initialize a text-buffer
             //
             // Proper metrics need to be set when drawing the text
@@ -25,23 +26,27 @@ impl ShaderBatcher {
         }
     }
 
-    /// Flush shader primitives using the WGPU renderer
-    /// This only works with iced_wgpu::Renderer specifically
-    pub fn flush(
-        &mut self,
-        renderer: &mut impl PrimitiveRenderer,
-        clip_bounds: &Rectangle,
-        with_damage: bool,
-    ) {
-        if with_damage {
-            self.mesh.clear();
+    /// Clear the buffer, triggering a redraw
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
+
+    /// Check if the buffer is empty (Should redraw)
+    pub fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
+
+    pub fn draw(&mut self, renderer: &mut impl PrimitiveRenderer, clip_bounds: &Rectangle) {
+        // Invalidate and update cache if the buffer has received new primitives
+        if !self.is_empty() {
+            let primitives = self.buffer.clone();
+            self.cache.update(primitives.into());
         }
 
-        renderer.draw_primitive(*clip_bounds, self.mesh.clone());
+        renderer.draw_primitive(*clip_bounds, self.cache.clone());
     }
 
     pub fn add_primitive(&mut self, primitive: Primitive) {
-        let mesh = self.mesh.get_or_insert_with(mesh::AkselMesh::new);
-        mesh.push_primitive(primitive, &mut self.text_buffer);
+        self.buffer.push(primitive);
     }
 }
