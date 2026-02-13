@@ -1045,10 +1045,8 @@ where
 
         // Check if we need to redraw
         if memory.last_signature.as_ref() != Some(&current_signature) {
-            println!("Damage!");
-            println!("Prev: {:#?}", memory.last_signature);
-            println!("New: {:#?}", current_signature);
             memory.get_buffer_mut().clear();
+            // Update signature
             memory.last_signature = Some(current_signature);
         }
 
