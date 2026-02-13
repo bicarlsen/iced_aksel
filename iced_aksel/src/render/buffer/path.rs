@@ -14,6 +14,7 @@ pub struct PathBatcher<Renderer: crate::Renderer> {
     buffer: Vec<Primitive>,
     cache: Cache<Renderer>,
     paths_limit: usize,
+    should_redraw: bool,
 }
 
 impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
@@ -22,6 +23,7 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
             buffer: Vec::with_capacity(PRE_ALLOC_PATHS),
             cache: Cache::new(),
             paths_limit,
+            should_redraw: true,
         }
     }
 
@@ -44,32 +46,27 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
     pub fn clear(&mut self) {
         self.buffer.clear();
         self.cache.clear();
+        self.should_redraw = true;
     }
 
     /// Check if the buffer is empty (should redraw)
     pub const fn is_empty(&self) -> bool {
-        self.buffer.is_empty()
+        self.should_redraw
     }
 
-    pub(crate) fn draw(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
-        // This will, after a render, result in an empty vec. But, since the underlying cache isn't
-        // cleared, it shouldn't redraw with the empty vector.
-        //
-        // The cache is only cleared when needed - And we can guarantee the if the cache is
-        // cleared, then the primitives will also exist in the buffer in order to redraw the cache
-        let primitives = std::mem::replace(&mut self.buffer, Vec::with_capacity(PRE_ALLOC_PATHS));
+    pub(crate) fn draw(&self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
         let geometry = self
             .cache
-            .draw_with_bounds(renderer, *clip_bounds, move |frame| {
-                primitives
-                    .into_iter()
+            .draw_with_bounds(renderer, *clip_bounds, |frame| {
+                self.buffer
+                    .iter()
                     .for_each(|primitive| Self::draw_primitive(primitive, frame))
             });
 
         renderer.draw_geometry(geometry);
     }
 
-    fn draw_primitive(primitive: Primitive, frame: &mut Frame<Renderer>) {
+    fn draw_primitive(primitive: &Primitive, frame: &mut Frame<Renderer>) {
         // -------------------------------------------------------------------------
         // 1. Handle Text (The "Odd One Out")
         // -------------------------------------------------------------------------
@@ -107,16 +104,16 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
 
                     (
                         bounds.width,
-                        Some(Rectangle::new(Point::new(x_origin, y_origin), bounds)),
+                        Some(Rectangle::new(Point::new(x_origin, y_origin), *bounds)),
                     )
                 };
 
                 // 2. Rotation (Rotate around the generic anchor point)
                 // Note: If you want to rotate the *box* around the specific alignment point,
                 // this logic is correct.
-                if rotation != 0.0 {
+                if *rotation != 0.0 {
                     frame.translate(Vector::new(position.x, position.y));
-                    frame.rotate(rotation);
+                    frame.rotate(*rotation);
                     frame.translate(Vector::new(-position.x, -position.y));
                 }
 
@@ -124,14 +121,14 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
                 let draw_text = |frame: &mut Frame<Renderer>| {
                     frame.fill_text(Text {
                         content: content.clone(),
-                        position, // Draw at anchor
-                        color: fill,
-                        size,
+                        position: *position, // Draw at anchor
+                        color: *fill,
+                        size: *size,
                         // Ensure this is Absolute to prevent the "Crazy Line Height"
-                        line_height,
-                        font,
-                        align_x: horizontal_alignment.into(),
-                        align_y: vertical_alignment,
+                        line_height: *line_height,
+                        font: *font,
+                        align_x: (*horizontal_alignment).into(),
+                        align_y: *vertical_alignment,
                         shaping: Shaping::Advanced,
                         max_width,
                     });
