@@ -54,14 +54,15 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
             }
             Self::Shader(buf) => {
                 // Downcast to the concrete WGPU renderer type
+                //
+                // We need to do this as not every renderer implements the
+                // iced_wgpu::primitive::Renderer trait.
                 let any_renderer = renderer as &mut dyn Any;
                 if let Some(renderer) = any_renderer.downcast_mut::<iced_renderer::Renderer>() {
-                    buf.flush(renderer, clip_bounds);
+                    buf.flush(renderer, clip_bounds, with_damage);
                 } else {
                     // This should never happen if buffer creation logic is correct
-                    panic!(
-                        "Shader buffer was created for non-WGPU renderer! Backend selection bug."
-                    );
+                    panic!("Shader backend was selected for a non-wgpu compatible backend!");
                 }
             }
         }

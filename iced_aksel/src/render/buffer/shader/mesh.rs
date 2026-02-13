@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use super::atlas::TextureAtlas;
 use super::data::{self, UnifiedVertex};
 use super::pipeline::AkselPipeline;
-use iced_core::Color;
-use iced_graphics::cache;
+use iced_core::{text::Shaping, Color};
+use iced_graphics::text::{self, cosmic_text, font_system};
 use iced_wgpu::wgpu;
 
 use crate::render::Primitive;
@@ -34,7 +34,12 @@ impl AkselMesh {
         }
     }
 
-    pub fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2]) {
+    pub fn clear(&mut self) {
+        self.version = self.version.wrapping_add(1);
+        self.vertices.clear();
+    }
+
+    pub(crate) fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2]) {
         self.vertices.push(UnifiedVertex {
             position,
             color,
@@ -42,7 +47,7 @@ impl AkselMesh {
         })
     }
 
-    pub fn push_primitive(&mut self, primitive: Primitive) {
+    pub fn draw_primitive(&mut self, primitive: Primitive, pipeline: AkselPipeline, text_buffer: &mut cosmic_text::Buffer) {
         match primitive {
             Primitive::Rectangle {
                 xy1,
@@ -131,31 +136,28 @@ impl AkselMesh {
                 bounds,
                 wrapping,
             } => {
-                // let mut lock = font_system().write().expect("Failed to get font_system");
-                // let font_system = lock.raw();
-                // let mut buffer = Buffer::new(
-                //     font_system,
-                //     Metrics::new(size.into(), line_height.to_absolute(size).into()),
-                // );
-                // buffer.set_size(font_system, Some(bounds.width), Some(bounds.height));
-                // buffer.set_wrap(font_system, text::to_wrap(wrapping));
-                // buffer.set_text(
-                //     font_system,
-                //     &content,
-                //     &text::to_attributes(font),
-                //     text::to_shaping(Shaping::Auto, &content),
-                //     None, // TODO: ?
-                // );
-                // buffer.shape_until_scroll(font_system, false);
-                //
-                // for run in buffer.layout_runs() {
-                //     for glyph in run.glyphs {
-                //         // TODO: Offset and/or scale properly?
-                //         let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
-                //
-                //         let cache_key =
-                //     }
-                // }
+                let mut lock = font_system().write().expect("Failed to get font_system");
+                let font_system = lock.raw();
+                text_buffer.set_metrics_and_size(font_system, cosmic_text::Metrics::new(size.into(), line_height.to_absolute(size.into()).into()), Some(bounds.width), Some(bounds.height));
+                text_buffer.set_wrap(font_system, text::to_wrap(wrapping));
+                text_buffer.shape_until_scroll(font_system, false);
+                text_buffer.set_text(
+                    font_system,
+                    &content,
+                    &text::to_attributes(font),
+                    text::to_shaping(Shaping::Auto, &content),
+                    None, // TODO: ?
+                );
+
+                for run in text_buffer.layout_runs() {
+                    for glyph in run.glyphs {
+                        // TODO: Offset and/or scale properly?
+                        let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
+                        let cache_key = physical_glyph.cache_key;
+
+                        if let Some((placement, uv_tl, uv_br)) = pipeline
+                    }
+                }
             }
 
             _ => {}

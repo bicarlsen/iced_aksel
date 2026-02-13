@@ -1,6 +1,6 @@
 use std::sync::atomic::AtomicU64;
 
-use iced_graphics::text::cosmic_text::SwashCache;
+use iced_graphics::text::cosmic_text::{self, SwashCache};
 use iced_wgpu::{primitive::Pipeline, wgpu};
 
 use super::{atlas::TextureAtlas, data};
@@ -34,6 +34,7 @@ pub struct AkselPipeline {
 
     pub sampler: wgpu::Sampler,
 
+    pub text_buffer: cosmic_text::Buffer,
     pub vertex_buffer: wgpu::Buffer,
     pub uniform_buffer: wgpu::Buffer,
 
@@ -173,6 +174,11 @@ impl Pipeline for AkselPipeline {
             pipeline,
             bind_group,
             sampler,
+            // Init empty text buffer
+            text_buffer: cosmic_text::Buffer::new_empty(cosmic_text::Metrics {
+                font_size: 1.0,
+                line_height: 1.0,
+            }),
             vertex_buffer,
             uniform_buffer,
             swash_cache,
