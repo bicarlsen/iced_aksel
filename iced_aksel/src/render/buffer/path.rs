@@ -40,31 +40,33 @@ impl<Renderer: crate::render::Renderer> PathBatcher<Renderer> {
         self.buffer.push(primitive)
     }
 
-    pub(crate) fn flush(
-        &mut self,
-        renderer: &mut Renderer,
-        clip_bounds: &Rectangle,
-        with_damage: bool,
-    ) {
-        if with_damage {
-            self.cache.clear();
-        }
+    /// Clear the buffer, triggering a redraw
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+        self.cache.clear();
+    }
 
-        // No matter what, if the buffer is empty, we should never draw - This means no primitives
-        // was added.
-        if !self.buffer.is_empty() {
-            let primitives =
-                std::mem::replace(&mut self.buffer, Vec::with_capacity(PRE_ALLOC_PATHS));
-            let geometry = self
-                .cache
-                .draw_with_bounds(renderer, *clip_bounds, move |frame| {
-                    primitives
-                        .into_iter()
-                        .for_each(|primitive| Self::draw_primitive(primitive, frame))
-                });
+    /// Check if the buffer is empty (should redraw)
+    pub const fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
 
-            renderer.draw_geometry(geometry);
-        }
+    pub(crate) fn draw(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
+        // This will, after a render, result in an empty vec. But, since the underlying cache isn't
+        // cleared, it shouldn't redraw with the empty vector.
+        //
+        // The cache is only cleared when needed - And we can guarantee the if the cache is
+        // cleared, then the primitives will also exist in the buffer in order to redraw the cache
+        let primitives = std::mem::replace(&mut self.buffer, Vec::with_capacity(PRE_ALLOC_PATHS));
+        let geometry = self
+            .cache
+            .draw_with_bounds(renderer, *clip_bounds, move |frame| {
+                primitives
+                    .into_iter()
+                    .for_each(|primitive| Self::draw_primitive(primitive, frame))
+            });
+
+        renderer.draw_geometry(geometry);
     }
 
     fn draw_primitive(primitive: Primitive, frame: &mut Frame<Renderer>) {

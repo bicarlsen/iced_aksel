@@ -33,13 +33,31 @@ impl<Renderer: crate::Renderer> RenderBuffer<Renderer> {
         Self::Path(Box::new(PathBatcher::new(limit)))
     }
 
-    pub fn flush(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle, with_damage: bool) {
+    pub fn clear(&mut self) {
         match self {
             Self::Path(buf) => {
-                buf.flush(renderer, clip_bounds, with_damage);
+                buf.clear();
             }
             Self::Mesh(buf) => {
-                buf.flush(renderer, clip_bounds, with_damage);
+                buf.clear();
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Mesh(buf) => buf.is_empty(),
+            Self::Path(buf) => buf.is_empty(),
+        }
+    }
+
+    pub fn draw(&mut self, renderer: &mut Renderer, clip_bounds: &Rectangle) {
+        match self {
+            Self::Path(buf) => {
+                buf.draw(renderer, clip_bounds);
+            }
+            Self::Mesh(buf) => {
+                buf.draw(renderer, clip_bounds);
             }
         }
     }

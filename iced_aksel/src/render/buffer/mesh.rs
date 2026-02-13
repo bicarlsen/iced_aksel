@@ -86,28 +86,37 @@ impl MeshBatcher {
         self.tessellator.set_quality(quality);
     }
 
+    // Clear the buffer and cache
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
+
+    // Check if the buffer is empty (Should redraw)
+    pub const fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
+
     /// Flushes the pending geometry to the `iced` renderer.
     ///
     /// This consumes the current internal buffer and resets it.
-    pub(crate) fn flush<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle, with_damage: bool)
+    pub(crate) fn draw<R>(&mut self, renderer: &mut R, clip_bounds: &Rectangle)
     where
         R: Renderer,
     {
-        // If the buffer is filled with primitives, and nothing is cached - Rerender the cache
-        if with_damage {
-            let mut buffer = MeshData::default();
-            self.buffer.drain(..).for_each(|primitive| {
-                Self::draw_primitive(&mut buffer, primitive, &mut self.tessellator);
+        // If the buffer is filled with primitives - Rerender the cache.
+        if !self.is_empty() {
+            let mut mesh_buffer = MeshData::default();
+
+            self.buffer.iter().for_each(|primitive| {
+                Self::draw_primitive(&mut mesh_buffer, primitive, &mut self.tessellator);
             });
 
-            if let Some(mesh) = buffer.into_mesh(*clip_bounds) {
+            if let Some(mesh) = mesh_buffer.into_mesh(*clip_bounds) {
                 self.cached.update([mesh].into());
             }
-        } else {
-            // Clear the buffer, but keep the allocated space for next frame
-            self.buffer.clear();
         }
 
+        // Cache is cheap to clone thanks to Arc - This is intended
         renderer.draw_mesh_cache(self.cached.clone());
     }
 
@@ -116,15 +125,15 @@ impl MeshBatcher {
     }
 
     /// Renders a primitive into this mesh buffer using the tessellator.
-    fn draw_primitive(buffer: &mut MeshData, primitive: Primitive, tessellator: &mut Tessellator) {
+    fn draw_primitive(buffer: &mut MeshData, primitive: &Primitive, tessellator: &mut Tessellator) {
         match primitive {
             Primitive::Rectangle {
-                xy1: min,
-                xy2: max,
+                xy1,
+                xy2,
                 fill,
                 stroke,
             } => {
-                tessellator.draw_rectangle(buffer, min.x, min.y, max.x, max.y, fill, stroke);
+                tessellator.draw_rectangle(buffer, xy1.x, xy1.y, xy2.x, xy2.y, *fill, *stroke);
             }
             Primitive::Ellipse {
                 center,
@@ -132,14 +141,14 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                tessellator.draw_ellipse(buffer, center, radius, fill, stroke);
+                tessellator.draw_ellipse(buffer, *center, *radius, *fill, *stroke);
             }
             Primitive::Triangle {
                 points,
                 fill,
                 stroke,
             } => {
-                tessellator.draw_triangle(buffer, points[0], points[1], points[2], fill, stroke);
+                tessellator.draw_triangle(buffer, points[0], points[1], points[2], *fill, *stroke);
             }
             Primitive::Polygon {
                 center,
@@ -149,7 +158,9 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                tessellator.draw_polygon(buffer, center, radius, vertices, rotation, fill, stroke);
+                tessellator.draw_polygon(
+                    buffer, *center, *radius, *vertices, *rotation, *fill, *stroke,
+                );
             }
             Primitive::Line {
                 start,
@@ -159,7 +170,15 @@ impl MeshBatcher {
                 extensions,
                 arrows,
             } => {
-                tessellator.draw_line(buffer, start, end, stroke, clip_bounds, extensions, arrows);
+                tessellator.draw_line(
+                    buffer,
+                    *start,
+                    *end,
+                    *stroke,
+                    *clip_bounds,
+                    *extensions,
+                    *arrows,
+                );
             }
             Primitive::HorizontalLine {
                 y,
@@ -171,24 +190,24 @@ impl MeshBatcher {
                 StrokeStyle::Solid => {
                     linear::draw_horizontal_line(
                         buffer,
-                        x_start,
-                        x_end,
-                        y,
+                        *x_start,
+                        *x_end,
+                        *y,
                         stroke.thickness,
                         stroke.fill,
-                        snap,
+                        *snap,
                     );
                 }
                 StrokeStyle::Dashed { dash, gap } => linear::draw_horizontal_dashed_line(
                     buffer,
-                    x_start,
-                    x_end,
-                    y,
+                    *x_start,
+                    *x_end,
+                    *y,
                     stroke.thickness,
                     stroke.fill,
                     dash,
                     gap,
-                    snap,
+                    *snap,
                 ),
                 StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
             },
@@ -202,24 +221,24 @@ impl MeshBatcher {
                 StrokeStyle::Solid => {
                     linear::draw_vertical_line(
                         buffer,
-                        x,
-                        y_start,
-                        y_end,
+                        *x,
+                        *y_start,
+                        *y_end,
                         stroke.thickness,
                         stroke.fill,
-                        snap,
+                        *snap,
                     );
                 }
                 StrokeStyle::Dashed { dash, gap } => linear::draw_vertical_dashed_line(
                     buffer,
-                    x,
-                    y_start,
-                    y_end,
+                    *x,
+                    *y_start,
+                    *y_end,
                     stroke.thickness,
                     stroke.fill,
                     dash,
                     gap,
-                    snap,
+                    *snap,
                 ),
                 StrokeStyle::Dotted { gap: _ } => todo!("Draw dotted line"),
             },
@@ -230,7 +249,14 @@ impl MeshBatcher {
                 extensions,
                 arrows,
             } => {
-                tessellator.draw_polyline(buffer, points, stroke, clip_bounds, extensions, arrows);
+                tessellator.draw_polyline(
+                    buffer,
+                    points.clone(),
+                    *stroke,
+                    *clip_bounds,
+                    *extensions,
+                    *arrows,
+                );
             }
             Primitive::BezierCurve {
                 start,
@@ -239,14 +265,14 @@ impl MeshBatcher {
                 control_2,
                 stroke,
             } => {
-                tessellator.draw_bezier(buffer, start, control_1, control_2, end, stroke);
+                tessellator.draw_bezier(buffer, *start, *control_1, *control_2, *end, *stroke);
             }
             Primitive::Spline {
                 points,
                 stroke,
                 tension,
             } => {
-                tessellator.draw_spline(buffer, points, stroke, tension);
+                tessellator.draw_spline(buffer, points, *stroke, *tension);
             }
             Primitive::Arc {
                 center,
@@ -261,12 +287,12 @@ impl MeshBatcher {
                     buffer,
                     center.x,
                     center.y,
-                    radius_inner,
-                    radius_outer,
-                    start_angle,
-                    end_angle,
-                    fill,
-                    stroke,
+                    *radius_inner,
+                    *radius_outer,
+                    *start_angle,
+                    *end_angle,
+                    *fill,
+                    *stroke,
                 );
             }
             Primitive::Area {
@@ -274,7 +300,7 @@ impl MeshBatcher {
                 fill,
                 stroke,
             } => {
-                tessellator.draw_area(buffer, &points, fill, stroke);
+                tessellator.draw_area(buffer, points, *fill, *stroke);
             }
             Primitive::Text {
                 font,
@@ -297,18 +323,18 @@ impl MeshBatcher {
                 tessellator.draw_text(
                     buffer,
                     crate::render::text::Text {
-                        font,
-                        content,
-                        position,
-                        size,
-                        rotation,
-                        horizontal_alignment,
-                        vertical_alignment,
-                        fill,
+                        font: *font,
+                        content: content.clone(),
+                        position: *position,
+                        size: *size,
+                        rotation: *rotation,
+                        horizontal_alignment: *horizontal_alignment,
+                        vertical_alignment: *vertical_alignment,
+                        fill: *fill,
                         tolerance,
-                        line_height: line_height.to_absolute(size),
-                        bounds,
-                        wrapping,
+                        line_height: line_height.to_absolute(*size),
+                        bounds: *bounds,
+                        wrapping: *wrapping,
                     },
                 );
             }

@@ -234,7 +234,6 @@ pub struct Chart<
     padding: Padding,
     quality: Quality,
     markers: Vec<MarkerRequest<'a, AxisId, Domain, Theme>>,
-    is_damaged: bool,
 
     // Fonts
     axis_font: Option<Font>,
@@ -284,7 +283,6 @@ where
             padding: Padding::new(0.),
             quality: Quality::Medium,
             markers: Vec::with_capacity(state.axes().len()),
-            is_damaged: false,
 
             // Handlers and fonts default to None
             axis_font: None,
@@ -1047,10 +1045,10 @@ where
 
         // Check if we need to redraw
         if memory.last_signature.as_ref() != Some(&current_signature) {
-            self.is_damaged = true;
             println!("Damage!");
             println!("Prev: {:#?}", memory.last_signature);
             println!("New: {:#?}", current_signature);
+            memory.get_buffer_mut().clear();
             memory.last_signature = Some(current_signature);
         }
 
@@ -1141,7 +1139,7 @@ where
         let memory = tree.state.downcast_ref::<Memory<AxisId, Renderer>>();
 
         // Get buffer from memory
-        let mut buffer = memory.get_buffer();
+        let mut buffer = memory.get_buffer_mut();
 
         let screen_rect = ScreenRect {
             x: plot_bounds.x,
@@ -1165,60 +1163,56 @@ where
         //         &bounds,
         //     );
         // }
-
-        // 2. Draw Spine Corners (Self-contained logic)
+        //
+        // // 2. Draw Spine Corners (Self-contained logic)
         // self.draw_spine_corners(layout, &style, plot_bounds, &mut buffer);
 
-        // Flush the mesh buffer (draws all the lines/ticks aggregated so far)
-        // buffer.flush(renderer, &bounds);
+        if buffer.is_empty() {
+            // 3. Render data layers if nothing in the buffer/cache
+            for layer in &self.layers {
+                // These axes are guaranteed to exist because of `verify_layer` check
+                let x_axis = self.state.axis(&layer.horizontal_axis_id);
+                let y_axis = self.state.axis(&layer.vertical_axis_id);
+                let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-        // 3. Render data layers
-        for layer in &self.layers {
-            // These axes are guaranteed to exist because of `verify_layer` check
-            let x_axis = self.state.axis(&layer.horizontal_axis_id);
-            let y_axis = self.state.axis(&layer.vertical_axis_id);
-            let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
+                let mut plot: Plot<Domain, Renderer> =
+                    Plot::new(renderer, &plot_bounds, &mut buffer, &transform);
 
-            let mut plot: Plot<Domain, Renderer> =
-                Plot::new(renderer, &plot_bounds, &mut buffer, &transform);
-
-            // User code draws shapes into the plot here
-            layer.items.draw(&mut plot, theme);
+                // User code draws shapes into the plot here
+                layer.items.draw(&mut plot, theme);
+            }
         }
 
-        // Flush the mesh buffer once more to draw all data layers
-        // buffer.flush(renderer, &plot_bounds);
-
         // 4. Render markers
-        // for marker_request in &self.markers {
-        //     let Some((idx, _, axis)) = self.state.axes().get_full(marker_request.axis_id) else {
-        //         continue;
-        //     };
-        //
-        //     let axis_bounds = layout.child(idx).bounds();
-        //
-        //     let Some((marker, normalized_position)) = marker_request.create_marker(
-        //         axis,
-        //         &axis_bounds,
-        //         &plot_bounds,
-        //         cursor,
-        //         &style.axis,
-        //         theme,
-        //     ) else {
-        //         continue;
-        //     };
-        //
-        //     axis.draw_marker_overlay(
-        //         renderer,
-        //         normalized_position,
-        //         marker,
-        //         axis_bounds,
-        //         &bounds,
-        //         style.axis.text_offset,
-        //     );
-        // }
+        for marker_request in &self.markers {
+            let Some((idx, _id, axis)) = self.state.axes().get_full(marker_request.axis_id) else {
+                continue;
+            };
 
-        buffer.flush(renderer, &bounds, self.is_damaged);
+            let axis_bounds = layout.child(idx).bounds();
+
+            let Some((marker, normalized_position)) = marker_request.create_marker(
+                axis,
+                &axis_bounds,
+                &plot_bounds,
+                cursor,
+                &style.axis,
+                theme,
+            ) else {
+                continue;
+            };
+
+            axis.draw_marker_overlay(
+                renderer,
+                normalized_position,
+                marker,
+                axis_bounds,
+                &bounds,
+                style.axis.text_offset,
+            );
+        }
+
+        buffer.draw(renderer, &bounds);
     }
 }
 
