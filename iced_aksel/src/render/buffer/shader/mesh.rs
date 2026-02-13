@@ -39,6 +39,9 @@ impl VertexBuffer {
             position,
             color,
             uv,
+            primitive_type: data::PRIM_TYPE_MSDF_TEXT, // Default to legacy texture rendering
+            param0: [0.0, 0.0, 0.0, 0.0],
+            param1: [0.0, 0.0, 0.0, 0.0],
         })
     }
 
@@ -55,74 +58,149 @@ impl VertexBuffer {
                 xy1,
                 xy2,
                 fill,
-                stroke,
+                stroke: _stroke,
             } => {
                 let color = fill.map(pack_color).unwrap_or(TRANSPARENT);
-                let uv = TextureAtlas::get_white_pixel_uv();
 
+                // Use SDF rounded rect rendering
+                let center_x = (xy1.x + xy2.x) / 2.0;
+                let center_y = (xy1.y + xy2.y) / 2.0;
+                let half_width = (xy2.x - xy1.x).abs() / 2.0;
+                let half_height = (xy2.y - xy1.y).abs() / 2.0;
+                let corner_radius = 0.0; // No rounding for basic rectangles
+
+                // Add small margin for antialiasing
+                let margin = 2.0;
+                let x1 = xy1.x - margin;
+                let y1 = xy1.y - margin;
+                let x2 = xy2.x + margin;
+                let y2 = xy2.y + margin;
+
+                // Create 6 vertices for the bounding quad (2 triangles)
                 // T1
-                self.push_vertex([xy1.x, xy1.y], color, uv);
-                self.push_vertex([xy2.x, xy1.y], color, uv);
-                self.push_vertex([xy1.x, xy2.y], color, uv);
+                self.0.push(data::UnifiedVertex {
+                    position: [x1, y1],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_ROUNDED_RECT,
+                    param0: [center_x, center_y, half_width, half_height],
+                    param1: [corner_radius, 1.0, 0.0, 0.0], // cos=1, sin=0 (no rotation)
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [x2, y1],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_ROUNDED_RECT,
+                    param0: [center_x, center_y, half_width, half_height],
+                    param1: [corner_radius, 1.0, 0.0, 0.0],
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [x1, y2],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_ROUNDED_RECT,
+                    param0: [center_x, center_y, half_width, half_height],
+                    param1: [corner_radius, 1.0, 0.0, 0.0],
+                });
                 // T2
-                self.push_vertex([xy2.x, xy1.y], color, uv);
-                self.push_vertex([xy2.x, xy2.y], color, uv);
-                self.push_vertex([xy1.x, xy2.y], color, uv);
+                self.0.push(data::UnifiedVertex {
+                    position: [x2, y1],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_ROUNDED_RECT,
+                    param0: [center_x, center_y, half_width, half_height],
+                    param1: [corner_radius, 1.0, 0.0, 0.0],
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [x2, y2],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_ROUNDED_RECT,
+                    param0: [center_x, center_y, half_width, half_height],
+                    param1: [corner_radius, 1.0, 0.0, 0.0],
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [x1, y2],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_ROUNDED_RECT,
+                    param0: [center_x, center_y, half_width, half_height],
+                    param1: [corner_radius, 1.0, 0.0, 0.0],
+                });
             }
 
             Primitive::Line {
                 start,
                 end,
                 stroke,
-                clip_bounds,
-                extensions,
-                arrows,
+                clip_bounds: _clip_bounds,
+                extensions: _extensions,
+                arrows: _arrows,
             } => {
                 let color = pack_color(stroke.fill);
-                let uv = TextureAtlas::get_white_pixel_uv();
+                let thickness = stroke.thickness;
 
-                // Calculate direction vector
-                let dx = end.x - start.x;
-                let dy = end.y - start.y;
+                // Calculate bounding box for the line with margin for antialiasing
+                let margin = thickness / 2.0 + 2.0;
+                let min_x = start.x.min(end.x) - margin;
+                let max_x = start.x.max(end.x) + margin;
+                let min_y = start.y.min(end.y) - margin;
+                let max_y = start.y.max(end.y) + margin;
 
-                // Calculate length
-                let len = dx.hypot(dy);
+                // Calculate rotation (0 for now, line is defined by start/end directly)
+                let rotation = 0.0_f32;
 
-                if len == 0.0 {
-                    return; // No 0-division!
-                }
-
-                // Calculate normalized direction
-                let u_x = dx / len;
-                let u_y = dy / len;
-
-                // Calculate perpendicular vector
-                let n_x = -u_y;
-                let n_y = u_x;
-
-                // Calculate offset
-                let half_width = stroke.thickness / 2.0;
-                let off_x = n_x * half_width;
-                let off_y = n_y * half_width;
-
-                // Calculate the 4 corners
-                let x1 = start.x + off_x;
-                let y1 = start.y + off_y;
-                let x2 = start.x - off_x;
-                let y2 = start.y - off_y;
-                let x3 = end.x - off_x;
-                let y3 = end.y - off_y;
-                let x4 = end.x + off_x;
-                let y4 = end.y + off_y;
-
+                // Create 6 vertices for the bounding quad (2 triangles)
                 // T1
-                self.push_vertex([x1, y1], color, uv);
-                self.push_vertex([x2, y2], color, uv);
-                self.push_vertex([x4, y4], color, uv);
+                self.0.push(data::UnifiedVertex {
+                    position: [min_x, min_y],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_LINE,
+                    param0: [start.x, start.y, end.x, end.y],
+                    param1: [thickness, rotation.cos(), rotation.sin(), 0.0],
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [max_x, min_y],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_LINE,
+                    param0: [start.x, start.y, end.x, end.y],
+                    param1: [thickness, rotation.cos(), rotation.sin(), 0.0],
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [min_x, max_y],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_LINE,
+                    param0: [start.x, start.y, end.x, end.y],
+                    param1: [thickness, rotation.cos(), rotation.sin(), 0.0],
+                });
                 // T2
-                self.push_vertex([x2, y2], color, uv);
-                self.push_vertex([x3, y3], color, uv);
-                self.push_vertex([x4, y4], color, uv);
+                self.0.push(data::UnifiedVertex {
+                    position: [max_x, min_y],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_LINE,
+                    param0: [start.x, start.y, end.x, end.y],
+                    param1: [thickness, rotation.cos(), rotation.sin(), 0.0],
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [max_x, max_y],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_LINE,
+                    param0: [start.x, start.y, end.x, end.y],
+                    param1: [thickness, rotation.cos(), rotation.sin(), 0.0],
+                });
+                self.0.push(data::UnifiedVertex {
+                    position: [min_x, max_y],
+                    color,
+                    uv: [0.0, 0.0],
+                    primitive_type: data::PRIM_TYPE_SDF_LINE,
+                    param0: [start.x, start.y, end.x, end.y],
+                    param1: [thickness, rotation.cos(), rotation.sin(), 0.0],
+                });
             }
             Primitive::Text {
                 font,

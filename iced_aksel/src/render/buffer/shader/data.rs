@@ -8,10 +8,20 @@ use crate::render::buffer::shader::pipeline::LABEL_RENDERER_VERTEX_BUFFER;
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct UnifiedVertex {
     // We use [f32; N] instead of vector to ensure memory layout explicitly
-    pub position: [f32; 2],
-    pub color: [f32; 4],
-    pub uv: [f32; 2],
+    pub position: [f32; 2],      // Vertex position (screen space for quads)
+    pub color: [f32; 4],          // RGBA color
+    pub uv: [f32; 2],             // UV coordinates for texture atlas
+    pub primitive_type: u32,      // Type of primitive (0=MSDF text, 1=SDF line, 2=SDF circle, etc.)
+    pub param0: [f32; 4],         // Shape-specific parameters
+    pub param1: [f32; 4],         // Additional shape-specific parameters
 }
+
+// Primitive type constants
+pub const PRIM_TYPE_MSDF_TEXT: u32 = 0;
+pub const PRIM_TYPE_SDF_LINE: u32 = 1;
+pub const PRIM_TYPE_SDF_CIRCLE: u32 = 2;
+pub const PRIM_TYPE_SDF_ROUNDED_RECT: u32 = 3;
+pub const PRIM_TYPE_SDF_ELLIPSE: u32 = 4;
 
 impl UnifiedVertex {
     pub const fn new_shape(pos: [f32; 2], color: [f32; 4], white_pixel_uv: [f32; 2]) -> Self {
@@ -19,6 +29,98 @@ impl UnifiedVertex {
             position: [pos[0], pos[1]],
             color,
             uv: white_pixel_uv,
+            primitive_type: PRIM_TYPE_MSDF_TEXT, // Legacy - use white pixel as texture
+            param0: [0.0, 0.0, 0.0, 0.0],
+            param1: [0.0, 0.0, 0.0, 0.0],
+        }
+    }
+
+    pub const fn new_msdf_text(pos: [f32; 2], color: [f32; 4], uv: [f32; 2]) -> Self {
+        Self {
+            position: pos,
+            color,
+            uv,
+            primitive_type: PRIM_TYPE_MSDF_TEXT,
+            param0: [0.0, 0.0, 0.0, 0.0],
+            param1: [0.0, 0.0, 0.0, 0.0],
+        }
+    }
+
+    pub fn new_sdf_line(
+        pos: [f32; 2],
+        color: [f32; 4],
+        line_start: [f32; 2],
+        line_end: [f32; 2],
+        width: f32,
+        rotation_radians: f32,
+    ) -> Self {
+        let cos_angle = rotation_radians.cos();
+        let sin_angle = rotation_radians.sin();
+        Self {
+            position: pos,
+            color,
+            uv: [0.0, 0.0], // Not used for SDF shapes
+            primitive_type: PRIM_TYPE_SDF_LINE,
+            param0: [line_start[0], line_start[1], line_end[0], line_end[1]],
+            param1: [width, cos_angle, sin_angle, 0.0],
+        }
+    }
+
+    pub fn new_sdf_circle(
+        pos: [f32; 2],
+        color: [f32; 4],
+        center: [f32; 2],
+        radius: f32,
+        rotation_radians: f32,
+    ) -> Self {
+        let cos_angle = rotation_radians.cos();
+        let sin_angle = rotation_radians.sin();
+        Self {
+            position: pos,
+            color,
+            uv: [0.0, 0.0],
+            primitive_type: PRIM_TYPE_SDF_CIRCLE,
+            param0: [center[0], center[1], radius, 0.0],
+            param1: [cos_angle, sin_angle, 0.0, 0.0],
+        }
+    }
+
+    pub fn new_sdf_ellipse(
+        pos: [f32; 2],
+        color: [f32; 4],
+        center: [f32; 2],
+        radii: [f32; 2],
+        rotation_radians: f32,
+    ) -> Self {
+        let cos_angle = rotation_radians.cos();
+        let sin_angle = rotation_radians.sin();
+        Self {
+            position: pos,
+            color,
+            uv: [0.0, 0.0],
+            primitive_type: PRIM_TYPE_SDF_ELLIPSE,
+            param0: [center[0], center[1], radii[0], radii[1]],
+            param1: [cos_angle, sin_angle, 0.0, 0.0],
+        }
+    }
+
+    pub fn new_sdf_rounded_rect(
+        pos: [f32; 2],
+        color: [f32; 4],
+        center: [f32; 2],
+        half_size: [f32; 2],
+        corner_radius: f32,
+        rotation_radians: f32,
+    ) -> Self {
+        let cos_angle = rotation_radians.cos();
+        let sin_angle = rotation_radians.sin();
+        Self {
+            position: pos,
+            color,
+            uv: [0.0, 0.0],
+            primitive_type: PRIM_TYPE_SDF_ROUNDED_RECT,
+            param0: [center[0], center[1], half_size[0], half_size[1]],
+            param1: [corner_radius, cos_angle, sin_angle, 0.0],
         }
     }
 }
@@ -155,26 +257,44 @@ pub fn create_renderer_pipeline(
             entry_point: Some("vs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             buffers: &[wgpu::VertexBufferLayout {
-                array_stride: std::mem::size_of::<UnifiedVertex>() as wgpu::BufferAddress, // Now bigger
+                array_stride: std::mem::size_of::<UnifiedVertex>() as wgpu::BufferAddress,
                 step_mode: wgpu::VertexStepMode::Vertex,
                 attributes: &[
-                    // Location 0: Position (Float32x2)
+                    // Location 0: Position (Float32x2) - offset 0
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32x2,
                         offset: 0,
                         shader_location: 0,
                     },
-                    // Location 1: Color starts at offset 8 (2 * 4 bytes)
+                    // Location 1: Color (Float32x4) - offset 8
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32x4,
                         offset: 8,
                         shader_location: 1,
                     },
-                    // Location 2: UV starts at offset 24 (8 + 16)
+                    // Location 2: UV (Float32x2) - offset 24
                     wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32x2,
                         offset: 24,
                         shader_location: 2,
+                    },
+                    // Location 3: Primitive Type (Uint32) - offset 32
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Uint32,
+                        offset: 32,
+                        shader_location: 3,
+                    },
+                    // Location 4: Param0 (Float32x4) - offset 36
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x4,
+                        offset: 36,
+                        shader_location: 4,
+                    },
+                    // Location 5: Param1 (Float32x4) - offset 52
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x4,
+                        offset: 52,
+                        shader_location: 5,
                     },
                 ],
             }],

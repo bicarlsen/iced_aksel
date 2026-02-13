@@ -29,6 +29,9 @@ lyon_tessellation.workspace = true
 lyon_path.workspace = true
 lyon.workspace = true
 lru.workspace = true
+fdsm.workspace = true
+fdsm-ttf-parser.workspace = true
+nalgebra.workspace = true
 
 [dev-dependencies]
 rand.workspace = true
