@@ -286,7 +286,8 @@ impl iced_wgpu::Primitive for ShaderCache {
 
             let needed_capacity = vertices.len();
             if needed_capacity > pipeline.vertex_capacity {
-                pipeline.vertex_buffer = data::create_renderer_vertex_buffer(device, needed_capacity);
+                pipeline.vertex_buffer =
+                    data::create_renderer_vertex_buffer(device, needed_capacity);
                 pipeline.vertex_capacity = needed_capacity;
             }
 
@@ -441,10 +442,11 @@ impl iced_wgpu::Primitive for ShaderCache {
     }
 
     fn draw(&self, pipeline: &Self::Pipeline, render_pass: &mut wgpu::RenderPass<'_>) -> bool {
-        // render_pass.set_pipeline(&pipeline.pipeline);
-        // render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
-        // render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
-        // render_pass.draw(0..pipeline.vertex_count, 0..1);
-        false
+        render_pass.set_pipeline(&pipeline.pipeline);
+        render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
+        render_pass.draw(0..pipeline.vertex_count, 0..1);
+        // false
+        true
     }
 }

@@ -1,0 +1,16 @@
+[package]
+name = "showcase_animated_text"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+iced.workspace = true
+
+iced_aksel = { path = "../../iced_aksel/" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iced = { workspace = true, features = ["web-colors", "thread-pool", "webgl", "fira-sans"] }
+
+[lints]
+workspace = true

@@ -51,6 +51,10 @@ where
         }
     }
 
+    pub fn mark_dirty(&mut self) {
+        self.increment_version();
+    }
+
     /// Returns the current version of the State
     pub(crate) const fn version(&self) -> u64 {
         self.version
