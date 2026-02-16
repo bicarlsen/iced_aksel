@@ -20,20 +20,17 @@ pub const LABEL_BLIT_MODULE: &str = "Aksel Blit Shader Module";
 pub const LABEL_BLIT_BIND_GROUP_LAYOUT: &str = "Aksel Blit Bind Group Layout";
 pub const LABEL_BLIT_PIPELINE_LAYOUT: &str = "Aksel Blit Pipeline Layout";
 pub const LABEL_BLIT_PIPELINE: &str = "Aksel Blit Pipeline";
-pub const LABEL_MSAA_TEXTURE: &str = "Aksel MSAA Texture";
 
 pub const VERTEX_BUFFER_INIT_CAPACITY: usize = 100;
 pub const VERTEX_BUFFER_SIZE: usize =
     VERTEX_BUFFER_INIT_CAPACITY * std::mem::size_of::<data::UnifiedVertex>();
-
-pub const MSAA_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-pub const MSAA_SAMPLE_COUNT: u32 = 4;
 
 pub struct AkselPipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
 
     pub sampler: wgpu::Sampler,
+    pub blit_sampler: wgpu::Sampler,
 
     pub text_buffer: cosmic_text::Buffer,
     pub vertex_buffer: wgpu::Buffer,
@@ -45,11 +42,8 @@ pub struct AkselPipeline {
     pub vertex_count: u32,
     pub vertex_capacity: usize,
 
-    // MSAA
-    pub sample_count: u32,
+    // Format
     pub format: wgpu::TextureFormat,
-    pub msaa_view: Option<wgpu::TextureView>,
-    pub msaa_texture: Option<wgpu::Texture>,
 
     // Caching
     pub cache_texture: Option<wgpu::Texture>,
@@ -84,12 +78,22 @@ impl Pipeline for AkselPipeline {
             ..Default::default()
         });
 
+        // Create separate sampler for blit (Nearest to avoid interpolation artifacts)
+        let blit_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         // Init text caches
         let atlas = TextureAtlas::new(device, queue);
 
         // Use the iced-provided format for all rendering to avoid color space conversion issues
+        // MSAA is disabled (sample_count = 1) for compatibility with MSDF rendering
         let (pipeline, bind_group_layout) =
-            data::create_renderer_pipeline(device, format, &shader_module, MSAA_SAMPLE_COUNT);
+            data::create_renderer_pipeline(device, format, &shader_module, 1);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(LABEL_RENDERER_BIND_GROUP),
             layout: &bind_group_layout,
@@ -157,7 +161,9 @@ impl Pipeline for AkselPipeline {
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    // Use premultiplied alpha blending to correctly composite cache over target
+                    // This avoids double-blending while preserving transparency
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -173,6 +179,7 @@ impl Pipeline for AkselPipeline {
             pipeline,
             bind_group,
             sampler,
+            blit_sampler,
             // Init empty text buffer
             text_buffer: cosmic_text::Buffer::new_empty(cosmic_text::Metrics {
                 font_size: 1.0,
@@ -185,10 +192,7 @@ impl Pipeline for AkselPipeline {
             vertex_count: 0,
             vertex_capacity: VERTEX_BUFFER_INIT_CAPACITY,
 
-            sample_count: MSAA_SAMPLE_COUNT,
             format, // Use iced format for all textures to avoid color space issues
-            msaa_view: None,
-            msaa_texture: None,
 
             cache_texture: None,
             cache_view: None,

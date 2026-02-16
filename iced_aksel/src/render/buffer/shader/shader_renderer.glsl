@@ -172,7 +172,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let local_pos = rotate_point(input.pixel_position, line_center, cos_angle, -sin_angle);
 
         let dist = distance_to_line_segment(local_pos, line_start, line_end) - line_width * 0.5;
-        let alpha = clamp(0.5 - dist, 0.0, 1.0);
+
+        // Use derivative-based anti-aliasing for smooth subpixel rendering
+        let pixel_dist = fwidth(input.pixel_position);
+        let aa_range = length(pixel_dist) * 0.5;
+        let alpha = clamp(0.5 - dist / aa_range, 0.0, 1.0);
 
         final_color = vec4<f32>(input.color.rgb, input.color.a * alpha);
     } else if (input.primitive_type == PRIM_TYPE_SDF_CIRCLE) {
@@ -187,7 +191,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let local_pos = rotate_point(input.pixel_position, center, cos_angle, -sin_angle);
 
         let dist = sdf_circle(local_pos, center, radius);
-        let alpha = clamp(0.5 - dist, 0.0, 1.0);
+
+        // Use derivative-based anti-aliasing for smooth subpixel rendering
+        let pixel_dist = fwidth(input.pixel_position);
+        let aa_range = length(pixel_dist) * 0.5;
+        let alpha = clamp(0.5 - dist / aa_range, 0.0, 1.0);
 
         final_color = vec4<f32>(input.color.rgb, input.color.a * alpha);
     } else if (input.primitive_type == PRIM_TYPE_SDF_ELLIPSE) {
@@ -201,7 +209,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let local_pos = rotate_point(input.pixel_position, center, cos_angle, -sin_angle);
 
         let dist = sdf_ellipse(local_pos, center, radii);
-        let alpha = clamp(0.5 - dist, 0.0, 1.0);
+
+        // Use derivative-based anti-aliasing for smooth subpixel rendering
+        let pixel_dist = fwidth(input.pixel_position);
+        let aa_range = length(pixel_dist) * 0.5;
+        let alpha = clamp(0.5 - dist / aa_range, 0.0, 1.0);
 
         final_color = vec4<f32>(input.color.rgb, input.color.a * alpha);
     } else if (input.primitive_type == PRIM_TYPE_SDF_ROUNDED_RECT) {
@@ -216,7 +228,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let local_pos = rotate_point(input.pixel_position, center, cos_angle, -sin_angle);
 
         let dist = sdf_rounded_rect(local_pos, center, half_size, corner_radius);
-        let alpha = clamp(0.5 - dist, 0.0, 1.0);
+
+        // Use derivative-based anti-aliasing for smooth subpixel rendering
+        let pixel_dist = fwidth(input.pixel_position);
+        let aa_range = length(pixel_dist) * 0.5;
+        let alpha = clamp(0.5 - dist / aa_range, 0.0, 1.0);
 
         final_color = vec4<f32>(input.color.rgb, input.color.a * alpha);
     } else {

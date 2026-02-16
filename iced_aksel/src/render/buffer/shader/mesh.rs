@@ -1,8 +1,8 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::num::NonZeroUsize;
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 
 use lru::LruCache;
 
@@ -35,13 +35,13 @@ const fn pack_color(color: Color) -> PackedColor {
 /// Cache key for shaped text layouts
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct TextShapeKey {
-    content_hash: u64,      // Hash of text content
-    font_hash: u64,         // Hash of font attributes
-    size_bits: u32,         // Font size as bits for exact comparison
-    line_height_bits: u32,  // Line height as bits
-    bounds_width_bits: u32, // Bounds width as bits
-    bounds_height_bits: u32,// Bounds height as bits
-    wrapping: u8,           // Wrapping mode as u8
+    content_hash: u64,       // Hash of text content
+    font_hash: u64,          // Hash of font attributes
+    size_bits: u32,          // Font size as bits for exact comparison
+    line_height_bits: u32,   // Line height as bits
+    bounds_width_bits: u32,  // Bounds width as bits
+    bounds_height_bits: u32, // Bounds height as bits
+    wrapping: u8,            // Wrapping mode as u8
 }
 
 impl TextShapeKey {
@@ -137,7 +137,13 @@ impl VertexBuffer {
         self.0.len()
     }
 
-    fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2], glyph_atlas_size: [f32; 2]) {
+    fn push_vertex(
+        &mut self,
+        position: [f32; 2],
+        color: PackedColor,
+        uv: [f32; 2],
+        glyph_atlas_size: [f32; 2],
+    ) {
         self.0.push(UnifiedVertex {
             position,
             color,
@@ -384,7 +390,9 @@ impl VertexBuffer {
                         let glyph_cache_key = physical_glyph.cache_key;
 
                         if let Some(mut atlas_glyph) =
-                            pipeline.atlas.get_glyph(queue, font_system, glyph_cache_key)
+                            pipeline
+                                .atlas
+                                .get_glyph(queue, font_system, glyph_cache_key)
                         {
                             // Create a fake LayoutRun for compatibility with get_logical_position
                             let fake_run = cosmic_text::LayoutRun {
@@ -405,7 +413,10 @@ impl VertexBuffer {
                                 &fake_run,
                             );
 
-                            let glyph_atlas_size = [atlas_glyph.atlas_width as f32, atlas_glyph.atlas_height as f32];
+                            let glyph_atlas_size = [
+                                atlas_glyph.atlas_width as f32,
+                                atlas_glyph.atlas_height as f32,
+                            ];
 
                             // T1
                             self.push_vertex(
@@ -523,9 +534,10 @@ impl iced_wgpu::Primitive for ShaderCache {
 
             let needed_capacity = vertices.len();
             if needed_capacity > pipeline.vertex_capacity {
-                pipeline.vertex_buffer =
-                    data::create_renderer_vertex_buffer(device, needed_capacity);
-                pipeline.vertex_capacity = needed_capacity;
+                // Use 1.5× growth factor to reduce reallocation frequency
+                let new_capacity = (needed_capacity * 3) / 2;
+                pipeline.vertex_buffer = data::create_renderer_vertex_buffer(device, new_capacity);
+                pipeline.vertex_capacity = new_capacity;
             }
 
             queue.write_buffer(&pipeline.vertex_buffer, 0, vertices.as_bytes());
@@ -548,26 +560,6 @@ impl iced_wgpu::Primitive for ShaderCache {
 
         let size_mismatch = pipeline.cache_size != (width, height);
 
-        if size_mismatch || pipeline.msaa_texture.is_none() {
-            let msaa_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Aksel MSAA Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: pipeline.sample_count,
-                dimension: wgpu::TextureDimension::D2,
-                format: pipeline.format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            pipeline.msaa_view =
-                Some(msaa_texture.create_view(&wgpu::TextureViewDescriptor::default()));
-            pipeline.msaa_texture = Some(msaa_texture);
-        }
-
         if size_mismatch || pipeline.cache_texture.is_none() {
             let cache_texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Aksel Cache Texture"),
@@ -579,6 +571,7 @@ impl iced_wgpu::Primitive for ShaderCache {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
+                // Must match the pipeline format (e.g., Rgb10a2Unorm from iced)
                 format: pipeline.format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -597,7 +590,7 @@ impl iced_wgpu::Primitive for ShaderCache {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&pipeline.sampler),
+                        resource: wgpu::BindingResource::Sampler(&pipeline.blit_sampler),
                     },
                 ],
             });
@@ -634,8 +627,8 @@ impl iced_wgpu::Primitive for ShaderCache {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(LABEL_CACHE_RENDER),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: pipeline.msaa_view.as_ref().unwrap_or(cache_view),
-                    resolve_target: pipeline.msaa_view.as_ref().map(|_| cache_view),
+                    view: cache_view,
+                    resolve_target: None,
                     ops: wgpu::Operations {
                         // Clear and store the new texture
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -679,11 +672,11 @@ impl iced_wgpu::Primitive for ShaderCache {
     }
 
     fn draw(&self, pipeline: &Self::Pipeline, render_pass: &mut wgpu::RenderPass<'_>) -> bool {
-        render_pass.set_pipeline(&pipeline.pipeline);
-        render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
-        render_pass.draw(0..pipeline.vertex_count, 0..1);
-        // false
-        true
+        // render_pass.set_pipeline(&pipeline.pipeline);
+        // render_pass.set_bind_group(0, &pipeline.bind_group, &[]);
+        // render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
+        // render_pass.draw(0..pipeline.vertex_count, 0..1);
+        false
+        // true
     }
 }
