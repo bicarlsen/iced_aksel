@@ -1,5 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::num::NonZeroUsize;
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
+
+use lru::LruCache;
 
 use super::atlas::TextureAtlas;
 use super::data::{self, UnifiedVertex};
@@ -17,9 +22,107 @@ type PackedColor = [f32; 4];
 const TRANSPARENT: PackedColor = [0., 0., 0., 0.];
 const INIT_CAPACITY: usize = 10_000;
 const LABEL_CACHE_RENDER: &str = "Aksel Cache Render";
+const TEXT_SHAPE_CACHE_CAPACITY: usize = 256; // Cache up to 256 unique text shapes
 
 const fn pack_color(color: Color) -> PackedColor {
     [color.r, color.g, color.b, color.a]
+}
+
+// -----------------------------------------------------------------------------
+// Text Shaping Cache
+// -----------------------------------------------------------------------------
+
+/// Cache key for shaped text layouts
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct TextShapeKey {
+    content_hash: u64,      // Hash of text content
+    font_hash: u64,         // Hash of font attributes
+    size_bits: u32,         // Font size as bits for exact comparison
+    line_height_bits: u32,  // Line height as bits
+    bounds_width_bits: u32, // Bounds width as bits
+    bounds_height_bits: u32,// Bounds height as bits
+    wrapping: u8,           // Wrapping mode as u8
+}
+
+impl TextShapeKey {
+    fn from_text_primitive(
+        content: &str,
+        font: &iced_core::Font,
+        size: f32,
+        line_height: iced_core::text::LineHeight,
+        bounds: iced_core::Size,
+        wrapping: iced_core::text::Wrapping,
+    ) -> Self {
+        // Hash the text content
+        let mut content_hasher = DefaultHasher::new();
+        content.hash(&mut content_hasher);
+        let content_hash = content_hasher.finish();
+
+        // Hash the font attributes
+        let mut font_hasher = DefaultHasher::new();
+        font.family.hash(&mut font_hasher);
+        font.weight.hash(&mut font_hasher);
+        font.stretch.hash(&mut font_hasher);
+        font.style.hash(&mut font_hasher);
+        let font_hash = font_hasher.finish();
+
+        // Convert line_height to absolute pixels
+        let line_height_px = line_height.to_absolute(iced_core::Pixels(size)).0;
+
+        Self {
+            content_hash,
+            font_hash,
+            size_bits: size.to_bits(),
+            line_height_bits: line_height_px.to_bits(),
+            bounds_width_bits: bounds.width.to_bits(),
+            bounds_height_bits: bounds.height.to_bits(),
+            wrapping: match wrapping {
+                iced_core::text::Wrapping::None => 0,
+                iced_core::text::Wrapping::Glyph => 1,
+                iced_core::text::Wrapping::Word => 2,
+                iced_core::text::Wrapping::WordOrGlyph => 3,
+            },
+        }
+    }
+}
+
+/// Cached shaped text layout
+#[derive(Clone)]
+struct ShapedText {
+    /// Owned layout runs with glyphs
+    runs: Vec<OwnedLayoutRun>,
+}
+
+/// An owned layout run (not borrowing from Buffer)
+#[derive(Clone)]
+struct OwnedLayoutRun {
+    line_y: f32,
+    glyphs: Vec<cosmic_text::LayoutGlyph>,
+}
+
+/// LRU cache for shaped text
+pub struct TextShapeCache {
+    cache: LruCache<TextShapeKey, ShapedText>,
+}
+
+impl TextShapeCache {
+    pub fn new() -> Self {
+        Self {
+            cache: LruCache::new(NonZeroUsize::new(TEXT_SHAPE_CACHE_CAPACITY).unwrap()),
+        }
+    }
+
+    fn get(&mut self, key: &TextShapeKey) -> Option<&ShapedText> {
+        self.cache.get(key)
+    }
+
+    fn insert(&mut self, key: TextShapeKey, shaped: ShapedText) {
+        self.cache.put(key, shaped);
+    }
+
+    pub fn clear(&mut self) {
+        self.cache.clear();
+    }
 }
 
 #[derive(Default)]
@@ -217,41 +320,89 @@ impl VertexBuffer {
                 wrapping,
             } => {
                 let color = pack_color(*fill);
-                pipeline.text_buffer.set_metrics_and_size(
-                    font_system,
-                    cosmic_text::Metrics::new(
-                        (*size).into(),
-                        line_height.to_absolute(*size).into(),
-                    ),
-                    Some(bounds.width),
-                    Some(bounds.height),
-                );
-                pipeline
-                    .text_buffer
-                    .set_wrap(font_system, text::to_wrap(*wrapping));
-                pipeline.text_buffer.shape_until_scroll(font_system, false);
-                pipeline.text_buffer.set_text(
-                    font_system,
+
+                // Create cache key for this text
+                let cache_key = TextShapeKey::from_text_primitive(
                     content,
-                    &text::to_attributes(*font),
-                    text::to_shaping(Shaping::Auto, content),
-                    None, // TODO: ?
+                    font,
+                    size.0,
+                    *line_height,
+                    *bounds,
+                    *wrapping,
                 );
 
-                for run in pipeline.text_buffer.layout_runs() {
-                    for glyph in run.glyphs {
+                // Check if we have shaped text cached
+                let shaped_text = if let Some(cached) = pipeline.text_shape_cache.get(&cache_key) {
+                    // Cache hit! Use the cached shaped text
+                    cached.clone()
+                } else {
+                    // Cache miss - need to shape the text
+                    pipeline.text_buffer.set_metrics_and_size(
+                        font_system,
+                        cosmic_text::Metrics::new(
+                            (*size).into(),
+                            line_height.to_absolute(*size).into(),
+                        ),
+                        Some(bounds.width),
+                        Some(bounds.height),
+                    );
+                    pipeline
+                        .text_buffer
+                        .set_wrap(font_system, text::to_wrap(*wrapping));
+                    pipeline.text_buffer.shape_until_scroll(font_system, false);
+                    pipeline.text_buffer.set_text(
+                        font_system,
+                        content,
+                        &text::to_attributes(*font),
+                        text::to_shaping(Shaping::Auto, content),
+                        None,
+                    );
+
+                    // Capture the shaped runs
+                    let runs: Vec<OwnedLayoutRun> = pipeline
+                        .text_buffer
+                        .layout_runs()
+                        .map(|run| OwnedLayoutRun {
+                            line_y: run.line_y,
+                            glyphs: run.glyphs.to_vec(),
+                        })
+                        .collect();
+
+                    let shaped = ShapedText { runs };
+
+                    // Cache the shaped text for next time
+                    pipeline.text_shape_cache.insert(cache_key, shaped.clone());
+
+                    shaped
+                };
+
+                // Now render using the shaped text (cached or freshly shaped)
+                for run in &shaped_text.runs {
+                    for glyph in &run.glyphs {
                         // TODO: Offset and/or scale properly?
                         let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
-                        let cache_key = physical_glyph.cache_key;
+                        let glyph_cache_key = physical_glyph.cache_key;
 
                         if let Some(mut atlas_glyph) =
-                            pipeline.atlas.get_glyph(queue, font_system, cache_key)
+                            pipeline.atlas.get_glyph(queue, font_system, glyph_cache_key)
                         {
+                            // Create a fake LayoutRun for compatibility with get_logical_position
+                            let fake_run = cosmic_text::LayoutRun {
+                                line_i: 0,
+                                text: "",
+                                rtl: false,
+                                glyphs: &[],
+                                line_y: run.line_y,
+                                line_top: 0.0,
+                                line_height: 0.0,
+                                line_w: 0.0,
+                            };
+
                             let logical_position = atlas_glyph.get_logical_position(
                                 scale_factor,
                                 position,
                                 &physical_glyph,
-                                &run,
+                                &fake_run,
                             );
 
                             let glyph_atlas_size = [atlas_glyph.atlas_width as f32, atlas_glyph.atlas_height as f32];

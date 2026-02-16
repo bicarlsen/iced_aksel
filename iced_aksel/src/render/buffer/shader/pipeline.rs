@@ -5,11 +5,11 @@ use iced_wgpu::{primitive::Pipeline, wgpu};
 
 use super::{atlas::TextureAtlas, data};
 
-pub const RENDERER_FILE: &str = include_str!("shader_renderer.wgsl");
+pub const RENDERER_FILE: &str = include_str!("shader_renderer.glsl");
 pub const RENDERER_SOURCE: wgpu::ShaderSource =
     wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(RENDERER_FILE));
 
-pub const BLIT_FILE: &str = include_str!("shader_blit.wgsl");
+pub const BLIT_FILE: &str = include_str!("shader_blit.glsl");
 pub const BLIT_SOURCE: wgpu::ShaderSource =
     wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(BLIT_FILE));
 
@@ -40,6 +40,7 @@ pub struct AkselPipeline {
     pub uniform_buffer: wgpu::Buffer,
 
     pub atlas: TextureAtlas,
+    pub text_shape_cache: crate::render::buffer::shader::mesh::TextShapeCache,
 
     pub vertex_count: u32,
     pub vertex_capacity: usize,
@@ -180,6 +181,7 @@ impl Pipeline for AkselPipeline {
             vertex_buffer,
             uniform_buffer,
             atlas,
+            text_shape_cache: crate::render::buffer::shader::mesh::TextShapeCache::new(),
             vertex_count: 0,
             vertex_capacity: VERTEX_BUFFER_INIT_CAPACITY,
 
