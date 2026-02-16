@@ -125,21 +125,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             // SDF glyph (all RGB channels equal and non-white)
             let dist = sampled.r;
 
-            // Standard MSDF formula using derivatives
-            // unitRange = spread (in pixels) / atlas size = spread in UV coordinates
-            let unit_range = vec2<f32>(4.0 / 1024.0);
-
-            // Calculate how many screen pixels per UV unit
-            // fwidth gives UV change per screen pixel, so 1/fwidth gives screen pixels per UV
-            let screen_tex_size = 1.0 / fwidth(input.uv);
-
-            // Calculate screen-space range: spread (in UV) * screen pixels per UV
-            let screen_px_range = max(0.5 * dot(unit_range, screen_tex_size), 1.0);
+            // Calculate derivative-based screen pixel range
+            // The spread is 4 pixels, and we need to know how many screen pixels that covers
+            let pxRange = 4.0;
+            let unitRange = pxRange / 1024.0;  // Convert to atlas UV space
+            let screenTexSize = vec2(1.0) / fwidth(input.uv);
+            let screenPxRange = max(unitRange * 0.5 * dot(screenTexSize, vec2(1.0)), 1.0);
 
             // Convert distance to alpha with antialiasing
-            // Values > 0.5 are inside the glyph, < 0.5 are outside
-            let screen_dist = screen_px_range * (dist - 0.5);
-            let alpha = clamp(screen_dist + 0.5, 0.0, 1.0);
+            let screenPxDistance = screenPxRange * (dist - 0.5);
+            let alpha = clamp(screenPxDistance + 0.5, 0.0, 1.0);
 
             // Ensure fully transparent outside the glyph
             final_color = vec4<f32>(input.color.rgb, input.color.a * alpha);
@@ -148,21 +143,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             // Use median of RGB channels for better quality
             let dist = median(sampled.r, sampled.g, sampled.b);
 
-            // Standard MSDF formula using derivatives
-            // unitRange = spread (in pixels) / atlas size = spread in UV coordinates
-            let unit_range = vec2<f32>(4.0 / 1024.0);
-
-            // Calculate how many screen pixels per UV unit
-            // fwidth gives UV change per screen pixel, so 1/fwidth gives screen pixels per UV
-            let screen_tex_size = 1.0 / fwidth(input.uv);
-
-            // Calculate screen-space range: spread (in UV) * screen pixels per UV
-            let screen_px_range = max(0.5 * dot(unit_range, screen_tex_size), 1.0);
+            // Calculate derivative-based screen pixel range
+            // The spread is 4 pixels, and we need to know how many screen pixels that covers
+            let pxRange = 4.0;
+            let unitRange = pxRange / 1024.0;  // Convert to atlas UV space
+            let screenTexSize = vec2(1.0) / fwidth(input.uv);
+            let screenPxRange = max(unitRange * 0.5 * dot(screenTexSize, vec2(1.0)), 1.0);
 
             // Convert distance to alpha with antialiasing
-            // MSDF uses the same 0.5 threshold as SDF
-            let screen_dist = screen_px_range * (dist - 0.5);
-            let alpha = clamp(screen_dist + 0.5, 0.0, 1.0);
+            let screenPxDistance = screenPxRange * (dist - 0.5);
+            let alpha = clamp(screenPxDistance + 0.5, 0.0, 1.0);
 
             // Apply color with MSDF-based alpha
             final_color = vec4<f32>(input.color.rgb, input.color.a * alpha);

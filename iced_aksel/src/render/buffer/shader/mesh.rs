@@ -34,13 +34,13 @@ impl VertexBuffer {
         self.0.len()
     }
 
-    fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2]) {
+    fn push_vertex(&mut self, position: [f32; 2], color: PackedColor, uv: [f32; 2], glyph_atlas_size: [f32; 2]) {
         self.0.push(UnifiedVertex {
             position,
             color,
             uv,
-            primitive_type: data::PRIM_TYPE_MSDF_TEXT, // Default to legacy texture rendering
-            param0: [0.0, 0.0, 0.0, 0.0],
+            primitive_type: data::PRIM_TYPE_MSDF_TEXT,
+            param0: [glyph_atlas_size[0], glyph_atlas_size[1], 0.0, 0.0],
             param1: [0.0, 0.0, 0.0, 0.0],
         })
     }
@@ -254,11 +254,14 @@ impl VertexBuffer {
                                 &run,
                             );
 
+                            let glyph_atlas_size = [atlas_glyph.atlas_width as f32, atlas_glyph.atlas_height as f32];
+
                             // T1
                             self.push_vertex(
                                 [logical_position.x, logical_position.y],
                                 color,
                                 [atlas_glyph.uv_tl[0], atlas_glyph.uv_tl[1]],
+                                glyph_atlas_size,
                             );
                             self.push_vertex(
                                 [
@@ -267,6 +270,7 @@ impl VertexBuffer {
                                 ],
                                 color,
                                 [atlas_glyph.uv_br[0], atlas_glyph.uv_tl[1]],
+                                glyph_atlas_size,
                             );
                             self.push_vertex(
                                 [
@@ -275,6 +279,7 @@ impl VertexBuffer {
                                 ],
                                 color,
                                 [atlas_glyph.uv_tl[0], atlas_glyph.uv_br[1]],
+                                glyph_atlas_size,
                             );
                             // T2
                             self.push_vertex(
@@ -284,6 +289,7 @@ impl VertexBuffer {
                                 ],
                                 color,
                                 [atlas_glyph.uv_br[0], atlas_glyph.uv_tl[1]],
+                                glyph_atlas_size,
                             );
                             self.push_vertex(
                                 [
@@ -292,6 +298,7 @@ impl VertexBuffer {
                                 ],
                                 color,
                                 [atlas_glyph.uv_br[0], atlas_glyph.uv_br[1]],
+                                glyph_atlas_size,
                             );
                             self.push_vertex(
                                 [
@@ -300,6 +307,7 @@ impl VertexBuffer {
                                 ],
                                 color,
                                 [atlas_glyph.uv_tl[0], atlas_glyph.uv_br[1]],
+                                glyph_atlas_size,
                             );
                         }
                     }

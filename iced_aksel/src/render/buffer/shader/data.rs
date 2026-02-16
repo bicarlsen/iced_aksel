@@ -35,13 +35,13 @@ impl UnifiedVertex {
         }
     }
 
-    pub const fn new_msdf_text(pos: [f32; 2], color: [f32; 4], uv: [f32; 2]) -> Self {
+    pub const fn new_msdf_text(pos: [f32; 2], color: [f32; 4], uv: [f32; 2], glyph_size_in_atlas: [f32; 2]) -> Self {
         Self {
             position: pos,
             color,
             uv,
             primitive_type: PRIM_TYPE_MSDF_TEXT,
-            param0: [0.0, 0.0, 0.0, 0.0],
+            param0: [glyph_size_in_atlas[0], glyph_size_in_atlas[1], 0.0, 0.0],
             param1: [0.0, 0.0, 0.0, 0.0],
         }
     }

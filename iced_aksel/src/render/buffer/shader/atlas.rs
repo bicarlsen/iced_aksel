@@ -29,6 +29,8 @@ pub struct AtlasGlyph {
     pub uv_tl: [f32; 2],
     pub uv_br: [f32; 2],
     reference_size: f32, // The size this glyph was rendered at for SDF
+    pub atlas_width: u32, // Width of this glyph in the atlas texture (pixels)
+    pub atlas_height: u32, // Height of this glyph in the atlas texture (pixels)
 }
 
 impl AtlasGlyph {
@@ -85,7 +87,7 @@ impl TextureAtlas {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm,  // Linear, not sRGB! MSDF is data, not color
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -259,6 +261,8 @@ impl TextureAtlas {
             uv_tl: [u_min, v_min],
             uv_br: [u_max, v_max],
             reference_size: MSDF_REFERENCE_SIZE,
+            atlas_width: width,
+            atlas_height: height,
         };
 
         self.cache.insert(sdf_key, result);
@@ -333,11 +337,12 @@ fn generate_msdf_from_shape(
         let prepared = colored_shape.prepare();
 
         // Create scaled bounding box for placement
+        // Subtract padding since the actual glyph content is inset by padding pixels
         let scaled_bbox = Rect {
-            x_min: (bbox.x_min as f32 * scale) as i16,
-            y_min: (bbox.y_min as f32 * scale) as i16,
-            x_max: (bbox.x_max as f32 * scale) as i16,
-            y_max: (bbox.y_max as f32 * scale) as i16,
+            x_min: (bbox.x_min as f32 * scale) as i16 - padding as i16,
+            y_min: (bbox.y_min as f32 * scale) as i16 - padding as i16,
+            x_max: (bbox.x_max as f32 * scale) as i16 + padding as i16,
+            y_max: (bbox.y_max as f32 * scale) as i16 + padding as i16,
         };
 
         // Create an RGB image buffer for the MSDF
