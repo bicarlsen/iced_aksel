@@ -250,11 +250,13 @@ impl TextureAtlas {
             },
         );
 
-        // Calculate UVs
-        let u_min = p_min.x as f32 / ATLAS_SIZE as f32;
-        let v_min = p_min.y as f32 / ATLAS_SIZE as f32;
-        let u_max = (p_min.x as f32 + width as f32) / ATLAS_SIZE as f32;
-        let v_max = (p_min.y as f32 + height as f32) / ATLAS_SIZE as f32;
+        // Calculate UVs with a small inset to prevent sampling artifacts at boundaries
+        // Inset by 0.5 pixels to avoid bleeding between glyphs in the atlas
+        let uv_inset = 0.5 / ATLAS_SIZE as f32;
+        let u_min = (p_min.x as f32 + 0.5) / ATLAS_SIZE as f32;
+        let v_min = (p_min.y as f32 + 0.5) / ATLAS_SIZE as f32;
+        let u_max = (p_min.x as f32 + width as f32 - 0.5) / ATLAS_SIZE as f32;
+        let v_max = (p_min.y as f32 + height as f32 - 0.5) / ATLAS_SIZE as f32;
 
         let result = AtlasGlyph {
             placement,
@@ -325,7 +327,8 @@ fn generate_msdf_from_shape(
         transformed_shape.transform(&transform);
 
         // Color the transformed shape using edge coloring
-        let sin_alpha = 3.0f64.to_radians().sin(); // Angle threshold for corners
+        // Increase angle threshold to better handle thin features like the middle bar of 'E'
+        let sin_alpha = 8.0f64.to_radians().sin(); // Angle threshold for corners (~8 degrees)
         let seed = 0; // Random seed for coloring
         let colored_shape = fdsm::shape::Shape::<fdsm::shape::ColoredContour>::edge_coloring_simple(
             transformed_shape,
