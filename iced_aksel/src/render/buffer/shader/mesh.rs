@@ -543,9 +543,11 @@ impl iced_wgpu::Primitive for ShaderCache {
             queue.write_buffer(&pipeline.vertex_buffer, 0, vertices.as_bytes());
 
             // Update uniform buffer with screen dimensions
+            // Use logical dimensions since vertices are in logical coordinates
+            let scale_factor = viewport.scale_factor();
             let uniforms = data::Uniforms {
-                screen_width: viewport.physical_width() as f32,
-                screen_height: viewport.physical_height() as f32,
+                screen_width: (viewport.physical_width() as f32 / scale_factor),
+                screen_height: (viewport.physical_height() as f32 / scale_factor),
                 _padding1: 0.0,
                 _padding2: 0.0,
             };
