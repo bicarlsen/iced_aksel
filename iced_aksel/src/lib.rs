@@ -85,14 +85,14 @@ use iced_core::{
     Widget,
     layout::{self, Limits, Node},
     mouse::{self, ScrollDelta},
-    renderer::Style,
-    text::{LineHeight, Shaping, Wrapping},
+    renderer::{Quad, Style},
     touch,
     widget::{Tree, tree},
 };
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Deref;
+
 // Re-export aksel core types for convenience
 pub use aksel::{Float, Transform, scale, scale::Scale, transform, transform::PlotPoint};
 
@@ -103,30 +103,29 @@ mod memory;
 mod render;
 mod state;
 
-pub mod style;
-
 pub mod axis;
 pub mod plot;
+pub mod radii;
 pub mod shape;
 pub mod stroke;
+pub mod style;
 
 pub use axis::Axis;
+pub use layer::{Cached, LayerId};
 pub use measure::Measure;
 pub use plot::{Plot, PlotData};
-pub use render::Quality;
+pub use radii::Radii;
+pub use render::{Quality, Renderer};
 pub use shape::Shape;
 pub use state::State;
 pub use stroke::Stroke;
 pub use style::Catalog;
 
-use crate::render::tessellation::manual::basic::draw_fill_rect;
 use action::Action;
-use axis::{Orientation, Position};
+use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
 use layer::Layer;
 use memory::Memory;
 use plot::DragDelta;
-
-use crate::axis::{MarkerContext, MarkerPosition, MarkerRequest};
 
 /// Default movement threshold (in pixels) to distinguish a click from a drag operation.
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
@@ -177,6 +176,19 @@ type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
 
+#[derive(Debug, PartialEq)]
+struct LayerIdentifier {
+    id: Option<LayerId>,
+    version: Option<u64>,
+}
+
+#[derive(Debug, PartialEq)]
+struct CacheSignature {
+    state_version: u64,
+    layout_bounds: Rectangle,
+    layers: Vec<LayerIdentifier>,
+}
+
 /// The main charting widget that renders axes and plot data.
 ///
 /// `Chart` manages the layout and rendering of axes, grid lines, and data layers.
@@ -215,7 +227,7 @@ pub struct Chart<
     AxisId: Hash + Eq + Clone + Debug,
     Domain: Float,
     Theme: Catalog,
-    Renderer: plot::Renderer,
+    Renderer: crate::Renderer,
 {
     state: &'a State<AxisId, Domain, Theme>,
     layers: Vec<Layer<'a, AxisId, Domain, Renderer, Theme>>,
@@ -225,7 +237,7 @@ pub struct Chart<
     errors: Vec<Error<AxisId>>,
     drag_deadband: f32,
     padding: Padding,
-    quality: f32,
+    quality: Quality,
     markers: Vec<MarkerRequest<'a, AxisId, Domain, Theme>>,
 
     // Fonts
@@ -257,7 +269,7 @@ where
     Domain: Float,
     AxisId: Hash + Eq + Clone + Debug,
     Theme: Catalog,
-    Renderer: plot::Renderer,
+    Renderer: crate::Renderer,
 {
     /// Creates a new chart from the given state.
     ///
@@ -274,7 +286,7 @@ where
             errors: vec![],
             drag_deadband: DEFAULT_DRAG_DEADBAND,
             padding: Padding::new(0.),
-            quality: 1.0,
+            quality: Quality::Medium,
             markers: Vec::with_capacity(state.axes().len()),
 
             // Handlers and fonts default to None
@@ -316,7 +328,7 @@ where
     /// * `1.0`: Standard quality (Default).
     /// * `< 1.0`: Lower quality, higher performance.
     /// * `> 1.0`: Higher quality, smoother curves.
-    pub const fn quality(mut self, quality: f32) -> Self {
+    pub const fn quality(mut self, quality: Quality) -> Self {
         self.quality = quality;
         self
     }
@@ -533,7 +545,7 @@ where
     /// Determines if the user clicked on the plot or an axis and updates the internal state.
     fn handle_mouse_press(
         &self,
-        memory: &mut Memory<AxisId>,
+        memory: &mut Memory<AxisId, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -620,7 +632,7 @@ where
     /// Triggers click events if the drag distance was within the deadband.
     fn handle_mouse_release(
         &self,
-        memory: &mut Memory<AxisId>,
+        memory: &mut Memory<AxisId, Renderer>,
         layout: Layout,
         _cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -666,7 +678,7 @@ where
     /// Manages hover states and processes drag deltas.
     fn handle_mouse_moved(
         &self,
-        memory: &mut Memory<AxisId>,
+        memory: &mut Memory<AxisId, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -796,7 +808,7 @@ where
         layout: Layout<'_>,
         style: &style::Style,
         plot: Rectangle,
-        mesh: &mut render::MeshBuffer,
+        renderer: &mut Renderer,
     ) {
         // Track the "inner-most" spine properties for each side
         let mut left: Option<(f32, Color)> = None;
@@ -860,53 +872,57 @@ where
 
         // Bottom-Left
         if let (Some((lw, lc)), Some((bw, _))) = (left, bottom) {
-            draw_fill_rect(
-                mesh,
-                plot.x - lw,               // x_min
-                plot.y + plot.height,      // y_min
-                plot.x,                    // x_max
-                plot.y + plot.height + bw, // y_max
+            let top_left = Point::new(plot.x - lw, plot.y + plot.height);
+            let size = Size::new(lw, bw);
+            renderer.fill_quad(
+                Quad {
+                    bounds: Rectangle::new(top_left, size),
+                    snap: true,
+                    ..Default::default()
+                },
                 lc,
-                true,
             );
         }
 
         // Top-Left
         if let (Some((lw, lc)), Some((tw, _))) = (left, top) {
-            draw_fill_rect(
-                mesh,
-                plot.x - lw, // x_min
-                plot.y - tw, // y_min
-                plot.x,      // x_max
-                plot.y,      // y_max
+            let top_left = Point::new(plot.x - lw, plot.y - tw);
+            let size = Size::new(lw, tw);
+            renderer.fill_quad(
+                Quad {
+                    bounds: Rectangle::new(top_left, size),
+                    snap: true,
+                    ..Default::default()
+                },
                 lc,
-                true,
             );
         }
 
         // Bottom-Right
         if let (Some((rw, rc)), Some((bw, _))) = (right, bottom) {
-            draw_fill_rect(
-                mesh,
-                plot.x + plot.width,       // x_min
-                plot.y + plot.height,      // y_min
-                plot.x + plot.width + rw,  // x_max
-                plot.y + plot.height + bw, // y_max
+            let top_left = Point::new(plot.x + plot.width, plot.y + plot.height);
+            let size = Size::new(rw, bw);
+            renderer.fill_quad(
+                Quad {
+                    bounds: Rectangle::new(top_left, size),
+                    snap: true,
+                    ..Default::default()
+                },
                 rc,
-                true,
             );
         }
 
         // Top-Right
         if let (Some((rw, rc)), Some((tw, _))) = (right, top) {
-            draw_fill_rect(
-                mesh,
-                plot.x + plot.width,      // x_min
-                plot.y - tw,              // y_min
-                plot.x + plot.width + rw, // x_max
-                plot.y,                   // y_max
+            let top_left = Point::new(plot.x + plot.width, plot.y - tw);
+            let size = Size::new(rw, tw);
+            renderer.fill_quad(
+                Quad {
+                    bounds: Rectangle::new(top_left, size),
+                    snap: true,
+                    ..Default::default()
+                },
                 rc,
-                true,
             );
         }
     }
@@ -917,16 +933,16 @@ impl<AxisId, Domain, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
     Domain: Float,
-    Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
     Theme: Catalog,
     Message: Clone,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Memory<AxisId>>()
+        tree::Tag::of::<Memory<AxisId, Renderer>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId>::new())
+        tree::State::new(Memory::<AxisId, Renderer>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -942,7 +958,10 @@ where
         Size::new(self.width, self.height)
     }
 
-    fn layout(&mut self, _tree: &mut Tree, _renderer: &Renderer, limits: &Limits) -> Node {
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
+        let memory: &mut Memory<AxisId, Renderer> = tree.state.downcast_mut();
+        memory.make_sure_cache_is_initialized(renderer, self.quality);
+
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
 
         let axis_count = self.state.axes().len();
@@ -1023,8 +1042,6 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        let memory: &mut Memory<AxisId> = tree.state.downcast_mut();
-
         if !self.errors.is_empty()
             && let Some(handler) = &self.on_error
         {
@@ -1032,6 +1049,42 @@ where
                 shell.publish(handler(error));
             }
             return;
+        }
+
+        // Construct current cache signature
+        let mut force_redraw = false;
+        let current_signature = CacheSignature {
+            state_version: self.state.version(),
+            layout_bounds: layout.bounds(),
+            layers: self
+                .layers
+                .iter()
+                .map(|l| {
+                    // Make sure we force a redraw if no version is provided for any layer
+                    if !force_redraw {
+                        force_redraw = l.items.version().is_none();
+                    }
+
+                    LayerIdentifier {
+                        id: l.items.id(),
+                        version: l.items.version(),
+                    }
+                })
+                .collect(),
+        };
+
+        let memory: &mut Memory<AxisId, Renderer> = tree.state.downcast_mut();
+
+        // Check if we need to redraw
+        if force_redraw || memory.last_signature.as_ref() != Some(&current_signature) {
+            // Update signature
+            memory.last_signature = Some(current_signature);
+
+            // Get and clear the cache
+            let Some(mut cache) = memory.get_cache_mut() else {
+                return;
+            };
+            cache.clear();
         }
 
         // Only handle events if the cursor is near the chart
@@ -1113,23 +1166,9 @@ where
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
-        renderer.start_layer(layout.bounds());
         let style = theme.style(&self.class);
         let bounds = layout.bounds();
         let plot_bounds = self.get_plot_layout(layout).bounds();
-
-        // 1. Retrieve the Memory from the Tree directly
-        let memory = tree.state.downcast_ref::<Memory<AxisId>>();
-
-        // Reuse tessellators from memory to avoid re-allocating them every frame
-        let mut tessellators = memory.tessellators.borrow_mut();
-
-        // Pass the global quality setting to the tessellator
-        tessellators.set_quality(self.quality);
-
-        // Create a new mesh buffer for this frame
-        let mut mesh_buffer = render::MeshBuffer::new(100_000);
-
         let screen_rect = ScreenRect {
             x: plot_bounds.x,
             y: plot_bounds.y,
@@ -1137,53 +1176,52 @@ where
             height: plot_bounds.height,
         };
 
+        // Retrieve the Memory from the Tree directly
+        let memory = tree.state.downcast_ref::<Memory<AxisId, Renderer>>();
+
+        // Get cache from memory
+        let Some(mut cache) = memory.get_cache_mut() else {
+            return;
+        };
+
+        // Draw axes
         for (i, (_, axis)) in self.state.axes().iter().enumerate() {
             // We only care about layout bounds here to determine position
             let axis_layout = layout.children().nth(i).unwrap();
 
-            // Draw the axis itself (Standard draw call)
+            // Draw the axis itself (Ticks, labels, spine and gridlines)
             axis.draw::<Renderer>(
                 renderer,
                 theme,
                 &style,
                 axis_layout,
                 &plot_bounds,
-                &mut mesh_buffer,
+                &mut cache,
                 &bounds,
             );
         }
 
-        // 2. Draw Spine Corners (Self-contained logic)
-        self.draw_spine_corners(layout, &style, plot_bounds, &mut mesh_buffer);
+        // Connect axis spines
+        self.draw_spine_corners(layout, &style, plot_bounds, renderer);
 
-        // Flush the mesh buffer (draws all the lines/ticks aggregated so far)
-        mesh_buffer.render(renderer, &bounds);
+        // Draw data layers if the cache needs redraw
+        if cache.needs_redraw() {
+            for layer in &self.layers {
+                // These axes are guaranteed to exist because of `verify_layer` check
+                let x_axis = self.state.axis(&layer.horizontal_axis_id);
+                let y_axis = self.state.axis(&layer.vertical_axis_id);
+                let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-        // 3. Render data layers
-        for layer in &self.layers {
-            // These axes are guaranteed to exist because of `verify_layer` check
-            let x_axis = self.state.axis(&layer.horizontal_axis_id);
-            let y_axis = self.state.axis(&layer.vertical_axis_id);
-            let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
+                let mut plot: Plot<Domain, Renderer> = Plot::new(renderer, &mut cache, &transform);
 
-            let mut plot: Plot<Domain, Renderer> = Plot::new(
-                &mut tessellators,
-                renderer,
-                &plot_bounds,
-                &mut mesh_buffer,
-                &transform,
-            );
-
-            // User code draws shapes into the plot here
-            layer.items.draw(&mut plot, theme);
+                // User code draws shapes into the plot here
+                layer.items.draw(&mut plot, theme);
+            }
         }
 
-        // Flush the mesh buffer once more
-        mesh_buffer.render(renderer, &bounds);
-
-        // 4. Render markers
+        // Draw markers
         for marker_request in &self.markers {
-            let Some((idx, _, axis)) = self.state.axes().get_full(marker_request.axis_id) else {
+            let Some((idx, _id, axis)) = self.state.axes().get_full(marker_request.axis_id) else {
                 continue;
             };
 
@@ -1210,41 +1248,8 @@ where
             );
         }
 
-        // 5. Draw Debug Overlay (if enabled)
-        if self.debug {
-            renderer.start_layer(bounds);
-
-            let v_count = mesh_buffer.total_vertices();
-            let i_count = mesh_buffer.total_indices();
-
-            // Color Coding: Green (Good), Yellow (Heavy), Red (Critical)
-            let color = if v_count < 50_000 {
-                Color::from_rgb(0.0, 0.7, 0.0) // Dark Green
-            } else if v_count < 200_000 {
-                Color::from_rgb(0.9, 0.7, 0.0) // Orange/Yellow
-            } else {
-                Color::from_rgb(0.9, 0.0, 0.0) // Red
-            };
-
-            let text_content = format!("Vertices: {} | Indices: {}", v_count, i_count);
-            let position = [bounds.x + 10.0, bounds.y + 10.0];
-
-            let text = iced_core::Text {
-                content: text_content,
-                bounds: Size::new(500., 500.),
-                size: 32.into(),
-                line_height: LineHeight::default(),
-                font: renderer.default_font(),
-                align_x: iced_core::text::Alignment::Left,
-                align_y: iced_core::alignment::Vertical::Top,
-                shaping: Shaping::Basic,
-                wrapping: Wrapping::None,
-            };
-
-            renderer.fill_text(text, position.into(), color, bounds);
-            renderer.end_layer();
-        }
-        renderer.end_layer()
+        // Draw the currently cached primitives
+        cache.draw(renderer, &plot_bounds);
     }
 }
 
@@ -1258,7 +1263,7 @@ where
     Domain: Float,
     Message: Clone + 'a,
     Theme: Catalog + 'a,
-    Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+    Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
 {
     fn from(plot: Chart<'a, AxisId, Domain, Message, Theme, Renderer>) -> Self {
         Element::new(plot)

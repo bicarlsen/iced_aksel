@@ -3,13 +3,16 @@
 //! This module provides the core plotting infrastructure for rendering data on charts.
 //! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
 
+use std::ops::Deref;
+
 use crate::{
-    render::{MeshBuffer, Tessellator},
+    layer::LayerId,
+    render::{Primitive, RenderCache},
     shape::Shape,
 };
 
 use aksel::{Float, PlotRect, Transform};
-use iced_core::Font;
+use iced_core::{Font, Rectangle};
 
 /// Normalized drag delta for panning operations.
 ///
@@ -29,23 +32,6 @@ pub struct DragDelta {
     pub x: f32,
     /// Normalized vertical drag distance (0.0-1.0).
     pub y: f32,
-}
-
-/// Renderer requirements for plotting.
-///
-/// This trait is automatically implemented for any renderer that satisfies the requirements.
-pub trait Renderer:
-    iced_core::Renderer
-    + iced_graphics::mesh::Renderer
-    + iced_core::text::Renderer<Font = iced_core::Font>
-{
-}
-
-impl<T> Renderer for T where
-    T: iced_core::Renderer
-        + iced_graphics::mesh::Renderer
-        + iced_core::text::Renderer<Font = iced_core::Font>
-{
 }
 
 /// Trait for drawable data on a plot.
@@ -77,45 +63,68 @@ impl<T> Renderer for T where
 pub trait PlotData<D, R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
     D: Float,
-    R: Renderer,
+    R: crate::Renderer,
 {
     /// Draws this data onto the plot.
     ///
     /// Use `plot.add_shape()` to add visual elements to the chart.
     fn draw(&self, plot: &mut Plot<D, R>, theme: &Theme);
+
+    /// The version of the layer, used for caching.
+    ///
+    /// If version returns None (default), then the layer will always redraw.
+    fn version(&self) -> Option<u64> {
+        None
+    }
+
+    /// The id of the layer. Primarily used by the [`Cached`](crate::Cached) struct.
+    fn id(&self) -> Option<LayerId> {
+        None
+    }
 }
 
 /// Internal rendering context for shapes.
 ///
-/// Manages layer ordering and buffering for efficient rendering.
-pub struct Context<'a, D: Float, Renderer: self::Renderer = iced_renderer::Renderer> {
+/// Manages layer ordering and caching for efficient rendering.
+pub struct Context<'a, D: Float, Renderer: crate::Renderer = iced_renderer::Renderer> {
     transform: &'a Transform<'a, D, f32, f32>,
-    clip_bounds: &'a iced_core::Rectangle,
     renderer: &'a mut Renderer,
-    tessellators: &'a mut Tessellator,
-    mesh_buffer: &'a mut MeshBuffer,
+    cache: &'a mut RenderCache<Renderer>,
 }
 
-impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
+impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer> {
+    type Target = Transform<'a, D, f32, f32>;
+
+    fn deref(&self) -> &Self::Target {
+        self.transform
+    }
+}
+
+impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
     /// Returns the default font of the underlying renderer
     #[inline(always)]
-    pub fn default_font(&mut self) -> Font {
+    pub fn default_font(&self) -> Font {
         self.renderer.default_font()
     }
 
-    /// Renders a mesh-based shape (lines, polygons, etc.).
-    ///
-    /// Used internally by shapes to add geometry to the mesh buffer.
-    pub fn render_mesh<F>(&mut self, f: F)
-    where
-        F: FnOnce(&Transform<'a, D, f32, f32>, &mut MeshBuffer, &mut Tessellator),
-    {
-        // Draw mesh
-        f(self.transform, self.mesh_buffer, self.tessellators);
+    /// Returns a mutable reference to the underlying [`RenderCache`].
+    pub const fn cache(&mut self) -> &mut RenderCache<Renderer> {
+        self.cache
+    }
 
-        // If buffer exceeds limit, render the mesh
-        if self.mesh_buffer.vertices_count() >= self.mesh_buffer.limit() {
-            self.mesh_buffer.render(self.renderer, self.clip_bounds);
+    /// Adds a low-level [`Primitive`] directly to the render cache.
+    pub fn add_primitive(&mut self, primitive: Primitive) {
+        self.cache.add_primitive(primitive);
+    }
+
+    /// Returns the screen bounds bounds of the plot
+    pub const fn clip_bounds(&self) -> Rectangle {
+        let bounds = self.transform.screen_bounds();
+        Rectangle {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
         }
     }
 }
@@ -124,31 +133,27 @@ impl<'a, D: Float, Renderer: self::Renderer> Context<'a, D, Renderer> {
 ///
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
-pub struct Plot<'a, D: Float, R: self::Renderer = iced_renderer::Renderer> {
+pub struct Plot<'a, D: Float, R: crate::Renderer = iced_renderer::Renderer> {
     context: Context<'a, D, R>,
 }
 
 impl<'a, D, R> Plot<'a, D, R>
 where
     D: Float,
-    R: self::Renderer,
+    R: crate::Renderer,
 {
     /// Creates a new plot context.
     ///
     /// This is typically called internally by the Chart widget.
     pub const fn new(
-        tessellators: &'a mut Tessellator,
         renderer: &'a mut R,
-        clip_bounds: &'a iced_core::Rectangle,
-        mesh_buffer: &'a mut MeshBuffer,
+        cache: &'a mut RenderCache<R>,
         transform: &'a Transform<'a, D, f32, f32>,
     ) -> Self {
         let context = Context {
             transform,
-            clip_bounds,
             renderer,
-            tessellators,
-            mesh_buffer,
+            cache,
         };
         Self { context }
     }
@@ -168,7 +173,7 @@ where
     /// #     }
     /// # }
     /// ```
-    pub fn bounds(&self) -> PlotRect<D> {
+    pub fn plot_bounds(&self) -> PlotRect<D> {
         self.context.transform.plot_bounds()
     }
 
@@ -190,18 +195,6 @@ where
     /// # }
     /// ```
     pub fn add_shape<S: Shape<D, R>>(&mut self, shape: S) {
-        shape.render(&mut self.context)
-    }
-}
-
-impl<'a, D, R> Drop for Plot<'a, D, R>
-where
-    D: Float,
-    R: self::Renderer,
-{
-    fn drop(&mut self) {
-        self.context
-            .mesh_buffer
-            .render(self.context.renderer, self.context.clip_bounds);
+        shape.render(&mut self.context);
     }
 }

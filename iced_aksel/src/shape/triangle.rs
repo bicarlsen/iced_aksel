@@ -1,9 +1,5 @@
-use crate::{
-    Measure, Shape, Stroke,
-    plot::{self},
-    render::{MeshBuffer, Tessellator},
-};
-use aksel::{Float, PlotPoint, Transform};
+use crate::{Measure, Shape, Stroke, plot, render::Primitive};
+use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point};
 
 /// A primitive representing a three-sided polygon.
@@ -48,11 +44,53 @@ pub struct Triangle<D> {
     pub stroke: Option<Stroke<D>>,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Triangle<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Triangle<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            geometry,
+            fill,
+            stroke,
+        } = self;
+
+        let points = match geometry {
+            Geometry::Vertices(pts) => (
+                Point::new(ctx.x_to_screen(&pts[0].x), ctx.y_to_screen(&pts[0].y)),
+                Point::new(ctx.x_to_screen(&pts[1].x), ctx.y_to_screen(&pts[1].y)),
+                Point::new(ctx.x_to_screen(&pts[2].x), ctx.y_to_screen(&pts[2].y)),
+            ),
+            Geometry::Centered {
+                center,
+                width,
+                height,
+            } => {
+                let center_x = ctx.x_to_screen(&center.x);
+                let center_y = ctx.y_to_screen(&center.y);
+
+                let width = width.resolve_x(ctx);
+                let height = height.resolve_y(ctx);
+
+                let half_width = width / 2.0;
+                let half_height = height / 2.0;
+
+                // Points for an Upward facing triangle inside the bounding box
+                (
+                    // Top Center
+                    Point::new(center_x, center_y - half_height),
+                    // Bottom Right
+                    Point::new(center_x + half_width, center_y + half_height),
+                    // Bottom Left
+                    Point::new(center_x - half_width, center_y + half_height),
+                )
+            }
+        };
+
+        let stroke = stroke.map(|s| s.resolve(ctx));
+
+        ctx.add_primitive(Primitive::Triangle {
+            points: points.into(),
+            fill,
+            stroke,
+        });
     }
 }
 
@@ -96,73 +134,5 @@ impl<D: Float> Triangle<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        let (point_one, point_two, point_three) = match self.geometry {
-            Geometry::Vertices(pts) => (
-                Point::new(
-                    transform.x_to_screen(&pts[0].x),
-                    transform.y_to_screen(&pts[0].y),
-                ),
-                Point::new(
-                    transform.x_to_screen(&pts[1].x),
-                    transform.y_to_screen(&pts[1].y),
-                ),
-                Point::new(
-                    transform.x_to_screen(&pts[2].x),
-                    transform.y_to_screen(&pts[2].y),
-                ),
-            ),
-            Geometry::Centered {
-                center,
-                width,
-                height,
-            } => {
-                let center_x = transform.x_to_screen(&center.x);
-                let center_y = transform.y_to_screen(&center.y);
-
-                let width_pixels = width.resolve_x(transform);
-                let height_pixels = height.resolve_y(transform);
-
-                let half_width = width_pixels / 2.0;
-                let half_height = height_pixels / 2.0;
-
-                // Points for an Upward facing triangle inside the bounding box
-                (
-                    // Top Center
-                    Point::new(center_x, center_y - half_height),
-                    // Bottom Right
-                    Point::new(center_x + half_width, center_y + half_height),
-                    // Bottom Left
-                    Point::new(center_x - half_width, center_y + half_height),
-                )
-            }
-        };
-
-        let stroke_info = self.stroke.as_ref().and_then(|stroke| {
-            // Default to X-axis scale for stroke thickness to ensure consistency
-            let width_pixels = stroke.thickness.resolve_x(transform);
-
-            if width_pixels < 0.1 {
-                None
-            } else {
-                Some((stroke, width_pixels))
-            }
-        });
-
-        tess.draw_triangle(
-            buffer,
-            point_one,
-            point_two,
-            point_three,
-            self.fill,
-            stroke_info,
-        );
     }
 }

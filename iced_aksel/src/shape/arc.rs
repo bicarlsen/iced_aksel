@@ -1,10 +1,7 @@
-use crate::{
-    Measure, Shape, Stroke,
-    plot::{self},
-    render::{MeshBuffer, Tessellator},
-};
-use aksel::{Float, PlotPoint, Transform};
-use iced_core::Color;
+use crate::{Measure, Shape, Stroke, plot, radii::Radius, render::Primitive};
+
+use aksel::{Float, PlotPoint};
+use iced_core::{Color, Point, Radians};
 
 /// A primitive representing a sector of a circle or a ring.
 ///
@@ -28,24 +25,49 @@ pub struct Arc<D> {
     /// The center point of the arc
     pub center: PlotPoint<D>,
     /// The outer radius of the arc
-    pub radius: Measure<D>,
+    pub radius: Radius<Measure<D>>,
     /// The inner radius of the arc (0 for a pie slice)
-    pub inner_radius: Measure<D>,
+    pub inner_radius: Radius<Measure<D>>,
     /// The starting angle in radians
-    pub start_angle: f32,
+    pub start_angle: Radians,
     /// The ending angle in radians
-    pub end_angle: f32,
+    pub end_angle: Radians,
     /// The fill color for the arc interior
     pub fill: Option<Color>,
     /// The stroke style for the arc border
     pub stroke: Option<Stroke<D>>,
 }
 
-impl<D: Float, R: plot::Renderer> Shape<D, R> for Arc<D> {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Arc<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        ctx.render_mesh(move |transform, buffer, tess| {
-            self.tessellate(transform, buffer, tess);
-        })
+        let Self {
+            center,
+            radius,
+            inner_radius,
+            start_angle,
+            end_angle,
+            fill,
+            stroke,
+        } = self;
+
+        // If the outer radius doesn't resolve, we don't render anything
+        let Some(radius_outer) = radius.resolve_isotropic(ctx) else {
+            return;
+        };
+
+        let radius_inner = inner_radius.resolve_isotropic(ctx);
+        let center = Point::new(ctx.x_to_screen(&center.x), ctx.y_to_screen(&center.y));
+        let stroke = stroke.map(|s| s.resolve(ctx));
+
+        ctx.add_primitive(Primitive::Arc {
+            center,
+            radius_inner,
+            radius_outer,
+            start_angle,
+            end_angle,
+            stroke,
+            fill,
+        });
     }
 }
 
@@ -57,26 +79,26 @@ impl<D: Float> Arc<D> {
     /// * `end_angle`: Ending angle in **Radians**.
     ///
     /// Note: The shape is invisible by default. You must call `.fill()` or `.stroke()` to render it.
-    pub const fn new(
+    pub fn new(
         center: PlotPoint<D>,
-        radius: Measure<D>,
-        start_angle: f32,
-        end_angle: f32,
+        radius: impl Into<Radius<Measure<D>>>,
+        start_angle: impl Into<Radians>,
+        end_angle: impl Into<Radians>,
     ) -> Self {
         Self {
             center,
-            radius,
-            inner_radius: Measure::Screen(0.0),
-            start_angle,
-            end_angle,
+            radius: radius.into(),
+            inner_radius: Radius(Measure::Screen(0.0)),
+            start_angle: start_angle.into(),
+            end_angle: end_angle.into(),
             fill: None,
             stroke: None,
         }
     }
 
     /// Sets the inner radius of the arc, creating a donut sector.
-    pub const fn inner_radius(mut self, radius: Measure<D>) -> Self {
-        self.inner_radius = radius;
+    pub fn inner_radius(mut self, radius: impl Into<Radius<Measure<D>>>) -> Self {
+        self.inner_radius = radius.into();
         self
     }
 
@@ -92,52 +114,5 @@ impl<D: Float> Arc<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
-    }
-
-    fn tessellate(
-        self,
-        transform: &Transform<D, f32, f32>,
-        buffer: &mut MeshBuffer,
-        tess: &mut Tessellator,
-    ) {
-        let center_x = transform.x_to_screen(&self.center.x);
-        let center_y = transform.y_to_screen(&self.center.y);
-
-        // Calculate isotropic radii by taking the minimum scale of X and Y dimensions
-        let outer_radius_pixels = {
-            let x = self.radius.resolve_x(transform);
-            let y = self.radius.resolve_y(transform);
-            x.min(y)
-        };
-
-        let inner_radius_pixels = {
-            let x = self.inner_radius.resolve_x(transform);
-            let y = self.inner_radius.resolve_y(transform);
-            x.min(y)
-        };
-
-        let stroke_info = self.stroke.as_ref().and_then(|stroke| {
-            let width_x = stroke.thickness.resolve_x(transform);
-            let width_y = stroke.thickness.resolve_y(transform);
-            let width_pixels = width_x.min(width_y);
-
-            if width_pixels < 0.1 {
-                None
-            } else {
-                Some((stroke, width_pixels))
-            }
-        });
-
-        tess.draw_arc(
-            buffer,
-            center_x,
-            center_y,
-            inner_radius_pixels,
-            outer_radius_pixels,
-            self.start_angle,
-            self.end_angle,
-            self.fill,
-            stroke_info,
-        );
     }
 }

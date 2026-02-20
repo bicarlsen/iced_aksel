@@ -2,7 +2,8 @@
 //!
 //! Handles expanding thin mathematical lines into thick, renderable triangles.
 
-use crate::render::MeshBuffer;
+use crate::render::cache::MeshData;
+use crate::render::cache::mesh::tessellation::manual::basic::draw_dot;
 use iced_core::{Color, Point, Vector};
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
@@ -34,7 +35,7 @@ fn maybe_snap(coord: f32, width: f32, snap: bool) -> f32 {
 /// the line width into a rectangle (2 triangles).
 #[inline]
 pub fn draw_line_segment(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     start: Point,
     end: Point,
     width: f32,
@@ -99,7 +100,7 @@ pub fn draw_line_segment(
 /// The arrowhead is constructed as a simple isosceles triangle.
 #[inline]
 pub fn draw_arrowhead(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     tip: Point,
     direction: Vector, // Must be normalized Vector
     line_width: f32,
@@ -146,7 +147,7 @@ pub fn draw_arrowhead(
 /// Draws a generic dashed line between two points.
 #[allow(unused)]
 pub fn draw_dashed_line_segment(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     start: Point,
     end: Point,
     width: f32,
@@ -198,7 +199,7 @@ pub fn draw_dashed_line_segment(
 /// Draws a perfectly horizontal line.
 #[inline]
 pub fn draw_horizontal_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x_start: f32,
     x_end: f32,
     y: f32,
@@ -251,7 +252,7 @@ pub fn draw_horizontal_line(
 /// Draws a perfectly vertical line.
 #[inline]
 pub fn draw_vertical_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x: f32,
     y_start: f32,
     y_end: f32,
@@ -302,7 +303,7 @@ pub fn draw_vertical_line(
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_horizontal_dashed_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x_start: f32,
     x_end: f32,
     y: f32,
@@ -380,7 +381,7 @@ pub fn draw_horizontal_dashed_line(
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_vertical_dashed_line(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     x: f32,
     y_start: f32,
     y_end: f32,
@@ -448,5 +449,133 @@ pub fn draw_vertical_dashed_line(
         ]);
 
         current_y += dash_length + gap_length;
+    }
+}
+
+/// Draws a perfectly horizontal dotted line using circular dots.
+#[inline]
+#[allow(clippy::too_many_arguments)]
+pub fn draw_horizontal_dotted_line(
+    buffer: &mut MeshData,
+    x_start: f32,
+    x_end: f32,
+    y: f32,
+    width: f32,
+    color: Color,
+    gap_length: f32,
+    snap: bool,
+) {
+    // Prevent inifnite loops
+    if gap_length < 0.0 || width <= 0.0 {
+        return;
+    }
+
+    let radius = width / 2.0;
+    let spacing = width + gap_length; // Space taken by the dot + the gap
+
+    let (start, end) = if x_start < x_end {
+        (x_start, x_end)
+    } else {
+        (x_end, x_start)
+    };
+
+    let y_snapped = maybe_snap(y, width, snap);
+
+    // Start the first dot shifted by its radius so the edge of the dot touches x_start
+    let mut current_x = start + radius;
+
+    #[allow(clippy::while_float)]
+    while current_x <= end - radius {
+        draw_dot(buffer, Point::new(current_x, y_snapped), radius, color);
+        current_x += spacing;
+    }
+}
+
+/// Draws a perfectly vertical dotted line using circular dots.
+#[inline]
+#[allow(clippy::too_many_arguments)]
+pub fn draw_vertical_dotted_line(
+    buffer: &mut MeshData,
+    x: f32,
+    y_start: f32,
+    y_end: f32,
+    width: f32,
+    color: Color,
+    gap_length: f32,
+    snap: bool,
+) {
+    let radius = width / 2.0;
+    let spacing = width + gap_length;
+
+    let (start, end) = if y_start < y_end {
+        (y_start, y_end)
+    } else {
+        (y_end, y_start)
+    };
+
+    let x_snapped = maybe_snap(x, width, snap);
+    let mut current_y = start + radius;
+
+    #[allow(clippy::while_float)]
+    while current_y <= end - radius {
+        draw_dot(buffer, Point::new(x_snapped, current_y), radius, color);
+        current_y += spacing;
+    }
+}
+
+/// Draws a path of connected segments as a series of perfectly circular dots.
+///
+/// It maintains the exact arc-length spacing across corners to ensure smooth
+/// continuous dotted patterns regardless of segment lengths.
+pub fn draw_dotted_path(
+    buffer: &mut MeshData,
+    points: &[Point],
+    width: f32,
+    gap: f32,
+    color: Color,
+) {
+    if points.is_empty() || gap < 0.0 || width <= 0.0 {
+        return;
+    }
+
+    let radius = width / 2.0;
+    let spacing = width + gap;
+
+    // Draw the very first dot exactly at the start point
+    draw_dot(buffer, points[0], radius, color);
+    let mut dist_since_last_dot = 0.0;
+
+    // Iterate over every connected segment
+    for window in points.windows(2) {
+        let p_start = window[0];
+        let p_end = window[1];
+
+        let dx = p_end.x - p_start.x;
+        let dy = p_end.y - p_start.y;
+        let len = dx.hypot(dy);
+
+        // Skip microscopic segments to prevent divide-by-zero
+        if len < 0.0001 {
+            continue;
+        }
+
+        let dir_x = dx / len;
+        let dir_y = dy / len;
+
+        // Calculate how far we need to travel along THIS segment to drop the next dot
+        let mut advance = spacing - dist_since_last_dot;
+
+        #[allow(clippy::while_float)]
+        while advance <= len {
+            let dot_center = Point::new(
+                dir_x.mul_add(advance, p_start.x),
+                dir_y.mul_add(advance, p_start.y),
+            );
+            draw_dot(buffer, dot_center, radius, color);
+            advance += spacing;
+        }
+
+        // Save the remaining distance on this segment for the next segment in the polyline
+        dist_since_last_dot = len - (advance - spacing);
     }
 }

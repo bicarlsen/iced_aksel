@@ -2,7 +2,7 @@
 //!
 //! Handles curved shapes defined by angular ranges.
 
-use crate::render::MeshBuffer;
+use crate::render::cache::MeshData;
 use iced_core::Color;
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
@@ -12,7 +12,7 @@ use iced_graphics::{color::pack, mesh::SolidVertex2D};
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn draw_arc_strip(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     center_x: f32,
     center_y: f32,
     radius_inner: f32,
@@ -53,17 +53,5 @@ pub fn draw_arc_strip(
     }
 
     // Connect as Triangle Strip
-    for i in 0..segments {
-        let current = i as u32;
-        let next = current + 1;
-
-        let inner_curr = start_index + current * 2;
-        let outer_curr = start_index + current * 2 + 1;
-        let inner_next = start_index + next * 2;
-        let outer_next = start_index + next * 2 + 1;
-
-        mesh.indices.extend_from_slice(&[
-            inner_curr, outer_curr, outer_next, inner_curr, outer_next, inner_next,
-        ]);
-    }
+    super::push_ring_strip_indices(mesh, start_index, segments, false);
 }

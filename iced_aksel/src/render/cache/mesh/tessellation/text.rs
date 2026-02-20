@@ -9,7 +9,7 @@
 //! * **Dynamic LOD:** The engine automatically adjusts the triangle count based on the size of the text on screen.
 //! * **Memory Safety:** Uses an LRU (Least Recently Used) cache to prevent unbounded memory growth.
 
-use crate::render::{MeshBuffer, Text};
+use crate::render::Text;
 use core::f32;
 use iced_core::{
     Color, Point,
@@ -51,35 +51,6 @@ use std::num::NonZeroUsize;
 /// or font sizes active simultaneously.
 const CACHE_CAPACITY: usize = 2000;
 
-/// The rendering quality of the vector text.
-///
-/// This controls the error tolerance of the tessellation algorithms.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum Quality {
-    /// High triangle count, very smooth curves. (Tolerance: 0.2)
-    High,
-    #[default]
-    /// Balanced performance and visual fidelity. (Tolerance: 0.5)
-    Medium,
-    /// Low triangle count, "blocky" curves. Best for performance. (Tolerance: 1.5)
-    Low,
-    /// Custom tolerance value. Lower is better/slower.
-    Custom(f32),
-}
-
-impl Quality {
-    /// Converts the quality setting into a tessellation tolerance value.
-    /// Lower values mean higher precision (more triangles).
-    pub const fn to_tolerance(self) -> f32 {
-        match self {
-            Self::High => 0.2,
-            Self::Medium => 0.5,
-            Self::Low => 1.5,
-            Self::Custom(val) => val.max(0.001),
-        }
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Caching Infrastructure
 // -----------------------------------------------------------------------------
@@ -87,7 +58,7 @@ impl Quality {
 /// A single tessellated character cached for reuse.
 ///
 /// Storing the `VertexBuffers` directly allows us to "stamp" this geometry
-/// into the main mesh buffer multiple times without re-running the expensive
+/// into the main mesh cache multiple times without re-running the expensive
 /// tessellation math.
 #[derive(Clone, Debug)]
 struct CachedGlyph {
@@ -168,7 +139,7 @@ impl Default for TextTessellationCache {
 /// to rendering functions.
 pub struct TextRenderContext<'a> {
     /// The final destination for the mesh data.
-    pub mesh_buffer: &'a mut MeshBuffer,
+    pub mesh_buffer: &'a mut crate::render::cache::MeshData,
     /// The Lyon tessellator instance (reused to avoid allocation).
     pub tessellator: &'a mut FillTessellator,
     /// The LRU cache for glyph geometry.
@@ -279,9 +250,9 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
     text_buffer.set_wrap(font_system, iced_graphics::text::to_wrap(req.wrapping));
     text_buffer.set_text(
         font_system,
-        req.content,
+        &req.content,
         &iced_graphics::text::to_attributes(req.font),
-        iced_graphics::text::to_shaping(iced_core::text::Shaping::Auto, req.content),
+        iced_graphics::text::to_shaping(iced_core::text::Shaping::Auto, &req.content),
         None,
     );
 
@@ -316,7 +287,7 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
     };
 
     // --- Decide pixel tolerance ---
-    let base_error_px = req.quality.to_tolerance();
+    let base_error_px = req.tolerance;
     let desired_error_px = base_error_px / ctx.quality_multiplier.max(0.1);
     let tess_tol_px = snap_to_bucket(desired_error_px);
     let tol_bucket_u16 = tol_bucket(tess_tol_px);
@@ -440,7 +411,7 @@ pub fn draw_geometric_text(ctx: &mut TextRenderContext, req: Text) {
 
 /// Transforms local glyph geometry to world/screen space and pushes it to the mesh buffer.
 fn flush_character_to_mesh(
-    target_buffer: &mut MeshBuffer,
+    target_buffer: &mut crate::render::cache::MeshData,
     source_geometry: &VertexBuffers<Point, u16>,
     screen_origin: Point,
     rotation_radians: f32,

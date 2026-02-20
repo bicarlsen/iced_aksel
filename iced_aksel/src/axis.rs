@@ -21,14 +21,8 @@ use iced_core::{
 };
 
 use crate::{
-    plot,
-    render::{
-        MeshBuffer,
-        tessellation::manual::linear::{
-            draw_horizontal_dashed_line, draw_horizontal_line, draw_vertical_dashed_line,
-            draw_vertical_line,
-        },
-    },
+    render::{Primitive, RenderCache},
+    stroke::{ResolvedStroke, StrokeStyle},
     style::{AxisStyle, DashStyle, Style},
 };
 
@@ -324,10 +318,10 @@ impl<D: Float, Theme> Axis<D, Theme> {
         style: &Style,
         layout: Layout<'_>,
         plot_bounds: &Rectangle,
-        mesh_buffer: &mut MeshBuffer,
+        cache: &mut RenderCache<Renderer>,
         viewport: &Rectangle,
     ) where
-        Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+        Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
     {
         if self.invisible && !self.render_grid {
             return;
@@ -339,7 +333,6 @@ impl<D: Float, Theme> Axis<D, Theme> {
         let (&d_min, &d_max) = self.scale.domain();
 
         // --- Prioritize Ticks (Center-Out) ---
-
         let prioritized_ticks = self.collect_prioritized_ticks();
 
         let mut label_candidates = Vec::new();
@@ -374,10 +367,11 @@ impl<D: Float, Theme> Axis<D, Theme> {
             };
 
             // Draw Grid Lines (Global style + local config)
-            if self.render_grid
+            if cache.needs_redraw()
+                && self.render_grid
                 && let Some(line) = grid_line
             {
-                self.draw_grid_line(line, &bounds, plot_bounds, mesh_buffer, pos_norm);
+                self.draw_grid_line(line, &bounds, plot_bounds, cache, pos_norm);
             }
 
             if self.invisible {
@@ -422,7 +416,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
 
             // Draw Tick Marks (Axis style + local config)
             if let Some(line) = tick_line {
-                self.draw_tick_line(line, &bounds, mesh_buffer, pos_norm);
+                self.draw_tick_line(line, &bounds, renderer, pos_norm);
             }
         }
 
@@ -454,7 +448,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         style: &SpineStyle,
         viewport: &Rectangle,
     ) where
-        Renderer: plot::Renderer,
+        Renderer: crate::Renderer,
     {
         if style.width.0 <= 0.0 {
             return;
@@ -530,7 +524,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         chart_bounds: &Rectangle,
         text_offset: Pixels,
     ) where
-        Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+        Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
     {
         let orientation = self.orientation();
 
@@ -709,7 +703,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
         candidate_max_size: Size,
         viewport: &Rectangle,
     ) where
-        Renderer: plot::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
+        Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font>,
     {
         let mut accepted: Vec<PlacedLabelInfo<D>> = Vec::new();
 
@@ -900,82 +894,111 @@ impl<D: Float, Theme> Axis<D, Theme> {
             color: label.color,
         })
     }
-    /// Renders a single tick mark into the mesh buffer using linear tessellators.
-    fn draw_tick_line(
+
+    /// Renders a single tick mark
+    fn draw_tick_line<Renderer>(
         &self,
         line: TickLine,
         bounds: &Rectangle,
-        mesh_buffer: &mut MeshBuffer,
+        renderer: &mut Renderer,
         pos_norm: f32,
-    ) {
-        let width = line.width.0;
+    ) where
+        Renderer: crate::Renderer,
+    {
+        let thickness = line.width.0;
+        let half_thickness = thickness / 2.0;
         let length = line.length.0;
-        let color = line.color;
+        let fill = line.color;
 
         match self.position {
             Position::Bottom => {
-                let x = bounds.width.mul_add(pos_norm, bounds.x);
-                draw_vertical_line(
-                    mesh_buffer,
-                    x,
-                    bounds.y,
-                    bounds.y + length,
-                    width,
-                    color,
-                    true,
+                let x = bounds.width.mul_add(pos_norm, bounds.x) - half_thickness;
+                renderer.fill_quad(
+                    Quad {
+                        bounds: Rectangle::new(
+                            Point { x, y: bounds.y },
+                            Size {
+                                width: thickness,
+                                height: length,
+                            },
+                        ),
+                        snap: true,
+                        ..Default::default()
+                    },
+                    fill,
                 );
             }
             Position::Top => {
-                let x = bounds.width.mul_add(pos_norm, bounds.x);
-                draw_vertical_line(
-                    mesh_buffer,
-                    x,
-                    bounds.y + bounds.height - length,
-                    bounds.y + bounds.height,
-                    width,
-                    color,
-                    true,
+                let x = bounds.width.mul_add(pos_norm, bounds.x) - half_thickness;
+                renderer.fill_quad(
+                    Quad {
+                        bounds: Rectangle::new(
+                            Point { x, y: bounds.y },
+                            Size {
+                                width: thickness,
+                                height: length,
+                            },
+                        ),
+                        snap: true,
+                        ..Default::default()
+                    },
+                    fill,
                 );
             }
             Position::Right => {
-                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                draw_horizontal_line(
-                    mesh_buffer,
-                    bounds.x,
-                    bounds.x + length,
-                    y,
-                    width,
-                    color,
-                    true,
+                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y) - half_thickness;
+                renderer.fill_quad(
+                    Quad {
+                        bounds: Rectangle::new(
+                            Point { x: bounds.x, y },
+                            Size {
+                                width: length,
+                                height: thickness,
+                            },
+                        ),
+                        snap: true,
+                        ..Default::default()
+                    },
+                    fill,
                 );
             }
             Position::Left => {
-                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y);
-                draw_horizontal_line(
-                    mesh_buffer,
-                    bounds.x + bounds.width - length,
-                    bounds.x + bounds.width,
-                    y,
-                    width,
-                    color,
-                    true,
+                let y = bounds.height.mul_add(1.0 - pos_norm, bounds.y) - half_thickness;
+                renderer.fill_quad(
+                    Quad {
+                        bounds: Rectangle::new(
+                            Point {
+                                x: bounds.x + bounds.width - length,
+                                y,
+                            },
+                            Size {
+                                width: length,
+                                height: thickness,
+                            },
+                        ),
+                        snap: true,
+                        ..Default::default()
+                    },
+                    fill,
                 );
             }
         }
     }
 
-    /// Renders a single grid line into the mesh buffer.
-    fn draw_grid_line(
+    /// Renders a single grid line into the cache.
+    fn draw_grid_line<Renderer>(
         &self,
         line: GridLine,
         axis_bounds: &Rectangle,
         plot_bounds: &Rectangle,
-        mesh_buffer: &mut MeshBuffer,
+        cache: &mut RenderCache<Renderer>,
         pos_norm: f32,
-    ) {
+    ) where
+        Renderer: crate::Renderer,
+    {
         let orientation = self.orientation();
-        let width = line.width.0;
-        let color = line.color;
+        let thickness = line.width.0;
+        let fill = line.color;
 
         match orientation {
             Orientation::Horizontal => {
@@ -985,27 +1008,32 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    draw_vertical_dashed_line(
-                        mesh_buffer,
+                    cache.add_primitive(Primitive::VerticalLine {
                         x,
-                        plot_bounds.y,
-                        plot_bounds.y + plot_bounds.height,
-                        width,
-                        color,
-                        line_length,
-                        gap_length,
-                        true,
-                    );
+                        y_start: plot_bounds.y,
+                        y_end: plot_bounds.y + plot_bounds.height,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Dashed {
+                                gap: gap_length,
+                                dash: line_length,
+                            },
+                        },
+                        snap: true,
+                    });
                 } else {
-                    draw_vertical_line(
-                        mesh_buffer,
+                    cache.add_primitive(Primitive::VerticalLine {
                         x,
-                        plot_bounds.y,
-                        plot_bounds.y + plot_bounds.height,
-                        width,
-                        color,
-                        true,
-                    );
+                        y_start: plot_bounds.y,
+                        y_end: plot_bounds.y + plot_bounds.height,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
+                    });
                 }
             }
             Orientation::Vertical => {
@@ -1015,27 +1043,32 @@ impl<D: Float, Theme> Axis<D, Theme> {
                     gap_length,
                 }) = line.dashed
                 {
-                    draw_horizontal_dashed_line(
-                        mesh_buffer,
-                        plot_bounds.x,
-                        plot_bounds.x + plot_bounds.width,
+                    cache.add_primitive(Primitive::HorizontalLine {
                         y,
-                        width,
-                        color,
-                        line_length,
-                        gap_length,
-                        true,
-                    );
+                        x_start: plot_bounds.x,
+                        x_end: plot_bounds.x + plot_bounds.width,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Dashed {
+                                dash: line_length,
+                                gap: gap_length,
+                            },
+                        },
+                        snap: true,
+                    });
                 } else {
-                    draw_horizontal_line(
-                        mesh_buffer,
-                        plot_bounds.x,
-                        plot_bounds.x + plot_bounds.width,
+                    cache.add_primitive(Primitive::HorizontalLine {
                         y,
-                        width,
-                        color,
-                        true,
-                    );
+                        x_start: plot_bounds.x,
+                        x_end: plot_bounds.x + plot_bounds.width,
+                        stroke: ResolvedStroke {
+                            fill,
+                            thickness,
+                            style: StrokeStyle::Solid,
+                        },
+                        snap: true,
+                    });
                 }
             }
         }

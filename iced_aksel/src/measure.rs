@@ -19,7 +19,7 @@ use aksel::{Float, Transform};
 /// // Data size: 5.0 units in plot space, scales when zooming
 /// let scalable = Measure::Plot(5.0_f64);
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Measure<D> {
     /// Fixed size in screen pixels.
     ///

@@ -27,7 +27,6 @@
 //! let line = Line::new(
 //!     PlotPoint::new(0.0, 0.0),
 //!     PlotPoint::new(10.0, 10.0),
-//! ).stroke(
 //!     Stroke::new(Color::from_rgb(0.0, 0.0, 1.0), Measure::Screen(2.0))
 //! );
 //!
@@ -67,6 +66,8 @@ pub use rectangle::Rectangle;
 pub use spline::Spline;
 pub use triangle::Triangle;
 
+pub use crate::render::{LineArrows, LineExtensions};
+
 /// Trait for shapes that can be rendered on a plot.
 ///
 /// Implement this trait for custom shapes. The rendering context provides access
@@ -84,16 +85,15 @@ pub use triangle::Triangle;
 ///
 /// impl Shape<f64> for MyCustomShape {
 ///     fn render(self, ctx: &mut plot::Context<'_, f64>) {
-///         // Use ctx.render_mesh() for geometric shapes
-///         // or ctx.render_text() for text rendering
+///         // Use ctx.add_primitve() to render primitives
 ///     }
 /// }
 /// ```
 pub trait Shape<D, Renderer = iced_renderer::Renderer>
 where
     D: Float,
-    Renderer: plot::Renderer,
+    Renderer: crate::Renderer,
 {
-    /// Renders this shape into the plot context.
+    /// Renders this shape into the plot context as a primitive.
     fn render(self, ctx: &mut plot::Context<'_, D, Renderer>);
 }

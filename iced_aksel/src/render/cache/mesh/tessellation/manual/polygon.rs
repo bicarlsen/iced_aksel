@@ -3,13 +3,13 @@
 //! Helper functions for rendering arbitrary triangles, fans (convex shapes),
 //! and rings (thick polygon borders).
 
-use crate::render::MeshBuffer;
+use crate::render::cache::MeshData;
 use iced_core::{Color, Point};
 use iced_graphics::{color::pack, mesh::SolidVertex2D};
 
 /// Writes a single filled triangle.
 #[inline]
-pub fn draw_fill_triangle(buffer: &mut MeshBuffer, p1: Point, p2: Point, p3: Point, color: Color) {
+pub fn draw_fill_triangle(buffer: &mut MeshData, p1: Point, p2: Point, p3: Point, color: Color) {
     let packed_color = pack(color);
     let mesh = buffer.get_mesh_mut();
     let start_index = mesh.vertices.len() as u32;
@@ -39,7 +39,7 @@ pub fn draw_fill_triangle(buffer: &mut MeshBuffer, p1: Point, p2: Point, p3: Poi
 /// and connects them.
 #[inline]
 pub fn draw_stroke_triangle(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     outer: [Point; 3],
     inner: [Point; 3],
     color: Color,
@@ -76,7 +76,7 @@ pub fn draw_stroke_triangle(
 ///
 /// Takes the first point as the center, and connects subsequent points to it.
 #[inline]
-pub fn draw_fan(buffer: &mut MeshBuffer, points: &[Point], color: Color) {
+pub fn draw_fan(buffer: &mut MeshData, points: &[Point], color: Color) {
     if points.len() < 3 {
         return;
     }
@@ -111,7 +111,7 @@ pub fn draw_fan(buffer: &mut MeshBuffer, points: &[Point], color: Color) {
 /// Used for stroking convex polygons.
 #[inline]
 pub fn draw_ring(
-    buffer: &mut MeshBuffer,
+    buffer: &mut MeshData,
     outer_points: &[Point],
     inner_points: &[Point],
     color: Color,

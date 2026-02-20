@@ -4,16 +4,10 @@ use iced::{
     time::Instant,
 };
 use iced_aksel::{
-    Axis,
-    Chart,
-    Measure,
-    PlotPoint,
-    State,
-    Stroke,
+    Axis, Chart, Measure, PlotPoint, State, Stroke,
     axis::{self, TickResult},
     plot::{Plot, PlotData},
     scale::Linear,
-    // Added Zone to imports
     shape::{Area, Label, Polygon, Polyline, Rectangle},
 };
 use std::collections::HashMap;
@@ -603,15 +597,10 @@ impl PlotData<f64> for LineChart {
                 plot.add_shape(Area::new(fill_poly).fill(color));
             }
 
-            plot.add_shape(Polyline {
-                points: points.clone(),
-                stroke: Some(Stroke::new(s.color, Measure::Screen(s.width))),
-                extend_start: false,
-                extend_end: false,
-                arrow_start: false,
-                arrow_end: false,
-                arrow_size: 10.0,
-            });
+            plot.add_shape(Polyline::new(
+                points.clone(),
+                Stroke::new(s.color, Measure::Screen(s.width)),
+            ));
 
             if s.show_markers {
                 for point in &points {

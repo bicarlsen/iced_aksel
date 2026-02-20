@@ -1,9 +1,9 @@
-use crate::Quality;
-use crate::render::Text;
+use crate::render::Primitive;
 use crate::{Measure, Shape, plot};
 use aksel::{Float, PlotPoint};
+use iced_core::text::LineHeight;
 use iced_core::{
-    Color, Font, Point, Size,
+    Color, Font, Point, Radians, Size,
     alignment::{Horizontal, Vertical},
     text::Wrapping,
 };
@@ -87,17 +87,19 @@ pub struct Label<D> {
     /// Font-size of the label
     pub size: Measure<D>,
     /// Text rotation in radians
-    pub rotation: f32, // Radians
+    pub rotation: Radians,
     /// Horizontal alignment
     pub horizontal_alignment: Horizontal,
     /// Vertical alignment
     pub vertical_alignment: Vertical,
     /// Color of the text
     pub fill: Color,
-    /// Quality preset to render at
-    pub quality: Quality,
+    /// Text tolerance quality override
+    pub quality: Option<f32>,
     /// Letter spacing for the text
-    pub letter_spacing: f32,
+    ///
+    /// TODO: Unused - Add this to rendering implementation!
+    // pub letter_spacing: f32,
     /// Font override - Defaults to the default font of the application
     pub font: Option<Font>,
     /// Line height for the text (How much space **between** lines)
@@ -108,38 +110,48 @@ pub struct Label<D> {
     pub wrapping: Wrapping,
 }
 
-impl<D: Float + Debug, R: plot::Renderer> Shape<D, R> for Label<D> {
+impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
     fn render(self, ctx: &mut plot::Context<'_, D, R>) {
-        let font = self.font.unwrap_or_else(|| ctx.default_font());
-        ctx.render_mesh(move |transform, mesh_buffer, tessellator| {
-            // 1. Resolve Position to Screen Coordinates
-            let screen_position = transform.chart_to_screen(&self.position);
+        let Self {
+            content,
+            position,
+            size,
+            rotation,
+            horizontal_alignment,
+            vertical_alignment,
+            fill,
+            quality,
+            // letter_spacing, // TODO: Use this!
+            font,
+            line_height,
+            bounds,
+            wrapping,
+        } = self;
 
-            // 2. Resolve Size (Screen Pixels vs Plot Units)
-            let font_size_in_pixels = self.size.resolve_y(transform);
-            let line_height = font_size_in_pixels + self.line_height;
+        let font = font.unwrap_or_else(|| ctx.default_font());
+        // 1. Resolve Position to Screen Coordinates
+        let screen_position = ctx.chart_to_screen(&position);
 
-            // 3. Resolve bounds
-            let bounds = self.bounds.resolve(transform, &self.position);
+        // 2. Resolve Size (Screen Pixels vs Plot Units)
+        let font_size_in_pixels = size.resolve_y(ctx);
 
-            // 4. Draw
-            tessellator.draw_text(
-                mesh_buffer,
-                Text {
-                    content: &self.content,
-                    position: Point::new(screen_position.x, screen_position.y),
-                    size: font_size_in_pixels.into(),
-                    rotation: self.rotation,
-                    horizontal_alignment: self.horizontal_alignment,
-                    vertical_alignment: self.vertical_alignment,
-                    fill: self.fill,
-                    quality: self.quality,
-                    font,
-                    line_height: line_height.into(),
-                    bounds,
-                    wrapping: self.wrapping,
-                },
-            );
+        // 3. Resolve bounds
+        let bounds = bounds.resolve(ctx, &position);
+
+        // 4. Draw
+        ctx.add_primitive(Primitive::Text {
+            content,
+            position: Point::new(screen_position.x, screen_position.y),
+            size: font_size_in_pixels.into(),
+            rotation,
+            horizontal_alignment,
+            vertical_alignment,
+            fill,
+            quality,
+            font,
+            line_height: LineHeight::Relative(line_height),
+            bounds,
+            wrapping,
         });
     }
 }
@@ -153,12 +165,12 @@ impl<D: Float> Label<D> {
             content: content.to_string(),
             position,
             size: Measure::Screen(12.0),
-            rotation: 0.0,
+            rotation: Radians(0.0),
             horizontal_alignment: Horizontal::Left,
             vertical_alignment: Vertical::Center,
             fill: Color::BLACK,
-            quality: Quality::default(), // Defaults to Medium
-            letter_spacing: 1.2,
+            quality: None,
+            // letter_spacing: 1.2,
             font: None,
             line_height: 1.0,
             bounds: Bounds::INFINITE,
@@ -208,8 +220,8 @@ impl<D: Float> Label<D> {
     }
 
     /// Sets the rotation of the text in radians.
-    pub const fn rotation(mut self, radians: f32) -> Self {
-        self.rotation = radians;
+    pub fn rotation(mut self, radians: impl Into<Radians>) -> Self {
+        self.rotation = radians.into();
         self
     }
 
@@ -224,13 +236,11 @@ impl<D: Float> Label<D> {
         self
     }
 
-    /// Sets the rendering quality (Level of Detail).
+    /// Overrides the rendering quality (Level of Detail).
     ///
-    /// - `Quality::Medium` (Default) is balanced for most cases.
-    /// - Use `Quality::Low` if rendering thousands of labels.
-    /// - Use `Quality::High` for very large, cinematic text.
-    pub const fn quality(mut self, quality: Quality) -> Self {
-        self.quality = quality;
+    /// See [`crate::Quality::Custom`] for more info
+    pub const fn quality(mut self, tolerance: f32) -> Self {
+        self.quality = Some(tolerance);
         self
     }
 }
