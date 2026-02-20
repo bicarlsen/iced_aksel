@@ -24,13 +24,13 @@ impl<Renderer: crate::Renderer> RenderCache<Renderer> {
         Self::Path(Box::new(PathCache::new()))
     }
 
-    pub fn clear(&mut self) {
+    pub fn request_redraw(&mut self) {
         match self {
             Self::Path(cache) => {
-                cache.clear();
+                cache.request_redraw();
             }
             Self::Mesh(cache) => {
-                cache.clear();
+                cache.request_redraw();
             }
         }
     }

@@ -42,8 +42,7 @@ impl<Renderer: crate::render::Renderer> PathCache<Renderer> {
     }
 
     /// Clear the buffer, triggering a redraw
-    pub fn clear(&mut self) {
-        self.buffer.clear();
+    pub fn request_redraw(&mut self) {
         self.cache.clear();
         self.needs_redraw = true;
     }
@@ -62,6 +61,7 @@ impl<Renderer: crate::render::Renderer> PathCache<Renderer> {
             });
 
         self.needs_redraw = false;
+        self.buffer.clear();
         renderer.draw_geometry(geometry);
     }
 

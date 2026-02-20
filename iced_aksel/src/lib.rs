@@ -1084,7 +1084,7 @@ where
             let Some(mut cache) = memory.get_cache_mut() else {
                 return;
             };
-            cache.clear();
+            cache.request_redraw();
         }
 
         // Only handle events if the cursor is near the chart
@@ -1205,18 +1205,16 @@ where
         self.draw_spine_corners(layout, &style, plot_bounds, renderer);
 
         // Draw data layers if the cache needs redraw
-        if cache.needs_redraw() {
-            for layer in &self.layers {
-                // These axes are guaranteed to exist because of `verify_layer` check
-                let x_axis = self.state.axis(&layer.horizontal_axis_id);
-                let y_axis = self.state.axis(&layer.vertical_axis_id);
-                let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
+        for layer in &self.layers {
+            // These axes are guaranteed to exist because of `verify_layer` check
+            let x_axis = self.state.axis(&layer.horizontal_axis_id);
+            let y_axis = self.state.axis(&layer.vertical_axis_id);
+            let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-                let mut plot: Plot<Domain, Renderer> = Plot::new(renderer, &mut cache, &transform);
+            let mut plot: Plot<Domain, Renderer> = Plot::new(renderer, &mut cache, &transform);
 
-                // User code draws shapes into the plot here
-                layer.items.draw(&mut plot, theme);
-            }
+            // User code draws shapes into the plot here
+            layer.items.draw(&mut plot, theme);
         }
 
         // Draw markers

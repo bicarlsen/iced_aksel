@@ -367,8 +367,7 @@ impl<D: Float, Theme> Axis<D, Theme> {
             };
 
             // Draw Grid Lines (Global style + local config)
-            if cache.needs_redraw()
-                && self.render_grid
+            if self.render_grid
                 && let Some(line) = grid_line
             {
                 self.draw_grid_line(line, &bounds, plot_bounds, cache, pos_norm);

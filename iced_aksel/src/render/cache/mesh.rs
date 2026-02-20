@@ -89,8 +89,7 @@ impl MeshCache {
     }
 
     /// Clears the buffer
-    pub fn clear(&mut self) {
-        self.buffer.clear();
+    pub const fn request_redraw(&mut self) {
         self.needs_redraw = true;
     }
 
@@ -122,6 +121,7 @@ impl MeshCache {
         }
 
         // Cache is cheap to clone thanks to Arc - This is intended
+        self.buffer.clear();
         renderer.draw_mesh_cache(self.cached.clone());
     }
 
