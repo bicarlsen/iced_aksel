@@ -11,7 +11,9 @@ use crate::{
     shape::Shape,
 };
 
+use crate::interaction::InteractionRegistry;
 use aksel::{Float, PlotRect, Transform};
+use iced_core::text::Renderer;
 use iced_core::{Font, Rectangle};
 
 /// Normalized drag delta for panning operations.
@@ -60,7 +62,7 @@ pub struct DragDelta {
 ///     }
 /// }
 /// ```
-pub trait PlotData<D, R = iced_renderer::Renderer, Theme = iced_core::Theme>
+pub trait PlotData<D, Message, R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
     D: Float,
     R: crate::Renderer,
@@ -68,7 +70,7 @@ where
     /// Draws this data onto the plot.
     ///
     /// Use `plot.add_shape()` to add visual elements to the chart.
-    fn draw(&self, plot: &mut Plot<D, R>, theme: &Theme);
+    fn draw(&self, plot: &mut Plot<D, Message, R>, theme: &Theme);
 
     /// The version of the layer, used for caching.
     ///
@@ -86,10 +88,11 @@ where
 /// Internal rendering context for shapes.
 ///
 /// Manages layer ordering and caching for efficient rendering.
-pub struct Context<'a, D: Float, Renderer: crate::Renderer = iced_renderer::Renderer> {
+pub struct Context<'a, D: Float, Message, Renderer: crate::Renderer = iced_renderer::Renderer> {
     transform: &'a Transform<'a, D, f32, f32>,
     renderer: &'a mut Renderer,
     cache: &'a mut RenderCache<Renderer>,
+    pub interactions: &'a mut InteractionRegistry<D, Message>,
 }
 
 impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer> {
@@ -100,7 +103,7 @@ impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer>
     }
 }
 
-impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
+impl<'a, D: Float, Message, Renderer: crate::Renderer> Context<'a, D, Message, Renderer> {
     /// Returns the default font of the underlying renderer
     #[inline(always)]
     pub fn default_font(&self) -> Font {
@@ -133,11 +136,11 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
 ///
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
-pub struct Plot<'a, D: Float, R: crate::Renderer = iced_renderer::Renderer> {
-    context: Context<'a, D, R>,
+pub struct Plot<'a, D: Float, Message, R: crate::Renderer = iced_renderer::Renderer> {
+    context: Context<'a, D, Message, R>,
 }
 
-impl<'a, D, R> Plot<'a, D, R>
+impl<'a, D, Message, R> Plot<'a, D, Message, R>
 where
     D: Float,
     R: crate::Renderer,
@@ -149,11 +152,13 @@ where
         renderer: &'a mut R,
         cache: &'a mut RenderCache<R>,
         transform: &'a Transform<'a, D, f32, f32>,
+        interactions: &'a mut InteractionRegistry<D, Message>,
     ) -> Self {
         let context = Context {
             transform,
             renderer,
             cache,
+            interactions,
         };
         Self { context }
     }

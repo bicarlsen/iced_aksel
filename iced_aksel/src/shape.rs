@@ -95,5 +95,5 @@ where
     Renderer: crate::Renderer,
 {
     /// Renders this shape into the plot context as a primitive.
-    fn render(self, ctx: &mut plot::Context<'_, D, Renderer>);
+    fn render<Message>(self, ctx: &mut plot::Context<'_, D, Message, Renderer>);
 }
