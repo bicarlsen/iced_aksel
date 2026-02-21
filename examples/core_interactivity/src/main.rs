@@ -20,8 +20,8 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone, PartialEq)]
 enum AppMode {
-    Interact, // Pan and move shapes
-    AddShape, // Click background to add shapes
+    Interact,
+    AddShape,
 }
 
 // -----------------------------------------------------------------------------
