@@ -1,6 +1,6 @@
-
 // src/interaction.rs
 use aksel::{Float, PlotPoint, PlotRect};
+use iced_core::Rectangle;
 
 /// Determines if an event should stop propagating or pass through to shapes behind it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -34,7 +34,8 @@ pub struct Interaction<Message> {
 #[derive(Debug)]
 pub struct InteractiveHitbox<D, Message> {
     /// The broad-phase bounding box
-    pub aabb: PlotRect<D>,
+    /// TODO: Consider using a plot-coordinate aware struct?
+    pub aabb: Rectangle,
     /// The narrow-phase precise geometry
     pub geometry: HitGeometry<D>,
 

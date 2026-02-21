@@ -79,28 +79,24 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
 
         // 2. Register Interactions with the Broad Phase Registry!
         if on_hover.is_some() || on_click.is_some() {
-            // To ensure zooming doesn't break hitboxes defined in Screen pixels,
-            // we reverse-project the calculated screen bounds back to Data space!
-            let dx1 = ctx.x_from_screen(&screen_min.x);
-            let dx2 = ctx.x_from_screen(&screen_max.x);
-            let dy1 = ctx.x_from_screen(&screen_min.y);
-            let dy2 = ctx.x_from_screen(&screen_max.y);
-
-            let min_x = if dx1 < dx2 { dx1 } else { dx2 };
-            let max_x = if dx1 > dx2 { dx1 } else { dx2 };
-            let min_y = if dy1 < dy2 { dy1 } else { dy2 };
-            let max_y = if dy1 > dy2 { dy1 } else { dy2 };
-
-            let data_bounds = PlotRect {
-                x: min_x,
-                y: min_y,
-                width: max_x - min_x,
-                height: max_y - min_y,
+            // Simply construct the screen rectangle
+            let aabb = iced_core::Rectangle {
+                x: screen_min.x,
+                y: screen_min.y,
+                width: screen_max.x - screen_min.x,
+                height: screen_max.y - screen_min.y,
             };
 
             ctx.interactions.add(InteractiveHitbox {
-                aabb: data_bounds.clone(),
-                geometry: HitGeometry::Rect(data_bounds),
+                aabb,
+                // For the MVP, we can just pass a dummy Rect to the geometry
+                // since we're only relying on the AABB for a simple rectangle.
+                geometry: HitGeometry::Rect(PlotRect {
+                    x: D::from(0).unwrap(),
+                    y: D::from(0).unwrap(),
+                    width: D::from(0).unwrap(),
+                    height: D::from(0).unwrap(),
+                }),
                 on_hover: on_hover.map(|msg| Interaction {
                     message: msg,
                     propagation,
