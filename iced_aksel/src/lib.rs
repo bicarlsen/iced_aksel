@@ -104,6 +104,7 @@ mod render;
 mod state;
 
 pub mod axis;
+mod interaction;
 pub mod plot;
 pub mod radii;
 pub mod shape;
