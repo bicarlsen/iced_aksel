@@ -199,7 +199,7 @@ where
     /// #     }
     /// # }
     /// ```
-    pub fn add_shape<S: Shape<D, R>>(&mut self, shape: S) {
+    pub fn add_shape<S: crate::shape::Shape<D, Message, R>>(&mut self, shape: S) {
         shape.render(&mut self.context);
     }
 }

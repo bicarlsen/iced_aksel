@@ -89,11 +89,6 @@ pub use crate::render::{LineArrows, LineExtensions};
 ///     }
 /// }
 /// ```
-pub trait Shape<D, Renderer = iced_renderer::Renderer>
-where
-    D: Float,
-    Renderer: crate::Renderer,
-{
-    /// Renders this shape into the plot context as a primitive.
-    fn render<Message>(self, ctx: &mut plot::Context<'_, D, Message, Renderer>);
+pub trait Shape<D: Float, Message, R: crate::Renderer = iced_renderer::Renderer> {
+    fn render(self, context: &mut plot::Context<'_, D, Message, R>);
 }
