@@ -1,3 +1,4 @@
+use crate::interaction::InteractionId;
 use crate::{
     Measure, Shape, Stroke,
     interaction::{HitGeometry, Interaction, InteractiveHitbox, Propagation},
@@ -27,6 +28,7 @@ pub struct Rectangle<D, Message = ()> {
     pub stroke: Option<Stroke<D>>,
 
     // NEW: Interaction fields!
+    pub id: Option<InteractionId>,
     pub on_hover: Option<Message>,
     pub on_click: Option<Message>,
     pub propagation: Propagation,
@@ -38,6 +40,7 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
             geometry,
             fill,
             stroke,
+            id,
             on_hover,
             on_click,
             propagation,
@@ -88,9 +91,11 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
             };
 
             ctx.interactions.add(InteractiveHitbox {
+                id,
                 aabb,
                 // For the MVP, we can just pass a dummy Rect to the geometry
                 // since we're only relying on the AABB for a simple rectangle.
+                // TODO: Stop relying on this dummy Rect
                 geometry: HitGeometry::Rect(PlotRect {
                     x: D::from(0).unwrap(),
                     y: D::from(0).unwrap(),
@@ -126,6 +131,7 @@ impl<D: Float, Message> Rectangle<D, Message> {
             geometry: Geometry::Corners { p1, p2 },
             fill: None,
             stroke: None,
+            id: None,
             on_hover: None,
             on_click: None,
             propagation: Propagation::Stop,
@@ -141,6 +147,7 @@ impl<D: Float, Message> Rectangle<D, Message> {
             },
             fill: None,
             stroke: None,
+            id: None,
             on_hover: None,
             on_click: None,
             propagation: Propagation::Stop,
@@ -158,6 +165,12 @@ impl<D: Float, Message> Rectangle<D, Message> {
     }
 
     // --- NEW BUILDERS ---
+
+    // --- NEW BUILDER METHOD ---
+    pub fn id(mut self, id: impl std::hash::Hash) -> Self {
+        self.id = Some(InteractionId::new(id));
+        self
+    }
 
     pub fn on_click(mut self, message: Message) -> Self {
         self.on_click = Some(message);

@@ -264,7 +264,7 @@ pub struct Chart<
     debug: bool,
 }
 
-impl<'a, AxisId, Domain, Message, Theme, Renderer>
+impl<'a, AxisId, Domain, Message: std::clone::Clone, Theme, Renderer>
     Chart<'a, AxisId, Domain, Message, Theme, Renderer>
 where
     Domain: Float,
@@ -635,12 +635,11 @@ where
         &self,
         memory: &mut Memory<AxisId, Domain, Message, Renderer>,
         layout: Layout,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
     ) {
         let Memory { action, .. } = memory;
 
-        // If total drag exceeded deadband, it was a drag, not a click.
         if let Some(total_drag_delta) = action.total_drag_delta()
             && total_drag_delta > self.drag_deadband
         {
@@ -650,16 +649,32 @@ where
         match action {
             Action::Idle => (), // Do nothing
             Action::DraggingPlot { origin, .. } => {
-                if let Some(handler) = &self.on_click {
-                    let plot_bounds = self.get_plot_layout(layout).bounds();
+                let mut handled = false;
 
-                    // Convert screen coordinates to normalized plot coordinates
-                    let normalized = Point::new(
-                        (origin.x - plot_bounds.x) / plot_bounds.width,
-                        1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
-                    );
+                // 1. Check Interaction Registry (Reverse iteration for Z-index)
+                for hitbox in memory.interactions.borrow().hitboxes.iter().rev() {
+                    if hitbox.aabb.contains(*origin) {
+                        if let Some(interaction) = &hitbox.on_click {
+                            shell.publish(interaction.message.clone());
 
-                    shell.publish(handler(normalized));
+                            if interaction.propagation == interaction::Propagation::Stop {
+                                handled = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Global background click
+                if !handled {
+                    if let Some(handler) = &self.on_click {
+                        let plot_bounds = self.get_plot_layout(layout).bounds();
+                        let normalized = Point::new(
+                            (origin.x - plot_bounds.x) / plot_bounds.width,
+                            1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
+                        );
+                        shell.publish(handler(normalized));
+                    }
                 }
             }
             Action::DraggingAxis { id, origin, .. } => {
@@ -690,15 +705,50 @@ where
         // 1. Mouse is over the plot area
         if cursor.position_in(plot_bounds).is_some() {
             match action {
-                Action::DraggingAxis { .. } => (), // Ignore if we are busy dragging an axis
+                Action::DraggingAxis { .. } => (), // Ignore if dragging axis
                 Action::Idle => {
-                    if let Some(handler) = &self.on_hover {
-                        let cursor_pos = cursor.position().unwrap();
-                        let normalized = Point::new(
-                            (cursor_pos.x - plot_bounds.x) / plot_bounds.width,
-                            1.0 - ((cursor_pos.y - plot_bounds.y) / plot_bounds.height),
-                        );
-                        shell.publish(handler(normalized));
+                    let cursor_p = cursor.position().unwrap();
+                    let mut handled = false;
+                    let mut current_hover_identity = None;
+                    let mut message_to_publish = None;
+
+                    // A. Check the Interaction Registry for hovers!
+                    let hitboxes = memory.interactions.borrow();
+                    for (i, hitbox) in hitboxes.hitboxes.iter().rev().enumerate() {
+                        if hitbox.aabb.contains(cursor_p) {
+                            if let Some(interaction) = &hitbox.on_hover {
+                                // Prefer the Explicit ID if it exists, otherwise fall back to the Array Index!
+                                current_hover_identity = hitbox
+                                    .id
+                                    .map(crate::interaction::HoverIdentity::Id)
+                                    .or(Some(crate::interaction::HoverIdentity::Index(i)));
+
+                                message_to_publish = Some(interaction.message.clone());
+
+                                if interaction.propagation == crate::interaction::Propagation::Stop
+                                {
+                                    handled = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // B. Stateful Deduplication: Only publish if the hovered identity CHANGED
+                    if memory.last_hovered_id != current_hover_identity {
+                        memory.last_hovered_id = current_hover_identity;
+
+                        if let Some(msg) = message_to_publish {
+                            shell.publish(msg);
+                        } else if !handled {
+                            if let Some(handler) = &self.on_hover {
+                                let normalized = Point::new(
+                                    (cursor_p.x - plot_bounds.x) / plot_bounds.width,
+                                    1.0 - ((cursor_p.y - plot_bounds.y) / plot_bounds.height),
+                                );
+                                shell.publish(handler(normalized));
+                            }
+                        }
                     }
                     return;
                 }
@@ -707,37 +757,28 @@ where
                     total_delta,
                     ..
                 } => {
-                    // Capture event so parent widgets don't steal the drag
                     shell.capture_event();
-
                     let current_pos = cursor.position().unwrap();
                     let delta_x = current_pos.x - last_position.x;
                     let delta_y = current_pos.y - last_position.y;
-
                     *total_delta += delta_x.hypot(delta_y);
                     *last_position = current_pos;
 
-                    // Only trigger drag if we exceeded the deadband
                     if *total_delta > self.drag_deadband
                         && let Some(handler) = &self.on_drag
                     {
-                        // Normalize the delta.
-                        // Note: X is inverted because dragging right usually implies panning left (moving the view).
-                        // Y is standard.
                         let normalized_delta = DragDelta {
                             x: -delta_x / plot_bounds.width,
                             y: delta_y / plot_bounds.height,
                         };
-
                         shell.publish(handler(normalized_delta));
                     }
-
                     return;
                 }
             }
         }
 
-        // 2. Handle active axis drag (continues even if cursor leaves axis bounds)
+        // 2. Handle active axis drag
         if let Action::DraggingAxis {
             id: dragging_id,
             last_position,
@@ -746,7 +787,6 @@ where
         } = action
         {
             shell.capture_event();
-
             if let Some((i, (id, axis))) = self
                 .state
                 .axes()
@@ -757,8 +797,8 @@ where
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
                 let cursor_pos = cursor.position().unwrap();
                 let screen_value = match axis.orientation() {
-                    Orientation::Horizontal => cursor_pos.x,
-                    Orientation::Vertical => cursor_pos.y,
+                    axis::Orientation::Horizontal => cursor_pos.x,
+                    axis::Orientation::Vertical => cursor_pos.y,
                 };
 
                 let delta = screen_value - *last_position;
@@ -773,7 +813,7 @@ where
                 }
             }
         }
-        // 3. Handle axis hover (only if idle)
+        // 3. Handle axis hover
         else if matches!(action, Action::Idle) {
             for (i, (id, axis)) in self.state.axes().iter().enumerate() {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
@@ -785,8 +825,8 @@ where
                 if let Some(handler) = &self.on_axis_hover {
                     let cursor_pos = cursor.position().unwrap();
                     let screen_value = match axis.orientation() {
-                        Orientation::Horizontal => cursor_pos.x,
-                        Orientation::Vertical => cursor_pos.y,
+                        axis::Orientation::Horizontal => cursor_pos.x,
+                        axis::Orientation::Vertical => cursor_pos.y,
                     };
                     let normalized = axis.screen_to_normalized(screen_value, &axis_bounds);
                     shell.publish(handler(id.clone(), normalized));
@@ -1086,7 +1126,6 @@ where
                 return;
             };
             cache.request_redraw();
-            memory.interactions.borrow_mut().clear();
         }
 
         // Only handle events if the cursor is near the chart
@@ -1209,6 +1248,7 @@ where
         self.draw_spine_corners(layout, &style, plot_bounds, renderer);
 
         let mut interactions = memory.interactions.borrow_mut();
+        interactions.clear(); // Clear the ghosts from the last frame!
 
         // Draw data layers if the cache needs redraw
         for layer in &self.layers {

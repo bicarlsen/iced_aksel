@@ -1,6 +1,26 @@
+use std::hash::{Hash, Hasher};
 // src/interaction.rs
 use aksel::{Float, PlotPoint, PlotRect};
 use iced_core::Rectangle;
+
+/// A unique identifier for an interactive shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct InteractionId(pub u64);
+
+impl InteractionId {
+    pub fn new<T: Hash>(id: T) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        id.hash(&mut hasher);
+        Self(hasher.finish())
+    }
+}
+
+/// Identifies what is currently being hovered, preferring explicit IDs over array indices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoverIdentity {
+    Id(InteractionId),
+    Index(usize),
+}
 
 /// Determines if an event should stop propagating or pass through to shapes behind it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -33,6 +53,7 @@ pub struct Interaction<Message> {
 /// A stored hitbox waiting to be tested against mouse events.
 #[derive(Debug)]
 pub struct InteractiveHitbox<D, Message> {
+    pub id: Option<InteractionId>,
     /// The broad-phase bounding box
     /// TODO: Consider using a plot-coordinate aware struct?
     pub aabb: Rectangle,
