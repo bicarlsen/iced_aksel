@@ -45,7 +45,7 @@ pub struct Triangle<D> {
 }
 
 impl<D: Float, R: crate::Renderer> Shape<D, R> for Triangle<D> {
-    fn render(self, ctx: &mut plot::Context<'_, D, R>) {
+    fn render<Message>(self, ctx: &mut plot::Context<'_, D, Message, R>) {
         let Self {
             geometry,
             fill,

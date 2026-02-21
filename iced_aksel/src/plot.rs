@@ -95,7 +95,7 @@ pub struct Context<'a, D: Float, Message, Renderer: crate::Renderer = iced_rende
     pub interactions: &'a mut InteractionRegistry<D, Message>,
 }
 
-impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer> {
+impl<'a, D: Float, Message, Renderer: crate::Renderer> Deref for Context<'a, D, Message, Renderer> {
     type Target = Transform<'a, D, f32, f32>;
 
     fn deref(&self) -> &Self::Target {

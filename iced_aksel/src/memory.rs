@@ -6,23 +6,26 @@ use crate::{
     render::{Backend, RenderCache},
 };
 
+use crate::interaction::InteractionRegistry;
 use iced_core::mouse;
 
 /// Internal chart memory
-pub struct Memory<AxisId, Renderer: crate::Renderer> {
+pub struct Memory<AxisId, D, Message, Renderer: crate::Renderer> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
     pub cache: Option<RefCell<RenderCache<Renderer>>>,
     pub last_signature: Option<CacheSignature>,
+    pub interactions: RefCell<InteractionRegistry<D, Message>>,
 }
 
-impl<AxisId, Renderer: crate::Renderer> Memory<AxisId, Renderer> {
+impl<AxisId, D, Message, Renderer: crate::Renderer> Memory<AxisId, D, Message, Renderer> {
     pub fn new() -> Self {
         Self {
             action: Action::default(),
             previous_click: None,
             cache: None,
             last_signature: None,
+            interactions: RefCell::new(InteractionRegistry::new()),
         }
     }
 

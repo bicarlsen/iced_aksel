@@ -12,16 +12,18 @@ use super::plot;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct Layer<'a, AxisId, Domain, Renderer, Theme> {
+pub struct Layer<'a, AxisId, Domain, Message, Renderer, Theme> {
     pub(crate) horizontal_axis_id: AxisId,
     pub(crate) vertical_axis_id: AxisId,
 
     #[derivative(Debug = "ignore")]
-    pub(crate) items: &'a dyn plot::PlotData<Domain, Renderer, Theme>,
+    pub(crate) items: &'a dyn plot::PlotData<Domain, Message, Renderer, Theme>,
 }
 
-impl<'a, AxisId: Hash + Eq, D: Float, R: crate::Renderer, Theme> Layer<'a, AxisId, D, R, Theme> {
-    pub const fn new<T: plot::PlotData<D, R, Theme>>(
+impl<'a, AxisId: std::hash::Hash + Eq, D: aksel::Float, Message, R: crate::Renderer, Theme>
+    Layer<'a, AxisId, D, Message, R, Theme>
+{
+    pub const fn new<T: plot::PlotData<D, Message, R, Theme>>(
         items: &'a T,
         horizontal_axis_id: AxisId,
         vertical_axis_id: AxisId,
@@ -112,17 +114,15 @@ impl<T> Cached<T> {
     }
 }
 
-impl<D: Float, Renderer: crate::Renderer, T: PlotData<D, Renderer>> PlotData<D, Renderer>
-    for Cached<T>
+impl<D: Float, Renderer: crate::Renderer, Message, T: PlotData<D, Message, Renderer>>
+    PlotData<D, Message, Renderer> for Cached<T>
 {
-    fn draw(&self, plot: &mut plot::Plot<D, Renderer>, theme: &iced_core::Theme) {
+    fn draw(&self, plot: &mut plot::Plot<D, Message, Renderer>, theme: &iced_core::Theme) {
         self.data.draw(plot, theme);
     }
-
     fn version(&self) -> Option<u64> {
         Some(self.version)
     }
-
     fn id(&self) -> Option<LayerId> {
         Some(self.uid)
     }

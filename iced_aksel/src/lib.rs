@@ -231,7 +231,7 @@ pub struct Chart<
     Renderer: crate::Renderer,
 {
     state: &'a State<AxisId, Domain, Theme>,
-    layers: Vec<Layer<'a, AxisId, Domain, Renderer, Theme>>,
+    layers: Vec<Layer<'a, AxisId, Domain, Message, Renderer, Theme>>,
     width: Length,
     height: Length,
     class: <Theme as Catalog>::Class<'a>,
@@ -346,7 +346,7 @@ where
     /// Multiple layers can be added to a single chart, potentially using different axes.
     ///
     /// ***OBS***: It's important to note that the axis ID's **must** be present in [`State`]
-    pub fn plot_data<T: plot::PlotData<Domain, Renderer, Theme>>(
+    pub fn plot_data<T: plot::PlotData<Domain, Message, Renderer, Theme>>(
         mut self,
         items: &'a T,
         x_axis_id: AxisId,
@@ -546,7 +546,7 @@ where
     /// Determines if the user clicked on the plot or an axis and updates the internal state.
     fn handle_mouse_press(
         &self,
-        memory: &mut Memory<AxisId, Renderer>,
+        memory: &mut Memory<AxisId, Domain, Message, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -633,7 +633,7 @@ where
     /// Triggers click events if the drag distance was within the deadband.
     fn handle_mouse_release(
         &self,
-        memory: &mut Memory<AxisId, Renderer>,
+        memory: &mut Memory<AxisId, Domain, Message, Renderer>,
         layout: Layout,
         _cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -679,7 +679,7 @@ where
     /// Manages hover states and processes drag deltas.
     fn handle_mouse_moved(
         &self,
-        memory: &mut Memory<AxisId, Renderer>,
+        memory: &mut Memory<AxisId, Domain, Message, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -933,17 +933,17 @@ impl<AxisId, Domain, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
     for Chart<'_, AxisId, Domain, Message, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
-    Domain: Float,
+    Domain: Float + 'static,
     Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
     Theme: Catalog,
-    Message: Clone,
+    Message: Clone + 'static,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Memory<AxisId, Renderer>>()
+        tree::Tag::of::<Memory<AxisId, Domain, Message, Renderer>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId, Renderer>::new())
+        tree::State::new(Memory::<AxisId, Domain, Message, Renderer>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -960,7 +960,7 @@ where
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
-        let memory: &mut Memory<AxisId, Renderer> = tree.state.downcast_mut();
+        let memory: &mut Memory<AxisId, Domain, Message, Renderer> = tree.state.downcast_mut();
         memory.make_sure_cache_is_initialized(renderer, self.quality);
 
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
@@ -1074,7 +1074,7 @@ where
                 .collect(),
         };
 
-        let memory: &mut Memory<AxisId, Renderer> = tree.state.downcast_mut();
+        let memory: &mut Memory<AxisId, Domain, Message, Renderer> = tree.state.downcast_mut();
 
         // Check if we need to redraw
         if force_redraw || memory.last_signature.as_ref() != Some(&current_signature) {
@@ -1086,6 +1086,7 @@ where
                 return;
             };
             cache.request_redraw();
+            memory.interactions.borrow_mut().clear();
         }
 
         // Only handle events if the cursor is near the chart
@@ -1178,7 +1179,9 @@ where
         };
 
         // Retrieve the Memory from the Tree directly
-        let memory = tree.state.downcast_ref::<Memory<AxisId, Renderer>>();
+        let memory = tree
+            .state
+            .downcast_ref::<Memory<AxisId, Domain, Message, Renderer>>();
 
         // Get cache from memory
         let Some(mut cache) = memory.get_cache_mut() else {
@@ -1205,6 +1208,8 @@ where
         // Connect axis spines
         self.draw_spine_corners(layout, &style, plot_bounds, renderer);
 
+        let mut interactions = memory.interactions.borrow_mut();
+
         // Draw data layers if the cache needs redraw
         for layer in &self.layers {
             // These axes are guaranteed to exist because of `verify_layer` check
@@ -1212,7 +1217,8 @@ where
             let y_axis = self.state.axis(&layer.vertical_axis_id);
             let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-            let mut plot: Plot<Domain, Renderer> = Plot::new(renderer, &mut cache, &transform);
+            let mut plot: Plot<Domain, Message, Renderer> =
+                Plot::new(renderer, &mut cache, &transform, &mut interactions);
 
             // User code draws shapes into the plot here
             layer.items.draw(&mut plot, theme);
@@ -1259,8 +1265,8 @@ impl<'a, AxisId, Domain, Message, Theme, Renderer>
     for Element<'a, Message, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
-    Domain: Float,
-    Message: Clone + 'a,
+    Domain: Float + 'static,
+    Message: Clone + 'a + 'static,
     Theme: Catalog + 'a,
     Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
 {
@@ -1300,8 +1306,8 @@ fn layout_vertical_axis<Domain: Float, Theme>(
 }
 
 #[inline(always)]
-fn verify_layer<'a, AxisId: Hash + Eq + Clone, Domain: Float, Renderer, Theme>(
-    layer: &Layer<'a, AxisId, Domain, Renderer, Theme>,
+fn verify_layer<'a, AxisId: Hash + Eq + Clone, Domain: Float, Message, Renderer, Theme>(
+    layer: &Layer<'a, AxisId, Domain, Message, Renderer, Theme>,
     state: &'a State<AxisId, Domain, Theme>,
     errors: &mut Vec<Error<AxisId>>,
 ) -> bool {
