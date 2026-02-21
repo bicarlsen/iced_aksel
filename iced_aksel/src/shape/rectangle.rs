@@ -31,6 +31,8 @@ pub struct Rectangle<D, Message = ()> {
     pub id: Option<InteractionId>,
     pub on_hover: Option<Message>,
     pub on_click: Option<Message>,
+    pub on_double_click: Option<Message>,
+    pub on_press: Option<Message>,
     pub propagation: Propagation,
 }
 
@@ -43,6 +45,8 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
             id,
             on_hover,
             on_click,
+            on_double_click,
+            on_press,
             propagation,
         } = self;
 
@@ -93,9 +97,6 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
             ctx.interactions.add(InteractiveHitbox {
                 id,
                 aabb,
-                // For the MVP, we can just pass a dummy Rect to the geometry
-                // since we're only relying on the AABB for a simple rectangle.
-                // TODO: Stop relying on this dummy Rect
                 geometry: HitGeometry::Rect(PlotRect {
                     x: D::from(0).unwrap(),
                     y: D::from(0).unwrap(),
@@ -107,6 +108,14 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
                     propagation,
                 }),
                 on_click: on_click.map(|msg| Interaction {
+                    message: msg,
+                    propagation,
+                }),
+                on_double_click: on_double_click.map(|msg| Interaction {
+                    message: msg,
+                    propagation,
+                }),
+                on_press: on_press.map(|msg| Interaction {
                     message: msg,
                     propagation,
                 }),
@@ -134,6 +143,8 @@ impl<D: Float, Message> Rectangle<D, Message> {
             id: None,
             on_hover: None,
             on_click: None,
+            on_double_click: None,
+            on_press: None,
             propagation: Propagation::Stop,
         }
     }
@@ -150,6 +161,8 @@ impl<D: Float, Message> Rectangle<D, Message> {
             id: None,
             on_hover: None,
             on_click: None,
+            on_double_click: None,
+            on_press: None,
             propagation: Propagation::Stop,
         }
     }
@@ -174,6 +187,16 @@ impl<D: Float, Message> Rectangle<D, Message> {
 
     pub fn on_click(mut self, message: Message) -> Self {
         self.on_click = Some(message);
+        self
+    }
+
+    pub fn on_double_click(mut self, message: Message) -> Self {
+        self.on_double_click = Some(message);
+        self
+    }
+
+    pub fn on_press(mut self, message: Message) -> Self {
+        self.on_press = Some(message);
         self
     }
 

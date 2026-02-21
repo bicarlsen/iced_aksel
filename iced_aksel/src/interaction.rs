@@ -62,6 +62,8 @@ pub struct InteractiveHitbox<D, Message> {
 
     pub on_hover: Option<Interaction<Message>>,
     pub on_click: Option<Interaction<Message>>,
+    pub on_double_click: Option<Interaction<Message>>,
+    pub on_press: Option<Interaction<Message>>,
 }
 
 /// The registry that collects hitboxes during the drawing phase.

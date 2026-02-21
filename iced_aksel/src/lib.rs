@@ -253,6 +253,8 @@ pub struct Chart<
     on_drag: Option<DragHandler<Message>>,
     on_hover: Option<HoverHandler<Message>>,
     on_scroll: Option<ScrollHandler<Message>>,
+    on_press: Option<ClickHandler<Message>>,
+    on_drag_end: Option<Box<dyn Fn() -> Message>>,
 
     // Axis Handlers
     on_axis_click: Option<AxisClickHandler<AxisId, Message>>,
@@ -298,6 +300,8 @@ where
             on_drag: None,
             on_hover: None,
             on_scroll: None,
+            on_press: None,
+            on_drag_end: None,
             on_axis_click: None,
             on_axis_double_click: None,
             on_axis_drag: None,
@@ -480,6 +484,21 @@ where
         self
     }
 
+    pub fn on_press<F>(mut self, f: F) -> Self
+    where
+        F: Fn(Point) -> Message + 'static,
+    {
+        self.on_press = Some(Box::new(f));
+        self
+    }
+    pub fn on_drag_end<F>(mut self, f: F) -> Self
+    where
+        F: Fn() -> Message + 'static,
+    {
+        self.on_drag_end = Some(Box::new(f));
+        self
+    }
+
     /// Sets a callback for scroll events (mouse wheel) on the main plot area.
     ///
     /// The callback receives the cursor position (normalized) and the scroll delta.
@@ -569,15 +588,41 @@ where
             };
 
             // Handle double-click immediately
-            if let Some((position, handler)) = cursor.position().zip(self.on_double_click.as_ref())
-            {
-                let new_click =
-                    mouse::Click::new(position, mouse::Button::Left, memory.previous_click);
+            // 1. Check if click is on the plot area
+            if cursor.position_over(plot_bounds).is_some() {
+                shell.capture_event();
+                let position = cursor.position().unwrap();
 
-                if new_click.kind() == mouse::click::Kind::Double {
-                    shell.publish(handler(position));
+                memory.action = Action::DraggingPlot {
+                    origin: position,
+                    last_position: position,
+                    total_delta: 0.0,
+                };
+
+                // Hit-test the press!
+                let mut handled = false;
+                for hitbox in memory.interactions.borrow().hitboxes.iter().rev() {
+                    if hitbox.aabb.contains(position) {
+                        if let Some(interaction) = &hitbox.on_press {
+                            shell.publish(interaction.message.clone());
+                            if interaction.propagation == crate::interaction::Propagation::Stop {
+                                handled = true;
+                                break;
+                            }
+                        }
+                    }
                 }
-                memory.previous_click = Some(new_click);
+
+                // Global press
+                if !handled {
+                    if let Some(handler) = &self.on_press {
+                        let normalized = Point::new(
+                            (position.x - plot_bounds.x) / plot_bounds.width,
+                            1.0 - ((position.y - plot_bounds.y) / plot_bounds.height),
+                        );
+                        shell.publish(handler(normalized));
+                    }
+                }
             }
             return;
         }
@@ -640,10 +685,15 @@ where
     ) {
         let Memory { action, .. } = memory;
 
-        if let Some(total_drag_delta) = action.total_drag_delta()
-            && total_drag_delta > self.drag_deadband
-        {
-            return;
+        // If total drag exceeded deadband, it was a drag, not a click.
+        if let Some(total_drag_delta) = action.total_drag_delta() {
+            if total_drag_delta > self.drag_deadband {
+                // Tell the app the drag finished!
+                if let Some(handler) = &self.on_drag_end {
+                    shell.publish(handler());
+                }
+                return;
+            }
         }
 
         match action {
