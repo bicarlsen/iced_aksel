@@ -6,14 +6,13 @@
 use std::ops::Deref;
 
 use crate::{
+    interaction::Interaction,
     layer::LayerId,
     render::{Primitive, RenderCache},
-    shape::Shape,
 };
 
-use crate::interaction::InteractionRegistry;
+use crate::interaction::InteractionsCache;
 use aksel::{Float, PlotRect, Transform};
-use iced_core::text::Renderer;
 use iced_core::{Font, Rectangle};
 
 /// Normalized drag delta for panning operations.
@@ -88,14 +87,13 @@ where
 /// Internal rendering context for shapes.
 ///
 /// Manages layer ordering and caching for efficient rendering.
-pub struct Context<'a, D: Float, Message, Renderer: crate::Renderer = iced_renderer::Renderer> {
+pub struct Context<'a, D: Float, Renderer: crate::Renderer = iced_renderer::Renderer> {
     transform: &'a Transform<'a, D, f32, f32>,
     renderer: &'a mut Renderer,
     cache: &'a mut RenderCache<Renderer>,
-    pub interactions: &'a mut InteractionRegistry<D, Message>,
 }
 
-impl<'a, D: Float, Message, Renderer: crate::Renderer> Deref for Context<'a, D, Message, Renderer> {
+impl<'a, D: Float, Renderer: crate::Renderer> Deref for Context<'a, D, Renderer> {
     type Target = Transform<'a, D, f32, f32>;
 
     fn deref(&self) -> &Self::Target {
@@ -103,7 +101,7 @@ impl<'a, D: Float, Message, Renderer: crate::Renderer> Deref for Context<'a, D, 
     }
 }
 
-impl<'a, D: Float, Message, Renderer: crate::Renderer> Context<'a, D, Message, Renderer> {
+impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
     /// Returns the default font of the underlying renderer
     #[inline(always)]
     pub fn default_font(&self) -> Font {
@@ -137,7 +135,8 @@ impl<'a, D: Float, Message, Renderer: crate::Renderer> Context<'a, D, Message, R
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
 pub struct Plot<'a, D: Float, Message, R: crate::Renderer = iced_renderer::Renderer> {
-    context: Context<'a, D, Message, R>,
+    context: Context<'a, D, R>,
+    interactions: &'a mut InteractionsCache<Message>,
 }
 
 impl<'a, D, Message, R> Plot<'a, D, Message, R>
@@ -152,15 +151,17 @@ where
         renderer: &'a mut R,
         cache: &'a mut RenderCache<R>,
         transform: &'a Transform<'a, D, f32, f32>,
-        interactions: &'a mut InteractionRegistry<D, Message>,
+        interactions: &'a mut InteractionsCache<Message>,
     ) -> Self {
         let context = Context {
             transform,
             renderer,
             cache,
-            interactions,
         };
-        Self { context }
+        Self {
+            context,
+            interactions,
+        }
     }
 
     /// Returns the current plot bounds in data space.
@@ -182,7 +183,7 @@ where
         self.context.transform.plot_bounds()
     }
 
-    /// Adds a shape to the plot.
+    /// Redners a shape to the plot.
     ///
     /// # Example
     ///
@@ -199,7 +200,13 @@ where
     /// #     }
     /// # }
     /// ```
-    pub fn add_shape<S: crate::shape::Shape<D, Message, R>>(&mut self, shape: S) {
+    pub fn render<S: crate::shape::Shape<D, R>>(&mut self, shape: S) {
         shape.render(&mut self.context);
+    }
+
+    pub fn add_interaction(&mut self, interaction: impl Into<Interaction<D, Message>>) {
+        let interaction = interaction.into();
+        self.interactions
+            .push(interaction.resolve(&self.context.transform));
     }
 }

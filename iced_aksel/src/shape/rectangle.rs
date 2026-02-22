@@ -1,10 +1,4 @@
-use crate::interaction::InteractionId;
-use crate::{
-    Measure, Shape, Stroke,
-    interaction::{HitGeometry, Interaction, InteractiveHitbox, Propagation},
-    plot,
-    render::Primitive,
-};
+use crate::{Measure, Shape, Stroke, interaction::Area, plot, render::Primitive};
 use aksel::{Float, PlotPoint, PlotRect};
 use iced_core::{Color, Point};
 
@@ -22,32 +16,18 @@ enum Geometry<D> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rectangle<D, Message = ()> {
+pub struct Rectangle<D> {
     geometry: Geometry<D>,
     pub fill: Option<Color>,
     pub stroke: Option<Stroke<D>>,
-
-    // NEW: Interaction fields!
-    pub id: Option<InteractionId>,
-    pub on_hover: Option<Message>,
-    pub on_click: Option<Message>,
-    pub on_double_click: Option<Message>,
-    pub on_press: Option<Message>,
-    pub propagation: Propagation,
 }
 
-impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rectangle<D, Message> {
-    fn render(self, ctx: &mut plot::Context<'_, D, Message, R>) {
+impl<D: Float, R: crate::Renderer> Shape<D, R> for Rectangle<D> {
+    fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             geometry,
             fill,
             stroke,
-            id,
-            on_hover,
-            on_click,
-            on_double_click,
-            on_press,
-            propagation,
         } = self;
 
         // 1. Calculate visual screen coordinates
@@ -84,44 +64,6 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
             }
         };
 
-        // 2. Register Interactions with the Broad Phase Registry!
-        if on_hover.is_some() || on_click.is_some() {
-            // Simply construct the screen rectangle
-            let aabb = iced_core::Rectangle {
-                x: screen_min.x,
-                y: screen_min.y,
-                width: screen_max.x - screen_min.x,
-                height: screen_max.y - screen_min.y,
-            };
-
-            ctx.interactions.add(InteractiveHitbox {
-                id,
-                aabb,
-                geometry: HitGeometry::Rect(PlotRect {
-                    x: D::from(0).unwrap(),
-                    y: D::from(0).unwrap(),
-                    width: D::from(0).unwrap(),
-                    height: D::from(0).unwrap(),
-                }),
-                on_hover: on_hover.map(|msg| Interaction {
-                    message: msg,
-                    propagation,
-                }),
-                on_click: on_click.map(|msg| Interaction {
-                    message: msg,
-                    propagation,
-                }),
-                on_double_click: on_double_click.map(|msg| Interaction {
-                    message: msg,
-                    propagation,
-                }),
-                on_press: on_press.map(|msg| Interaction {
-                    message: msg,
-                    propagation,
-                }),
-            });
-        }
-
         // 3. Dispatch visual rendering
         let stroke = stroke.map(|s| s.resolve(ctx));
 
@@ -134,18 +76,12 @@ impl<D: Float, Message: Clone, R: crate::Renderer> Shape<D, Message, R> for Rect
     }
 }
 
-impl<D: Float, Message> Rectangle<D, Message> {
+impl<D: Float> Rectangle<D> {
     pub const fn corners(p1: PlotPoint<D>, p2: PlotPoint<D>) -> Self {
         Self {
             geometry: Geometry::Corners { p1, p2 },
             fill: None,
             stroke: None,
-            id: None,
-            on_hover: None,
-            on_click: None,
-            on_double_click: None,
-            on_press: None,
-            propagation: Propagation::Stop,
         }
     }
 
@@ -158,12 +94,6 @@ impl<D: Float, Message> Rectangle<D, Message> {
             },
             fill: None,
             stroke: None,
-            id: None,
-            on_hover: None,
-            on_click: None,
-            on_double_click: None,
-            on_press: None,
-            propagation: Propagation::Stop,
         }
     }
 
@@ -177,36 +107,51 @@ impl<D: Float, Message> Rectangle<D, Message> {
         self
     }
 
-    // --- NEW BUILDERS ---
+    // pub fn id(mut self, id: impl std::hash::Hash) -> Self {
+    //     self.id = Some(InteractionId::new(id));
+    //     self
+    // }
+    //
+    // pub fn on_click(mut self, message: Message) -> Self {
+    //     self.on_click = Some(message);
+    //     self
+    // }
+    //
+    // pub fn on_double_click(mut self, message: Message) -> Self {
+    //     self.on_double_click = Some(message);
+    //     self
+    // }
+    //
+    // pub fn on_press(mut self, message: Message) -> Self {
+    //     self.on_press = Some(message);
+    //     self
+    // }
+    //
+    // pub fn on_hover(mut self, message: Message) -> Self {
+    //     self.on_hover = Some(message);
+    //     self
+    // }
+    //
+    // pub fn propagation(mut self, propagation: Propagation) -> Self {
+    //     self.propagation = propagation;
+    //     self
+    // }
+}
 
-    // --- NEW BUILDER METHOD ---
-    pub fn id(mut self, id: impl std::hash::Hash) -> Self {
-        self.id = Some(InteractionId::new(id));
-        self
-    }
-
-    pub fn on_click(mut self, message: Message) -> Self {
-        self.on_click = Some(message);
-        self
-    }
-
-    pub fn on_double_click(mut self, message: Message) -> Self {
-        self.on_double_click = Some(message);
-        self
-    }
-
-    pub fn on_press(mut self, message: Message) -> Self {
-        self.on_press = Some(message);
-        self
-    }
-
-    pub fn on_hover(mut self, message: Message) -> Self {
-        self.on_hover = Some(message);
-        self
-    }
-
-    pub fn propagation(mut self, propagation: Propagation) -> Self {
-        self.propagation = propagation;
-        self
+impl<D: Float> From<&Rectangle<D>> for Area<D> {
+    fn from(value: &Rectangle<D>) -> Self {
+        match value.geometry {
+            Geometry::Corners { p1, p2 } => Self::Rect {
+                x: p1.x,
+                y: p1.y,
+                width: Measure::Plot((p2.x - p1.x).abs()),
+                height: Measure::Plot((p2.y - p1.y).abs()),
+            },
+            Geometry::Centered {
+                center,
+                width,
+                height,
+            } => todo!(),
+        }
     }
 }

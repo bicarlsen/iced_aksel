@@ -1,0 +1,74 @@
+use aksel::{Float, PlotPoint, PlotRect, Transform, transform};
+use iced_core::{Point, Rectangle};
+
+use crate::Measure;
+
+trait IntoArea<D> {
+    fn into_area(self, transform: Transform<D, f32, f32>) -> Area<D>;
+}
+
+/// The exact geometric intent for the hit-test.
+#[derive(Debug, Clone)]
+pub enum Area<D> {
+    /// A simple data-space bounding box (e.g., filled Rectangle)
+    Rect {
+        x: D,
+        y: D,
+        width: Measure<D>,
+        height: Measure<D>,
+    },
+    /// A line segment with a pixel-based thickness for the stroke
+    LineSegment {
+        p1: PlotPoint<D>,
+        p2: PlotPoint<D>,
+        width: f32,
+    },
+}
+
+impl<D: Float> Area<D> {
+    pub(super) fn resolve(self, transform: &Transform<D, f32, f32>) -> ResolvedArea {
+        match self {
+            Self::Rect {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                let point = transform.chart_to_screen(&PlotPoint::new(x, y));
+                ResolvedArea::Rect(Rectangle {
+                    x: point.x,
+                    y: point.y,
+                    width: width.resolve_x(transform),
+                    height: height.resolve_y(transform),
+                })
+            }
+            _ => todo!("Resolve other areas"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ResolvedArea {
+    Rect(Rectangle),
+    LineSegment {
+        p1: Point,
+        p2: Point,
+        stroke_width_px: f32,
+    },
+}
+
+impl ResolvedArea {
+    pub fn contains(&self, point: Point) -> bool {
+        match self {
+            Self::Rect(rect) => rect.contains(point),
+            _ => todo!("Check if geometry contains point"),
+        }
+    }
+
+    pub fn bounding_box(&self) -> Rectangle {
+        match self {
+            Self::Rect(rect) => *rect,
+            _ => todo!("Create bounding boxes"),
+        }
+    }
+}

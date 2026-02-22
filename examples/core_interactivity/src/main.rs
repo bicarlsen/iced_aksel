@@ -5,8 +5,9 @@ use iced::{
     widget::{button, column, container, row, text},
 };
 use iced_aksel::{
-    Axis, Cached, Chart, PlotPoint, State,
+    Axis, Cached, Chart, Interaction, PlotPoint, State,
     axis::{self},
+    interaction::{Event, Id},
     plot::{DragDelta, Plot, PlotData},
     scale::Linear,
     shape::Rectangle,
@@ -301,17 +302,19 @@ impl PlotData<f64, Message> for DrawingData {
                 color = palette.success;
             }
 
-            plot.add_shape(
-                Rectangle::corners(
-                    PlotPoint::new(rect.x, rect.y),
-                    PlotPoint::new(rect.x + rect.w, rect.y + rect.h),
-                )
-                .id(rect.id)
-                .fill(color)
-                .on_hover(Message::ShapeHovered(rect.id))
-                .on_press(Message::ShapePressed(rect.id))
-                .on_click(Message::ShapeClicked(rect.id)),
+            let shape = Rectangle::corners(
+                PlotPoint::new(rect.x, rect.y),
+                PlotPoint::new(rect.x + rect.w, rect.y + rect.h),
+            )
+            .fill(color);
+
+            plot.add_interaction(
+                Interaction::new(Id::new(rect.id), &shape)
+                    .on_hover(Event::new(Message::ShapeHovered(rect.id)))
+                    .on_press(Event::new(Message::ShapePressed(rect.id)))
+                    .on_click(Event::new(Message::ShapeClicked(rect.id))),
             );
+            plot.render(shape);
         }
     }
 }

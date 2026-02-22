@@ -104,7 +104,7 @@ mod render;
 mod state;
 
 pub mod axis;
-mod interaction;
+pub mod interaction;
 pub mod plot;
 pub mod radii;
 pub mod shape;
@@ -112,6 +112,7 @@ pub mod stroke;
 pub mod style;
 
 pub use axis::Axis;
+pub use interaction::Interaction;
 pub use layer::{Cached, LayerId};
 pub use measure::Measure;
 pub use plot::{Plot, PlotData};
@@ -127,6 +128,8 @@ use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
 use layer::Layer;
 use memory::Memory;
 use plot::DragDelta;
+
+use crate::memory::CacheSignature;
 
 /// Default movement threshold (in pixels) to distinguish a click from a drag operation.
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
@@ -176,19 +179,6 @@ type AxisDoubleClickHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Messag
 type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
-
-#[derive(Debug, PartialEq)]
-struct LayerIdentifier {
-    id: Option<LayerId>,
-    version: Option<u64>,
-}
-
-#[derive(Debug, PartialEq)]
-struct CacheSignature {
-    state_version: u64,
-    layout_bounds: Rectangle,
-    layers: Vec<LayerIdentifier>,
-}
 
 /// The main charting widget that renders axes and plot data.
 ///
@@ -565,7 +555,7 @@ where
     /// Determines if the user clicked on the plot or an axis and updates the internal state.
     fn handle_mouse_press(
         &self,
-        memory: &mut Memory<AxisId, Domain, Message, Renderer>,
+        memory: &mut Memory<AxisId, Message, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -601,8 +591,8 @@ where
 
                 // Hit-test the press!
                 let mut handled = false;
-                for hitbox in memory.interactions.borrow().hitboxes.iter().rev() {
-                    if hitbox.aabb.contains(position) {
+                for hitbox in memory.interaction_cache.borrow().iter().rev() {
+                    if hitbox.area.contains(position) {
                         if let Some(interaction) = &hitbox.on_press {
                             shell.publish(interaction.message.clone());
                             if interaction.propagation == crate::interaction::Propagation::Stop {
@@ -678,7 +668,7 @@ where
     /// Triggers click events if the drag distance was within the deadband.
     fn handle_mouse_release(
         &self,
-        memory: &mut Memory<AxisId, Domain, Message, Renderer>,
+        memory: &mut Memory<AxisId, Message, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -699,32 +689,27 @@ where
         match action {
             Action::Idle => (), // Do nothing
             Action::DraggingPlot { origin, .. } => {
-                let mut handled = false;
-
                 // 1. Check Interaction Registry (Reverse iteration for Z-index)
-                for hitbox in memory.interactions.borrow().hitboxes.iter().rev() {
-                    if hitbox.aabb.contains(*origin) {
-                        if let Some(interaction) = &hitbox.on_click {
-                            shell.publish(interaction.message.clone());
+                for hitbox in memory.interaction_cache.borrow().iter().rev() {
+                    if hitbox.area.contains(*origin)
+                        && let Some(interaction) = &hitbox.on_click
+                    {
+                        shell.publish(interaction.message.clone());
 
-                            if interaction.propagation == interaction::Propagation::Stop {
-                                handled = true;
-                                break;
-                            }
+                        if interaction.propagation == interaction::Propagation::Stop {
+                            return;
                         }
                     }
                 }
 
                 // 2. Global background click
-                if !handled {
-                    if let Some(handler) = &self.on_click {
-                        let plot_bounds = self.get_plot_layout(layout).bounds();
-                        let normalized = Point::new(
-                            (origin.x - plot_bounds.x) / plot_bounds.width,
-                            1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
-                        );
-                        shell.publish(handler(normalized));
-                    }
+                if let Some(handler) = &self.on_click {
+                    let plot_bounds = self.get_plot_layout(layout).bounds();
+                    let normalized = Point::new(
+                        (origin.x - plot_bounds.x) / plot_bounds.width,
+                        1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
+                    );
+                    shell.publish(handler(normalized));
                 }
             }
             Action::DraggingAxis { id, origin, .. } => {
@@ -744,7 +729,7 @@ where
     /// Manages hover states and processes drag deltas.
     fn handle_mouse_moved(
         &self,
-        memory: &mut Memory<AxisId, Domain, Message, Renderer>,
+        memory: &mut Memory<AxisId, Message, Renderer>,
         layout: Layout,
         cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
@@ -763,16 +748,12 @@ where
                     let mut message_to_publish = None;
 
                     // A. Check the Interaction Registry for hovers!
-                    let hitboxes = memory.interactions.borrow();
-                    for (i, hitbox) in hitboxes.hitboxes.iter().rev().enumerate() {
-                        if hitbox.aabb.contains(cursor_p) {
+                    let hitboxes = memory.interaction_cache.borrow();
+                    for hitbox in hitboxes.iter().rev() {
+                        if hitbox.area.contains(cursor_p) {
                             if let Some(interaction) = &hitbox.on_hover {
                                 // Prefer the Explicit ID if it exists, otherwise fall back to the Array Index!
-                                current_hover_identity = hitbox
-                                    .id
-                                    .map(crate::interaction::HoverIdentity::Id)
-                                    .or(Some(crate::interaction::HoverIdentity::Index(i)));
-
+                                current_hover_identity = Some(hitbox.id);
                                 message_to_publish = Some(interaction.message.clone());
 
                                 if interaction.propagation == crate::interaction::Propagation::Stop
@@ -1029,11 +1010,11 @@ where
     Message: Clone + 'static,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Memory<AxisId, Domain, Message, Renderer>>()
+        tree::Tag::of::<Memory<AxisId, Message, Renderer>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId, Domain, Message, Renderer>::new())
+        tree::State::new(Memory::<AxisId, Message, Renderer>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -1050,7 +1031,7 @@ where
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
-        let memory: &mut Memory<AxisId, Domain, Message, Renderer> = tree.state.downcast_mut();
+        let memory: &mut Memory<AxisId, Message, Renderer> = tree.state.downcast_mut();
         memory.make_sure_cache_is_initialized(renderer, self.quality);
 
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
@@ -1142,41 +1123,10 @@ where
             return;
         }
 
-        // Construct current cache signature
-        let mut force_redraw = false;
-        let current_signature = CacheSignature {
-            state_version: self.state.version(),
-            layout_bounds: layout.bounds(),
-            layers: self
-                .layers
-                .iter()
-                .map(|l| {
-                    // Make sure we force a redraw if no version is provided for any layer
-                    if !force_redraw {
-                        force_redraw = l.items.version().is_none();
-                    }
-
-                    LayerIdentifier {
-                        id: l.items.id(),
-                        version: l.items.version(),
-                    }
-                })
-                .collect(),
-        };
-
-        let memory: &mut Memory<AxisId, Domain, Message, Renderer> = tree.state.downcast_mut();
-
-        // Check if we need to redraw
-        if force_redraw || memory.last_signature.as_ref() != Some(&current_signature) {
-            // Update signature
-            memory.last_signature = Some(current_signature);
-
-            // Get and clear the cache
-            let Some(mut cache) = memory.get_cache_mut() else {
-                return;
-            };
-            cache.request_redraw();
-        }
+        let signature = CacheSignature::new(self.state, &layout, &self.layers);
+        let memory: &mut Memory<AxisId, Message, Renderer> = tree.state.downcast_mut();
+        memory.update(signature);
+        memory.update_partitions(self.get_plot_layout(layout).bounds());
 
         // Only handle events if the cursor is near the chart
         let bounds = layout.bounds();
@@ -1270,7 +1220,7 @@ where
         // Retrieve the Memory from the Tree directly
         let memory = tree
             .state
-            .downcast_ref::<Memory<AxisId, Domain, Message, Renderer>>();
+            .downcast_ref::<Memory<AxisId, Message, Renderer>>();
 
         // Get cache from memory
         let Some(mut cache) = memory.get_cache_mut() else {
@@ -1297,21 +1247,22 @@ where
         // Connect axis spines
         self.draw_spine_corners(layout, &style, plot_bounds, renderer);
 
-        let mut interactions = memory.interactions.borrow_mut();
-        interactions.clear(); // Clear the ghosts from the last frame!
-
         // Draw data layers if the cache needs redraw
-        for layer in &self.layers {
-            // These axes are guaranteed to exist because of `verify_layer` check
-            let x_axis = self.state.axis(&layer.horizontal_axis_id);
-            let y_axis = self.state.axis(&layer.vertical_axis_id);
-            let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
+        if cache.needs_redraw() {
+            let mut interactions = memory.interaction_cache.borrow_mut();
 
-            let mut plot: Plot<Domain, Message, Renderer> =
-                Plot::new(renderer, &mut cache, &transform, &mut interactions);
+            for layer in &self.layers {
+                // These axes are guaranteed to exist because of `verify_layer` check
+                let x_axis = self.state.axis(&layer.horizontal_axis_id);
+                let y_axis = self.state.axis(&layer.vertical_axis_id);
+                let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-            // User code draws shapes into the plot here
-            layer.items.draw(&mut plot, theme);
+                let mut plot: Plot<Domain, Message, Renderer> =
+                    Plot::new(renderer, &mut cache, &transform, &mut interactions);
+
+                // User code draws shapes into the plot here
+                layer.items.draw(&mut plot, theme);
+            }
         }
 
         // Draw markers
@@ -1342,6 +1293,9 @@ where
                 style.axis.text_offset,
             );
         }
+
+        // DEBUG!
+        memory.draw_partitions(renderer, plot_bounds);
 
         // Draw the currently cached primitives
         cache.draw(renderer, &plot_bounds);
