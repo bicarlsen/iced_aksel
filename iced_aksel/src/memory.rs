@@ -2,8 +2,8 @@ use std::cell::{RefCell, RefMut};
 use std::hash::Hash;
 
 use aksel::Float;
-use iced_core::mouse;
 use iced_core::{Border, Color, Layout, Point, Rectangle, renderer::Quad};
+use iced_core::{keyboard, mouse};
 
 use crate::interaction::{Id, InteractionsCache};
 use crate::{
@@ -70,6 +70,7 @@ pub struct Memory<AxisId, Message, Renderer: crate::Renderer> {
     pub interaction_cache: RefCell<InteractionsCache<Message>>,
     pub last_hovered_id: Option<Id>,
     pub partition_grid: Vec<Rectangle>,
+    pub keyboard_modifiers: keyboard::Modifiers,
 }
 
 impl<AxisId, Message, Renderer: crate::Renderer> Memory<AxisId, Message, Renderer> {
@@ -82,7 +83,12 @@ impl<AxisId, Message, Renderer: crate::Renderer> Memory<AxisId, Message, Rendere
             last_signature: None,
             last_hovered_id: None,
             partition_grid: Vec::new(),
+            keyboard_modifiers: keyboard::Modifiers::NONE,
         }
+    }
+
+    pub fn update_modifiers(&mut self, modifiers: keyboard::Modifiers) {
+        self.keyboard_modifiers = modifiers;
     }
 
     pub fn update_click(&mut self, position: Point, button: mouse::Button) -> mouse::Click {

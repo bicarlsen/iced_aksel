@@ -82,7 +82,7 @@ use aksel::ScreenRect;
 use derive_more::{Display, Error};
 use iced_core::{
     Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Point, Rectangle, Shell, Size,
-    Widget,
+    Widget, keyboard,
     layout::{self, Limits, Node},
     mouse::{self, ScrollDelta},
     renderer::{Quad, Style},
@@ -96,6 +96,7 @@ use std::ops::Deref;
 pub use aksel::{Float, Transform, scale, scale::Scale, transform, transform::PlotPoint};
 
 mod action;
+mod event;
 mod layer;
 mod measure;
 mod memory;
@@ -124,6 +125,7 @@ pub use style::Catalog;
 
 use action::Action;
 use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
+use event::{PressEvent, ReleaseEvent};
 use layer::Layer;
 use memory::Memory;
 use plot::DragDelta;
@@ -164,21 +166,21 @@ pub enum Error<AxisId> {
     },
 }
 
-// Internal type aliases for event handlers
+// Internal type aliases for plot event handlers
 type ErrorHandler<AxisId, Message> = Box<dyn Fn(Error<AxisId>) -> Message>;
-type PressHandler<Message> = Box<dyn Fn(Point, mouse::click::Kind) -> Message>;
-type ReleaseHandler<Message> = Box<dyn Fn(Point, Option<mouse::click::Kind>) -> Message>;
 type DragHandler<Message> = Box<dyn Fn(DragDelta) -> Message>;
 type HoverHandler<Message> = Box<dyn Fn(Point) -> Message>;
 type ScrollHandler<Message> = Box<dyn Fn(Point, ScrollDelta) -> Message>;
+type PressHandler<Message> = Box<dyn Fn(PressEvent<Point>) -> Option<Message>>;
+type ReleaseHandler<Message> = Box<dyn Fn(ReleaseEvent<Point>) -> Option<Message>>;
 
 // Internal type aliases for axis event handlers
-type AxisPressHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, mouse::click::Kind) -> Message>;
-type AxisReleaseHandler<AxisId, Message> =
-    Box<dyn Fn(AxisId, f32, Option<mouse::click::Kind>) -> Message>;
 type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
+type AxisPressHandler<AxisId, Message> = Box<dyn Fn(AxisId, PressEvent<f32>) -> Option<Message>>;
+type AxisReleaseHandler<AxisId, Message> =
+    Box<dyn Fn(AxisId, ReleaseEvent<f32>) -> Option<Message>>;
 
 /// The main charting widget that renders axes and plot data.
 ///
@@ -454,7 +456,7 @@ where
     /// Sets a callback for mouse button presses on the main plot area.
     pub fn on_press<F>(mut self, f: F) -> Self
     where
-        F: Fn(Point, mouse::click::Kind) -> Message + 'static,
+        F: Fn(PressEvent<Point>) -> Option<Message> + 'static,
     {
         self.on_press = Some(Box::new(f));
         self
@@ -463,7 +465,7 @@ where
     /// Sets a callback for mouse button releases on the main plot area.
     pub fn on_release<F>(mut self, f: F) -> Self
     where
-        F: Fn(Point, Option<mouse::click::Kind>) -> Message + 'static,
+        F: Fn(ReleaseEvent<Point>) -> Option<Message> + 'static,
     {
         self.on_release = Some(Box::new(f));
         self
@@ -496,7 +498,7 @@ where
     /// along that axis.
     pub fn on_axis_press<F>(mut self, f: F) -> Self
     where
-        F: Fn(AxisId, f32, mouse::click::Kind) -> Message + 'static,
+        F: Fn(AxisId, PressEvent<f32>) -> Option<Message> + 'static,
     {
         self.on_axis_press = Some(Box::new(f));
         self
@@ -508,9 +510,9 @@ where
     /// along that axis.
     pub fn on_axis_release<F>(mut self, f: F) -> Self
     where
-        F: Fn(AxisId, f32, mouse::click::Kind) -> Message + 'static,
+        F: Fn(AxisId, ReleaseEvent<f32>) -> Option<Message> + 'static,
     {
-        self.on_axis_press = Some(Box::new(f));
+        self.on_axis_release = Some(Box::new(f));
         self
     }
 
@@ -551,6 +553,7 @@ where
         layout: Layout,
         shell: &mut Shell<'_, Message>,
         click: mouse::Click,
+        button: mouse::Button,
     ) {
         // If we press during any other action than idle, we must return
         if Action::Idle != memory.action {
@@ -575,7 +578,14 @@ where
                     (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
                     1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
                 );
-                shell.publish(handler(normalized, click.kind()));
+                if let Some(message) = handler(PressEvent::new(
+                    normalized,
+                    button,
+                    click.kind(),
+                    memory.keyboard_modifiers,
+                )) {
+                    shell.publish(message);
+                }
             }
 
             return;
@@ -604,12 +614,18 @@ where
             };
 
             // Handle double-click on axis
-            if let Some(handler) = self.on_axis_press.as_ref() {
-                shell.publish(handler(
+            if let Some(handler) = self.on_axis_press.as_ref()
+                && let Some(message) = handler(
                     id.clone(),
-                    axis.screen_to_normalized(origin, &axis_bounds),
-                    click.kind(),
-                ));
+                    PressEvent::new(
+                        axis.screen_to_normalized(origin, &axis_bounds),
+                        button,
+                        click.kind(),
+                        memory.keyboard_modifiers,
+                    ),
+                )
+            {
+                shell.publish(message);
             }
 
             // We can only interact with one axis at a time
@@ -625,6 +641,7 @@ where
         layout: Layout,
         shell: &mut Shell<'_, Message>,
         previous_click_kind: Option<mouse::click::Kind>,
+        button: mouse::Button,
     ) {
         let Memory { action, .. } = memory;
 
@@ -649,15 +666,32 @@ where
                         (origin.x - plot_bounds.x) / plot_bounds.width,
                         1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
                     );
-                    shell.publish(handler(normalized, previous_click_kind));
+                    if let Some(message) = handler(ReleaseEvent::new(
+                        normalized,
+                        button,
+                        previous_click_kind,
+                        memory.keyboard_modifiers,
+                    )) {
+                        shell.publish(message);
+                    }
                 }
             }
             Action::DraggingAxis { id, origin, .. } => {
                 if let Some((i, id, axis)) = self.state.axes().get_full(id) {
                     let axis_bounds = layout.children().nth(i).unwrap().bounds();
                     let normalized = axis.screen_to_normalized(*origin, &axis_bounds);
-                    if let Some(handler) = &self.on_axis_release {
-                        shell.publish(handler(id.clone(), normalized, previous_click_kind));
+                    if let Some(handler) = &self.on_axis_release
+                        && let Some(message) = handler(
+                            id.clone(),
+                            ReleaseEvent::new(
+                                normalized,
+                                button,
+                                previous_click_kind,
+                                memory.keyboard_modifiers,
+                            ),
+                        )
+                    {
+                        shell.publish(message);
                     }
                 }
             }
@@ -1071,11 +1105,11 @@ where
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(button)) => {
                 let new_click = memory.update_click(mouse_pos, *button);
-                self.handle_mouse_press(memory, layout, shell, new_click);
+                self.handle_mouse_press(memory, layout, shell, new_click, *button);
             }
-            Event::Mouse(mouse::Event::ButtonReleased(_)) => {
+            Event::Mouse(mouse::Event::ButtonReleased(button)) => {
                 let previous_click_kind = memory.previous_click.take().map(|c| c.kind());
-                self.handle_mouse_release(memory, layout, shell, previous_click_kind);
+                self.handle_mouse_release(memory, layout, shell, previous_click_kind, *button);
                 memory.action = Action::Idle;
             }
             Event::Mouse(mouse::Event::CursorMoved { position }) => {
@@ -1120,6 +1154,9 @@ where
                         }
                     }
                 }
+            }
+            Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                memory.update_modifiers(*modifiers)
             }
             // TODO: Add multi-touch support for zooming
             _ => {}

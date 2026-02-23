@@ -1,7 +1,7 @@
 //! iced_aksel Drawing Library Example (With Zoom & Z-Index Testing)
 use iced::{
     Element, Length, Point, Theme,
-    mouse::ScrollDelta,
+    mouse::{self, ScrollDelta},
     widget::{button, column, container, row, text},
 };
 use iced_aksel::{
@@ -245,8 +245,11 @@ impl DrawingApp {
         let chart = Chart::new(&self.chart_state)
             .plot_data(&self.data, Self::X, Self::Y)
             .on_hover(|_| Message::BackgroundHovered)
-            .on_press(|_point, _kind| Message::BackgroundPressed)
-            .on_release(|point, _kind| Message::BackgroundClicked(point))
+            .on_press(|_| Some(Message::BackgroundPressed))
+            .on_release(|event| {
+                (event.button == mouse::Button::Left)
+                    .then_some(Message::BackgroundClicked(event.position))
+            })
             .on_drag(Message::ChartDragged)
             .on_drag_end(|| Message::DragEnded)
             .on_scroll(Message::ChartScrolled);
