@@ -53,9 +53,6 @@ pub struct Interaction<D, Message> {
     pub id: Id,
     pub area: Area<D>,
     pub on_hover: Option<Event<Message>>,
-    pub on_click: Option<Event<Message>>,
-    pub on_double_click: Option<Event<Message>>,
-    pub on_press: Option<Event<Message>>,
 }
 
 impl<D: Float, Message> Interaction<D, Message> {
@@ -63,14 +60,7 @@ impl<D: Float, Message> Interaction<D, Message> {
         self,
         transform: &Transform<D, f32, f32>,
     ) -> ResolvedInteraction<Message> {
-        let Self {
-            id,
-            area,
-            on_hover,
-            on_click,
-            on_double_click,
-            on_press,
-        } = self;
+        let Self { id, area, on_hover } = self;
 
         let area = area.resolve(transform);
         let bounding_box = area.bounding_box();
@@ -80,9 +70,6 @@ impl<D: Float, Message> Interaction<D, Message> {
             area,
             bounding_box,
             on_hover,
-            on_click,
-            on_double_click,
-            on_press,
         }
     }
 
@@ -93,29 +80,11 @@ impl<D: Float, Message> Interaction<D, Message> {
             id,
             area,
             on_hover: None,
-            on_click: None,
-            on_double_click: None,
-            on_press: None,
         }
     }
 
     pub fn on_hover(mut self, event: Event<Message>) -> Self {
         self.on_hover = Some(event);
-        self
-    }
-
-    pub fn on_click(mut self, event: Event<Message>) -> Self {
-        self.on_click = Some(event);
-        self
-    }
-
-    pub fn on_double_click(mut self, event: Event<Message>) -> Self {
-        self.on_double_click = Some(event);
-        self
-    }
-
-    pub fn on_press(mut self, event: Event<Message>) -> Self {
-        self.on_press = Some(event);
         self
     }
 }
@@ -128,9 +97,6 @@ pub(crate) struct ResolvedInteraction<Message> {
     pub bounding_box: Rectangle,
 
     pub on_hover: Option<Event<Message>>,
-    pub on_click: Option<Event<Message>>,
-    pub on_double_click: Option<Event<Message>>,
-    pub on_press: Option<Event<Message>>,
 }
 
 /// The registry that collects hitboxes during the drawing phase.
@@ -138,7 +104,7 @@ pub(crate) struct ResolvedInteraction<Message> {
 pub(crate) struct InteractionsCache<Message>(Vec<ResolvedInteraction<Message>>);
 
 impl<Message> InteractionsCache<Message> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(Vec::new())
     }
 

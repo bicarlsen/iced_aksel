@@ -86,7 +86,6 @@ use iced_core::{
     layout::{self, Limits, Node},
     mouse::{self, ScrollDelta},
     renderer::{Quad, Style},
-    touch,
     widget::{Tree, tree},
 };
 use std::fmt::Debug;
@@ -167,15 +166,16 @@ pub enum Error<AxisId> {
 
 // Internal type aliases for event handlers
 type ErrorHandler<AxisId, Message> = Box<dyn Fn(Error<AxisId>) -> Message>;
-type ClickHandler<Message> = Box<dyn Fn(Point) -> Message>;
-type DoubleClickHandler<Message> = Box<dyn Fn(Point) -> Message>;
+type PressHandler<Message> = Box<dyn Fn(Point, mouse::click::Kind) -> Message>;
+type ReleaseHandler<Message> = Box<dyn Fn(Point, Option<mouse::click::Kind>) -> Message>;
 type DragHandler<Message> = Box<dyn Fn(DragDelta) -> Message>;
 type HoverHandler<Message> = Box<dyn Fn(Point) -> Message>;
 type ScrollHandler<Message> = Box<dyn Fn(Point, ScrollDelta) -> Message>;
 
 // Internal type aliases for axis event handlers
-type AxisClickHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
-type AxisDoubleClickHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
+type AxisPressHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, mouse::click::Kind) -> Message>;
+type AxisReleaseHandler<AxisId, Message> =
+    Box<dyn Fn(AxisId, f32, Option<mouse::click::Kind>) -> Message>;
 type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
 type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
@@ -238,17 +238,16 @@ pub struct Chart<
     on_error: Option<ErrorHandler<AxisId, Message>>,
 
     // Plot Area Handlers
-    on_click: Option<ClickHandler<Message>>,
-    on_double_click: Option<DoubleClickHandler<Message>>,
+    on_press: Option<PressHandler<Message>>,
+    on_release: Option<ReleaseHandler<Message>>,
     on_drag: Option<DragHandler<Message>>,
     on_hover: Option<HoverHandler<Message>>,
     on_scroll: Option<ScrollHandler<Message>>,
-    on_press: Option<ClickHandler<Message>>,
     on_drag_end: Option<Box<dyn Fn() -> Message>>,
 
     // Axis Handlers
-    on_axis_click: Option<AxisClickHandler<AxisId, Message>>,
-    on_axis_double_click: Option<AxisDoubleClickHandler<AxisId, Message>>,
+    on_axis_press: Option<AxisPressHandler<AxisId, Message>>,
+    on_axis_release: Option<AxisReleaseHandler<AxisId, Message>>,
     on_axis_drag: Option<AxisDragHandler<AxisId, Message>>,
     on_axis_hover: Option<AxisHoverHandler<AxisId, Message>>,
     on_axis_scroll: Option<AxisScrollHandler<AxisId, Message>>,
@@ -285,15 +284,14 @@ where
             // Handlers and fonts default to None
             axis_font: None,
             on_error: None,
-            on_click: None,
-            on_double_click: None,
             on_drag: None,
             on_hover: None,
             on_scroll: None,
             on_press: None,
+            on_release: None,
             on_drag_end: None,
-            on_axis_click: None,
-            on_axis_double_click: None,
+            on_axis_press: None,
+            on_axis_release: None,
             on_axis_drag: None,
             on_axis_hover: None,
             on_axis_scroll: None,
@@ -432,27 +430,6 @@ where
         self
     }
 
-    /// Sets a callback for clicks on the main plot area.
-    ///
-    /// The callback receives the position of the click as normalized coordinates (0.0-1.0)
-    /// relative to the plot bounds.
-    pub fn on_click<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point) -> Message + 'static,
-    {
-        self.on_click = Some(Box::new(f));
-        self
-    }
-
-    /// Sets a callback for double-clicks on the main plot area.
-    pub fn on_double_click<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point) -> Message + 'static,
-    {
-        self.on_double_click = Some(Box::new(f));
-        self
-    }
-
     /// Sets a callback for drag events on the main plot area.
     ///
     /// The callback receives a [`DragDelta`] containing the normalized distance dragged.
@@ -474,13 +451,25 @@ where
         self
     }
 
+    /// Sets a callback for mouse button presses on the main plot area.
     pub fn on_press<F>(mut self, f: F) -> Self
     where
-        F: Fn(Point) -> Message + 'static,
+        F: Fn(Point, mouse::click::Kind) -> Message + 'static,
     {
         self.on_press = Some(Box::new(f));
         self
     }
+
+    /// Sets a callback for mouse button releases on the main plot area.
+    pub fn on_release<F>(mut self, f: F) -> Self
+    where
+        F: Fn(Point, Option<mouse::click::Kind>) -> Message + 'static,
+    {
+        self.on_release = Some(Box::new(f));
+        self
+    }
+
+    /// Sets a callback for when mouse drag ends.
     pub fn on_drag_end<F>(mut self, f: F) -> Self
     where
         F: Fn() -> Message + 'static,
@@ -501,24 +490,27 @@ where
         self
     }
 
-    /// Sets a callback for click events on an axis.
+    /// Sets a callback for mouse-press events on an axis.
     ///
     /// The callback receives the ID of the clicked axis and the normalized position (0.0-1.0)
     /// along that axis.
-    pub fn on_axis_click<F>(mut self, f: F) -> Self
+    pub fn on_axis_press<F>(mut self, f: F) -> Self
     where
-        F: Fn(AxisId, f32) -> Message + 'static,
+        F: Fn(AxisId, f32, mouse::click::Kind) -> Message + 'static,
     {
-        self.on_axis_click = Some(Box::new(f));
+        self.on_axis_press = Some(Box::new(f));
         self
     }
 
-    /// Sets a callback for double-click events on an axis.
-    pub fn on_axis_double_click<F>(mut self, f: F) -> Self
+    /// Sets a callback for mouse-release events on an axis.
+    ///
+    /// The callback receives the ID of the clicked axis and the normalized position (0.0-1.0)
+    /// along that axis.
+    pub fn on_axis_release<F>(mut self, f: F) -> Self
     where
-        F: Fn(AxisId, f32) -> Message + 'static,
+        F: Fn(AxisId, f32, mouse::click::Kind) -> Message + 'static,
     {
-        self.on_axis_double_click = Some(Box::new(f));
+        self.on_axis_press = Some(Box::new(f));
         self
     }
 
@@ -552,86 +544,54 @@ where
     }
 
     /// Internal handler for mouse press events.
-    /// Determines if the user clicked on the plot or an axis and updates the internal state.
+    /// Determines if the user mouse-pressed on the plot or an axis and updates the internal state.
     fn handle_mouse_press(
         &self,
         memory: &mut Memory<AxisId, Message, Renderer>,
         layout: Layout,
-        cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
+        click: mouse::Click,
     ) {
-        // If we click during any other action than idle, we must return
+        // If we press during any other action than idle, we must return
         if Action::Idle != memory.action {
             return;
         }
 
         let plot_bounds = self.get_plot_layout(layout).bounds();
+        let mouse_pos = click.position();
 
-        // 1. Check if click is on the plot area
-        if cursor.position_over(plot_bounds).is_some() {
+        // Check if press is on the plot area
+        if plot_bounds.contains(mouse_pos) {
             shell.capture_event();
 
             memory.action = Action::DraggingPlot {
-                origin: cursor.position().unwrap(),
-                last_position: cursor.position().unwrap(),
+                origin: mouse_pos,
+                last_position: mouse_pos,
                 total_delta: 0.0,
             };
 
-            // Handle double-click immediately
-            // 1. Check if click is on the plot area
-            if cursor.position_over(plot_bounds).is_some() {
-                shell.capture_event();
-                let position = cursor.position().unwrap();
-
-                memory.action = Action::DraggingPlot {
-                    origin: position,
-                    last_position: position,
-                    total_delta: 0.0,
-                };
-
-                // Hit-test the press!
-                let mut handled = false;
-                for hitbox in memory.interaction_cache.borrow().iter().rev() {
-                    if hitbox.area.contains(position) {
-                        if let Some(interaction) = &hitbox.on_press {
-                            shell.publish(interaction.message.clone());
-                            if interaction.propagation == crate::interaction::Propagation::Stop {
-                                handled = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Global press
-                if !handled {
-                    if let Some(handler) = &self.on_press {
-                        let normalized = Point::new(
-                            (position.x - plot_bounds.x) / plot_bounds.width,
-                            1.0 - ((position.y - plot_bounds.y) / plot_bounds.height),
-                        );
-                        shell.publish(handler(normalized));
-                    }
-                }
+            if let Some(handler) = &self.on_press {
+                let normalized = Point::new(
+                    (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
+                    1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
+                );
+                shell.publish(handler(normalized, click.kind()));
             }
+
             return;
         }
 
-        // 2. Check if click is on any axis
+        // Check if press is on any axis
         for (i, (id, axis)) in self.state.axes().iter().enumerate() {
             let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
-            let Some(position) = cursor.position() else {
-                continue;
-            };
-
-            if !axis_bounds.contains(position) {
+            if !axis_bounds.contains(mouse_pos) {
                 continue;
             }
 
             let origin = match axis.orientation() {
-                Orientation::Horizontal => position.x,
-                Orientation::Vertical => position.y,
+                Orientation::Horizontal => mouse_pos.x,
+                Orientation::Vertical => mouse_pos.y,
             };
 
             shell.capture_event();
@@ -644,19 +604,12 @@ where
             };
 
             // Handle double-click on axis
-            if let Some((position, handler)) =
-                cursor.position().zip(self.on_axis_double_click.as_ref())
-            {
-                let new_click =
-                    mouse::Click::new(position, mouse::Button::Left, memory.previous_click);
-
-                if new_click.kind() == mouse::click::Kind::Double {
-                    shell.publish(handler(
-                        id.clone(),
-                        axis.screen_to_normalized(origin, &axis_bounds),
-                    ));
-                }
-                memory.previous_click = Some(new_click);
+            if let Some(handler) = self.on_axis_press.as_ref() {
+                shell.publish(handler(
+                    id.clone(),
+                    axis.screen_to_normalized(origin, &axis_bounds),
+                    click.kind(),
+                ));
             }
 
             // We can only interact with one axis at a time
@@ -670,55 +623,41 @@ where
         &self,
         memory: &mut Memory<AxisId, Message, Renderer>,
         layout: Layout,
-        cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
+        previous_click_kind: Option<mouse::click::Kind>,
     ) {
         let Memory { action, .. } = memory;
 
         // If total drag exceeded deadband, it was a drag, not a click.
-        if let Some(total_drag_delta) = action.total_drag_delta() {
-            if total_drag_delta > self.drag_deadband {
-                // Tell the app the drag finished!
-                if let Some(handler) = &self.on_drag_end {
-                    shell.publish(handler());
-                }
-                return;
+        if action
+            .total_drag_delta()
+            .is_some_and(|delta| delta > self.drag_deadband)
+        {
+            // Tell the app the drag finished!
+            if let Some(handler) = &self.on_drag_end {
+                shell.publish(handler());
             }
+            return;
         }
 
         match action {
             Action::Idle => (), // Do nothing
             Action::DraggingPlot { origin, .. } => {
-                // 1. Check Interaction Registry (Reverse iteration for Z-index)
-                for hitbox in memory.interaction_cache.borrow().iter().rev() {
-                    if hitbox.area.contains(*origin)
-                        && let Some(interaction) = &hitbox.on_click
-                    {
-                        shell.publish(interaction.message.clone());
-
-                        if interaction.propagation == interaction::Propagation::Stop {
-                            return;
-                        }
-                    }
-                }
-
-                // 2. Global background click
-                if let Some(handler) = &self.on_click {
+                if let Some(handler) = &self.on_release {
                     let plot_bounds = self.get_plot_layout(layout).bounds();
                     let normalized = Point::new(
                         (origin.x - plot_bounds.x) / plot_bounds.width,
                         1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
                     );
-                    shell.publish(handler(normalized));
+                    shell.publish(handler(normalized, previous_click_kind));
                 }
             }
             Action::DraggingAxis { id, origin, .. } => {
                 if let Some((i, id, axis)) = self.state.axes().get_full(id) {
                     let axis_bounds = layout.children().nth(i).unwrap().bounds();
                     let normalized = axis.screen_to_normalized(*origin, &axis_bounds);
-
-                    if let Some(handler) = &self.on_axis_click {
-                        shell.publish(handler(id.clone(), normalized));
+                    if let Some(handler) = &self.on_axis_release {
+                        shell.publish(handler(id.clone(), normalized, previous_click_kind));
                     }
                 }
             }
@@ -731,54 +670,50 @@ where
         &self,
         memory: &mut Memory<AxisId, Message, Renderer>,
         layout: Layout,
-        cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
+        mouse_pos: Point,
     ) {
         let Memory { action, .. } = memory;
         let plot_bounds = self.get_plot_layout(layout).bounds();
 
-        // 1. Mouse is over the plot area
-        if cursor.position_in(plot_bounds).is_some() {
+        // Mouse is over the plot area
+        if plot_bounds.contains(mouse_pos) {
             match action {
                 Action::DraggingAxis { .. } => (), // Ignore if dragging axis
                 Action::Idle => {
-                    let cursor_p = cursor.position().unwrap();
                     let mut handled = false;
                     let mut current_hover_identity = None;
                     let mut message_to_publish = None;
 
-                    // A. Check the Interaction Registry for hovers!
+                    // Check the Interaction Registry for hovers!
                     let hitboxes = memory.interaction_cache.borrow();
                     for hitbox in hitboxes.iter().rev() {
-                        if hitbox.area.contains(cursor_p) {
-                            if let Some(interaction) = &hitbox.on_hover {
-                                // Prefer the Explicit ID if it exists, otherwise fall back to the Array Index!
-                                current_hover_identity = Some(hitbox.id);
-                                message_to_publish = Some(interaction.message.clone());
+                        if hitbox.area.contains(mouse_pos)
+                            && let Some(interaction) = &hitbox.on_hover
+                        {
+                            // Prefer the Explicit ID if it exists, otherwise fall back to the Array Index!
+                            current_hover_identity = Some(hitbox.id);
+                            message_to_publish = Some(interaction.message.clone());
 
-                                if interaction.propagation == crate::interaction::Propagation::Stop
-                                {
-                                    handled = true;
-                                    break;
-                                }
+                            if interaction.propagation == crate::interaction::Propagation::Stop {
+                                handled = true;
+                                break;
                             }
                         }
                     }
 
-                    // B. Stateful Deduplication: Only publish if the hovered identity CHANGED
+                    // Stateful Deduplication: Only publish if the hovered identity CHANGED
                     if memory.last_hovered_id != current_hover_identity {
                         memory.last_hovered_id = current_hover_identity;
 
                         if let Some(msg) = message_to_publish {
                             shell.publish(msg);
-                        } else if !handled {
-                            if let Some(handler) = &self.on_hover {
-                                let normalized = Point::new(
-                                    (cursor_p.x - plot_bounds.x) / plot_bounds.width,
-                                    1.0 - ((cursor_p.y - plot_bounds.y) / plot_bounds.height),
-                                );
-                                shell.publish(handler(normalized));
-                            }
+                        } else if !handled && let Some(handler) = &self.on_hover {
+                            let normalized = Point::new(
+                                (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
+                                1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
+                            );
+                            shell.publish(handler(normalized));
                         }
                     }
                     return;
@@ -789,11 +724,11 @@ where
                     ..
                 } => {
                     shell.capture_event();
-                    let current_pos = cursor.position().unwrap();
-                    let delta_x = current_pos.x - last_position.x;
-                    let delta_y = current_pos.y - last_position.y;
+
+                    let delta_x = mouse_pos.x - last_position.x;
+                    let delta_y = mouse_pos.y - last_position.y;
                     *total_delta += delta_x.hypot(delta_y);
-                    *last_position = current_pos;
+                    *last_position = mouse_pos;
 
                     if *total_delta > self.drag_deadband
                         && let Some(handler) = &self.on_drag
@@ -809,7 +744,7 @@ where
             }
         }
 
-        // 2. Handle active axis drag
+        // Handle active axis drag
         if let Action::DraggingAxis {
             id: dragging_id,
             last_position,
@@ -826,10 +761,9 @@ where
                 .find(|(_, (axis_id, _))| *axis_id == dragging_id)
             {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
-                let cursor_pos = cursor.position().unwrap();
                 let screen_value = match axis.orientation() {
-                    axis::Orientation::Horizontal => cursor_pos.x,
-                    axis::Orientation::Vertical => cursor_pos.y,
+                    axis::Orientation::Horizontal => mouse_pos.x,
+                    axis::Orientation::Vertical => mouse_pos.y,
                 };
 
                 let delta = screen_value - *last_position;
@@ -844,20 +778,19 @@ where
                 }
             }
         }
-        // 3. Handle axis hover
+        // Handle axis hover
         else if matches!(action, Action::Idle) {
             for (i, (id, axis)) in self.state.axes().iter().enumerate() {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
-                if cursor.position_over(axis_bounds).is_none() {
+                if axis_bounds.contains(mouse_pos) {
                     continue;
                 }
 
                 if let Some(handler) = &self.on_axis_hover {
-                    let cursor_pos = cursor.position().unwrap();
                     let screen_value = match axis.orientation() {
-                        axis::Orientation::Horizontal => cursor_pos.x,
-                        axis::Orientation::Vertical => cursor_pos.y,
+                        axis::Orientation::Horizontal => mouse_pos.x,
+                        axis::Orientation::Vertical => mouse_pos.y,
                     };
                     let normalized = axis.screen_to_normalized(screen_value, &axis_bounds);
                     shell.publish(handler(id.clone(), normalized));
@@ -1130,25 +1063,23 @@ where
 
         // Only handle events if the cursor is near the chart
         let bounds = layout.bounds();
-        if cursor.position_over(bounds).is_none() {
+        let Some(mouse_pos) = cursor.position_over(bounds) else {
             return;
-        }
+        };
 
         // Handle input events
         match event {
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                self.handle_mouse_press(memory, layout, cursor, shell);
+            Event::Mouse(mouse::Event::ButtonPressed(button)) => {
+                let new_click = memory.update_click(mouse_pos, *button);
+                self.handle_mouse_press(memory, layout, shell, new_click);
             }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. })
-            | Event::Touch(touch::Event::FingerLost { .. }) => {
-                self.handle_mouse_release(memory, layout, cursor, shell);
+            Event::Mouse(mouse::Event::ButtonReleased(_)) => {
+                let previous_click_kind = memory.previous_click.take().map(|c| c.kind());
+                self.handle_mouse_release(memory, layout, shell, previous_click_kind);
                 memory.action = Action::Idle;
             }
-            Event::Mouse(mouse::Event::CursorMoved { .. })
-            | Event::Touch(touch::Event::FingerMoved { .. }) => {
-                self.handle_mouse_moved(memory, layout, cursor, shell);
+            Event::Mouse(mouse::Event::CursorMoved { position }) => {
+                self.handle_mouse_moved(memory, layout, shell, *position);
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 if let Some(cursor_pos) = cursor.position() {

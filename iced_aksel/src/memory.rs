@@ -2,16 +2,15 @@ use std::cell::{RefCell, RefMut};
 use std::hash::Hash;
 
 use aksel::Float;
-use iced_core::{Border, Color, Layout, Rectangle, renderer::Quad};
+use iced_core::mouse;
+use iced_core::{Border, Color, Layout, Point, Rectangle, renderer::Quad};
 
+use crate::interaction::{Id, InteractionsCache};
 use crate::{
     Action, LayerId, Quality, State,
     layer::Layer,
     render::{Backend, RenderCache},
 };
-
-use crate::interaction::{Id, InteractionsCache};
-use iced_core::mouse;
 
 #[derive(Debug, PartialEq)]
 struct LayerIdentifier {
@@ -84,6 +83,12 @@ impl<AxisId, Message, Renderer: crate::Renderer> Memory<AxisId, Message, Rendere
             last_hovered_id: None,
             partition_grid: Vec::new(),
         }
+    }
+
+    pub fn update_click(&mut self, position: Point, button: mouse::Button) -> mouse::Click {
+        let click = mouse::Click::new(position, button, self.previous_click);
+        self.previous_click = Some(click);
+        click
     }
 
     pub fn update_partitions(&mut self, viewport: Rectangle) {

@@ -46,8 +46,6 @@ enum Message {
 
     // Shape Interactions
     ShapeHovered(usize),
-    ShapePressed(usize),
-    ShapeClicked(usize),
 
     // Global Interactions
     BackgroundHovered,
@@ -137,14 +135,14 @@ impl DrawingApp {
 
             // --- Shape Interactions ---
             Message::ShapeHovered(id) => self.data.edit().hovered_id = Some(id),
-            Message::ShapeClicked(id) => self.data.edit().selected_id = Some(id),
-            Message::ShapePressed(id) => {
-                if self.mode == AppMode::Interact {
-                    let data = self.data.edit();
-                    data.selected_id = Some(id);
-                    data.dragging_id = Some(id);
-                }
-            }
+            // Message::ShapeClicked(id) => self.data.edit().selected_id = Some(id),
+            // Message::ShapePressed(id) => {
+            //     if self.mode == AppMode::Interact {
+            //         let data = self.data.edit();
+            //         data.selected_id = Some(id);
+            //         data.dragging_id = Some(id);
+            //     }
+            // }
 
             // --- Background Interactions ---
             Message::BackgroundHovered => self.data.edit().hovered_id = None,
@@ -172,6 +170,11 @@ impl DrawingApp {
                         id: self.next_id,
                     });
                     self.next_id += 1;
+                } else {
+                    let data = self.data.edit();
+                    if let Some(id) = data.hovered_id {
+                        data.selected_id = Some(id);
+                    }
                 }
             }
 
@@ -242,11 +245,11 @@ impl DrawingApp {
         let chart = Chart::new(&self.chart_state)
             .plot_data(&self.data, Self::X, Self::Y)
             .on_hover(|_| Message::BackgroundHovered)
-            .on_press(|_| Message::BackgroundPressed)
-            .on_click(Message::BackgroundClicked) // Detects full click to add shape
+            .on_press(|_point, _kind| Message::BackgroundPressed)
+            .on_release(|point, _kind| Message::BackgroundClicked(point))
             .on_drag(Message::ChartDragged)
             .on_drag_end(|| Message::DragEnded)
-            .on_scroll(Message::ChartScrolled); // <--- BIND SCROLL
+            .on_scroll(Message::ChartScrolled);
 
         // UI Header with Mode Buttons
         let mode_text = match self.mode {
@@ -310,9 +313,7 @@ impl PlotData<f64, Message> for DrawingData {
 
             plot.add_interaction(
                 Interaction::new(Id::new(rect.id), &shape)
-                    .on_hover(Event::new(Message::ShapeHovered(rect.id)))
-                    .on_press(Event::new(Message::ShapePressed(rect.id)))
-                    .on_click(Event::new(Message::ShapeClicked(rect.id))),
+                    .on_hover(Event::new(Message::ShapeHovered(rect.id))),
             );
             plot.render(shape);
         }

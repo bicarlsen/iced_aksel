@@ -34,10 +34,16 @@ impl<D: Float> Area<D> {
                 width,
                 height,
             } => {
-                let point = transform.chart_to_screen(&PlotPoint::new(x, y));
+                // For Plot measures, we need both corners to handle axis inversions (e.g., Y-axis flip)
+                let width_data = if let Measure::Plot(w) = width { w } else { D::zero() };
+                let height_data = if let Measure::Plot(h) = height { h } else { D::zero() };
+
+                let p1 = transform.chart_to_screen(&PlotPoint::new(x, y));
+                let p2 = transform.chart_to_screen(&PlotPoint::new(x + width_data, y + height_data));
+
                 ResolvedArea::Rect(Rectangle {
-                    x: point.x,
-                    y: point.y,
+                    x: p1.x.min(p2.x),
+                    y: p1.y.min(p2.y),
                     width: width.resolve_x(transform),
                     height: height.resolve_y(transform),
                 })
