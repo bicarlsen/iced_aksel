@@ -5,6 +5,7 @@ pub enum Action<AxisId> {
     #[default]
     Idle,
     DraggingPlot {
+        interaction_idx: Option<usize>,
         origin: Point,
         last_position: Point,
         total_delta: f32,
@@ -23,6 +24,7 @@ impl<AxisId> Action<AxisId> {
             Self::Idle => None,
             Self::DraggingPlot { total_delta, .. } => Some(*total_delta),
             Self::DraggingAxis { total_delta, .. } => Some(*total_delta),
+            Self::DraggingInteraction { total_delta, .. } => Some(*total_delta),
         }
     }
 }

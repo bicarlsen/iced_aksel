@@ -567,11 +567,37 @@ where
         if plot_bounds.contains(mouse_pos) {
             shell.capture_event();
 
+            let mut interaction_idx = None;
+            let mut stop_propagation = false;
+            let hitboxes = memory.interaction_cache.borrow();
+            for (idx, hitbox) in hitboxes.iter().enumerate().rev() {
+                if hitbox.area.contains(mouse_pos)
+                    && let Some(interaction) = &hitbox.on_press
+                {
+                    // TODO: Priority sorting - Which id should we actually save?
+                    // We just save the top-most Id for now
+                    if interaction_idx.is_none() {
+                        interaction_idx = Some(idx);
+                    }
+
+                    shell.publish(interaction.message.clone());
+                    if interaction.propagation == interaction::Propagation::Stop {
+                        stop_propagation = true;
+                        break;
+                    }
+                }
+            }
+
             memory.action = Action::DraggingPlot {
+                interaction_idx,
                 origin: mouse_pos,
                 last_position: mouse_pos,
                 total_delta: 0.0,
             };
+
+            if stop_propagation {
+                return;
+            }
 
             if let Some(handler) = &self.on_press {
                 let normalized = Point::new(
@@ -659,7 +685,7 @@ where
 
         match action {
             Action::Idle => (), // Do nothing
-            Action::DraggingPlot { origin, .. } => {
+            Action::DraggingPlot { origin, .. } | Action::DraggingInteraction { origin, .. } => {
                 if let Some(handler) = &self.on_release {
                     let plot_bounds = self.get_plot_layout(layout).bounds();
                     let normalized = Point::new(
@@ -755,6 +781,7 @@ where
                 Action::DraggingPlot {
                     last_position,
                     total_delta,
+                    interaction_idx,
                     ..
                 } => {
                     shell.capture_event();
@@ -764,15 +791,26 @@ where
                     *total_delta += delta_x.hypot(delta_y);
                     *last_position = mouse_pos;
 
-                    if *total_delta > self.drag_deadband
-                        && let Some(handler) = &self.on_drag
-                    {
-                        let normalized_delta = DragDelta {
-                            x: -delta_x / plot_bounds.width,
-                            y: delta_y / plot_bounds.height,
-                        };
+                    if *total_delta < self.drag_deadband {
+                        return;
+                    };
+
+                    let normalized_delta = DragDelta {
+                        x: -delta_x / plot_bounds.width,
+                        y: delta_y / plot_bounds.height,
+                    };
+
+                    // Interaction present - Use that instead
+                    if let Some((id, handler)) = interaction {
+                        shell.publish(handler(*id, normalized_delta));
+                        // Drag events can never propagate, so we return here
+                        return;
+                    }
+
+                    if let Some(handler) = &self.on_drag {
                         shell.publish(handler(normalized_delta));
                     }
+
                     return;
                 }
             }

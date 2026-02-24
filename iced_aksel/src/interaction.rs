@@ -30,15 +30,15 @@ pub enum Propagation {
 
 /// An interaction configuration attached to a shape.
 #[derive(Debug, Clone)]
-pub struct Event<Message> {
-    pub message: Message,
+pub struct EventHandler<F> {
+    pub handler: F,
     pub propagation: Propagation,
 }
 
-impl<Message> Event<Message> {
-    pub const fn new(message: Message) -> Self {
+impl<F> EventHandler<F> {
+    pub const fn new(handler: F) -> Self {
         Self {
-            message,
+            handler,
             propagation: Propagation::PassThrough,
         }
     }
@@ -49,10 +49,23 @@ impl<Message> Event<Message> {
     }
 }
 
+trait IntoEventHandler<F> {
+    fn into_event_handler(self) -> EventHandler<F>;
+}
+
+impl<F, T: Into<F>> IntoEventHandler<F> for T {
+    fn into_event_handler(self) -> EventHandler<F> {
+        EventHandler::new(self.into())
+    }
+}
+
 pub struct Interaction<D, Message> {
     pub id: Id,
     pub area: Area<D>,
-    pub on_hover: Option<Event<Message>>,
+    pub on_hover: Option<EventHandler<Message>>,
+    pub on_drag: Option<EventHandler<Message>>,
+    pub on_press: Option<EventHandler<Message>>,
+    pub on_release: Option<EventHandler<Message>>,
 }
 
 impl<D: Float, Message> Interaction<D, Message> {
@@ -60,7 +73,14 @@ impl<D: Float, Message> Interaction<D, Message> {
         self,
         transform: &Transform<D, f32, f32>,
     ) -> ResolvedInteraction<Message> {
-        let Self { id, area, on_hover } = self;
+        let Self {
+            id,
+            area,
+            on_hover,
+            on_drag,
+            on_press,
+            on_release,
+        } = self;
 
         let area = area.resolve(transform);
         let bounding_box = area.bounding_box();
@@ -70,6 +90,9 @@ impl<D: Float, Message> Interaction<D, Message> {
             area,
             bounding_box,
             on_hover,
+            on_drag,
+            on_press,
+            on_release,
         }
     }
 
@@ -80,11 +103,14 @@ impl<D: Float, Message> Interaction<D, Message> {
             id,
             area,
             on_hover: None,
+            on_drag: None,
+            on_press: None,
+            on_release: None,
         }
     }
 
-    pub fn on_hover(mut self, event: Event<Message>) -> Self {
-        self.on_hover = Some(event);
+    pub fn on_hover(mut self, event: impl IntoEventHandler<Message>) -> Self {
+        self.on_hover = Some(event.into());
         self
     }
 }
@@ -96,7 +122,10 @@ pub(crate) struct ResolvedInteraction<Message> {
     pub area: ResolvedArea,
     pub bounding_box: Rectangle,
 
-    pub on_hover: Option<Event<Message>>,
+    pub on_hover: Option<EventHandler<Message>>,
+    pub on_drag: Option<EventHandler<Message>>,
+    pub on_press: Option<EventHandler<Message>>,
+    pub on_release: Option<EventHandler<Message>>,
 }
 
 /// The registry that collects hitboxes during the drawing phase.
