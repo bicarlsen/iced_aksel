@@ -1,11 +1,7 @@
-use aksel::{Float, PlotPoint, PlotRect, Transform, transform};
+use aksel::{Float, PlotPoint, Transform};
 use iced_core::{Point, Rectangle};
 
 use crate::Measure;
-
-trait IntoArea<D> {
-    fn into_area(self, transform: Transform<D, f32, f32>) -> Area<D>;
-}
 
 /// The exact geometric intent for the hit-test.
 #[derive(Debug, Clone)]
@@ -35,11 +31,20 @@ impl<D: Float> Area<D> {
                 height,
             } => {
                 // For Plot measures, we need both corners to handle axis inversions (e.g., Y-axis flip)
-                let width_data = if let Measure::Plot(w) = width { w } else { D::zero() };
-                let height_data = if let Measure::Plot(h) = height { h } else { D::zero() };
+                let width_data = if let Measure::Plot(w) = width {
+                    w
+                } else {
+                    D::zero()
+                };
+                let height_data = if let Measure::Plot(h) = height {
+                    h
+                } else {
+                    D::zero()
+                };
 
                 let p1 = transform.chart_to_screen(&PlotPoint::new(x, y));
-                let p2 = transform.chart_to_screen(&PlotPoint::new(x + width_data, y + height_data));
+                let p2 =
+                    transform.chart_to_screen(&PlotPoint::new(x + width_data, y + height_data));
 
                 ResolvedArea::Rect(Rectangle {
                     x: p1.x.min(p2.x),

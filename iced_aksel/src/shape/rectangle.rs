@@ -106,36 +106,6 @@ impl<D: Float> Rectangle<D> {
         self.stroke = Some(stroke);
         self
     }
-
-    // pub fn id(mut self, id: impl std::hash::Hash) -> Self {
-    //     self.id = Some(InteractionId::new(id));
-    //     self
-    // }
-    //
-    // pub fn on_click(mut self, message: Message) -> Self {
-    //     self.on_click = Some(message);
-    //     self
-    // }
-    //
-    // pub fn on_double_click(mut self, message: Message) -> Self {
-    //     self.on_double_click = Some(message);
-    //     self
-    // }
-    //
-    // pub fn on_press(mut self, message: Message) -> Self {
-    //     self.on_press = Some(message);
-    //     self
-    // }
-    //
-    // pub fn on_hover(mut self, message: Message) -> Self {
-    //     self.on_hover = Some(message);
-    //     self
-    // }
-    //
-    // pub fn propagation(mut self, propagation: Propagation) -> Self {
-    //     self.propagation = propagation;
-    //     self
-    // }
 }
 
 impl<D: Float> From<&Rectangle<D>> for Area<D> {

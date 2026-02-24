@@ -1,11 +1,12 @@
+use crate::interaction;
 use iced_core::Point;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Action<AxisId> {
     #[default]
     Idle,
     DraggingPlot {
-        interaction_idx: Option<usize>,
+        interaction_id: Option<interaction::Id>,
         origin: Point,
         last_position: Point,
         total_delta: f32,
@@ -24,7 +25,6 @@ impl<AxisId> Action<AxisId> {
             Self::Idle => None,
             Self::DraggingPlot { total_delta, .. } => Some(*total_delta),
             Self::DraggingAxis { total_delta, .. } => Some(*total_delta),
-            Self::DraggingInteraction { total_delta, .. } => Some(*total_delta),
         }
     }
 }

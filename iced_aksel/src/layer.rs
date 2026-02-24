@@ -1,7 +1,4 @@
-use std::{
-    hash::Hash,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use aksel::Float;
 use derivative::Derivative;
@@ -20,7 +17,7 @@ pub struct Layer<'a, AxisId, Domain, Message, Renderer, Theme> {
     pub(crate) items: &'a dyn plot::PlotData<Domain, Message, Renderer, Theme>,
 }
 
-impl<'a, AxisId: std::hash::Hash + Eq, D: aksel::Float, Message, R: crate::Renderer, Theme>
+impl<'a, AxisId: std::hash::Hash + Eq, D: aksel::Float, Message: Clone, R: crate::Renderer, Theme>
     Layer<'a, AxisId, D, Message, R, Theme>
 {
     pub const fn new<T: plot::PlotData<D, Message, R, Theme>>(
@@ -114,7 +111,7 @@ impl<T> Cached<T> {
     }
 }
 
-impl<D: Float, Renderer: crate::Renderer, Message, T: PlotData<D, Message, Renderer>>
+impl<D: Float, Renderer: crate::Renderer, Message: Clone, T: PlotData<D, Message, Renderer>>
     PlotData<D, Message, Renderer> for Cached<T>
 {
     fn draw(&self, plot: &mut plot::Plot<D, Message, Renderer>, theme: &iced_core::Theme) {

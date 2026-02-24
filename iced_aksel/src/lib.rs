@@ -112,6 +112,7 @@ pub mod stroke;
 pub mod style;
 
 pub use axis::Axis;
+pub use event::{PressEvent, ReleaseEvent};
 pub use interaction::Interaction;
 pub use layer::{Cached, LayerId};
 pub use measure::Measure;
@@ -125,7 +126,6 @@ pub use style::Catalog;
 
 use action::Action;
 use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
-use event::{PressEvent, ReleaseEvent};
 use layer::Layer;
 use memory::Memory;
 use plot::DragDelta;
@@ -567,35 +567,47 @@ where
         if plot_bounds.contains(mouse_pos) {
             shell.capture_event();
 
-            let mut interaction_idx = None;
-            let mut stop_propagation = false;
-            let hitboxes = memory.interaction_cache.borrow();
-            for (idx, hitbox) in hitboxes.iter().enumerate().rev() {
-                if hitbox.area.contains(mouse_pos)
-                    && let Some(interaction) = &hitbox.on_press
+            let mut interaction_id = None;
+            let interactions = memory.interaction_cache.borrow();
+            for (id, interaction) in interactions.iter().rev() {
+                if interaction.area.contains(mouse_pos)
+                    && let Some(handler) = &interaction.on_press
                 {
                     // TODO: Priority sorting - Which id should we actually save?
                     // We just save the top-most Id for now
-                    if interaction_idx.is_none() {
-                        interaction_idx = Some(idx);
+                    if interaction_id.is_none() && interaction.on_drag.is_some() {
+                        interaction_id = Some(id.clone());
                     }
 
-                    shell.publish(interaction.message.clone());
-                    if interaction.propagation == interaction::Propagation::Stop {
-                        stop_propagation = true;
-                        break;
-                    }
+                    let normalized = Point::new(
+                        (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
+                        1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
+                    );
+                    let event = PressEvent::new(
+                        normalized,
+                        button,
+                        click.kind(),
+                        memory.keyboard_modifiers,
+                    );
+
+                    shell.publish(handler.run(|f| f(id.clone(), event)));
+
+                    // You can't press more than thing at a time
+                    break;
                 }
             }
 
+            let handled = interaction_id.is_some();
+
             memory.action = Action::DraggingPlot {
-                interaction_idx,
+                interaction_id,
                 origin: mouse_pos,
                 last_position: mouse_pos,
                 total_delta: 0.0,
             };
 
-            if stop_propagation {
+            // Make sure we don't test plot, if a shape was pressed already
+            if handled {
                 return;
             }
 
@@ -604,12 +616,9 @@ where
                     (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
                     1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
                 );
-                if let Some(message) = handler(PressEvent::new(
-                    normalized,
-                    button,
-                    click.kind(),
-                    memory.keyboard_modifiers,
-                )) {
+                let event =
+                    PressEvent::new(normalized, button, click.kind(), memory.keyboard_modifiers);
+                if let Some(message) = handler(event) {
                     shell.publish(message);
                 }
             }
@@ -685,7 +694,7 @@ where
 
         match action {
             Action::Idle => (), // Do nothing
-            Action::DraggingPlot { origin, .. } | Action::DraggingInteraction { origin, .. } => {
+            Action::DraggingPlot { origin, .. } => {
                 if let Some(handler) = &self.on_release {
                     let plot_bounds = self.get_plot_layout(layout).bounds();
                     let normalized = Point::new(
@@ -741,29 +750,26 @@ where
             match action {
                 Action::DraggingAxis { .. } => (), // Ignore if dragging axis
                 Action::Idle => {
-                    let mut handled = false;
                     let mut current_hover_identity = None;
                     let mut message_to_publish = None;
 
                     // Check the Interaction Registry for hovers!
-                    let hitboxes = memory.interaction_cache.borrow();
-                    for hitbox in hitboxes.iter().rev() {
-                        if hitbox.area.contains(mouse_pos)
-                            && let Some(interaction) = &hitbox.on_hover
+                    let interactions = memory.interaction_cache.borrow();
+                    for (id, interaction) in interactions.iter().rev() {
+                        if interaction.area.contains(mouse_pos)
+                            && let Some(handler) = &interaction.on_hover
+                            // NOTE: REMOVE THIS WHEN WE WANT TO SUPPORT MULTIPLE HOVER EVENTS
+                            && current_hover_identity.is_none()
                         {
                             // Prefer the Explicit ID if it exists, otherwise fall back to the Array Index!
-                            current_hover_identity = Some(hitbox.id);
-                            message_to_publish = Some(interaction.message.clone());
-
-                            if interaction.propagation == crate::interaction::Propagation::Stop {
-                                handled = true;
-                                break;
-                            }
+                            current_hover_identity = Some(id.clone());
+                            message_to_publish = Some(handler.run(|f| f(id.clone())));
                         }
                     }
 
                     // Stateful Deduplication: Only publish if the hovered identity CHANGED
                     if memory.last_hovered_id != current_hover_identity {
+                        let handled = current_hover_identity.is_some();
                         memory.last_hovered_id = current_hover_identity;
 
                         if let Some(msg) = message_to_publish {
@@ -781,7 +787,7 @@ where
                 Action::DraggingPlot {
                     last_position,
                     total_delta,
-                    interaction_idx,
+                    interaction_id,
                     ..
                 } => {
                     shell.capture_event();
@@ -801,8 +807,19 @@ where
                     };
 
                     // Interaction present - Use that instead
-                    if let Some((id, handler)) = interaction {
-                        shell.publish(handler(*id, normalized_delta));
+
+                    if let Some(id) = interaction_id {
+                        let interactions = memory.interaction_cache.borrow();
+                        let Some(interaction) = interactions.get(id) else {
+                            return;
+                        };
+
+                        let Some(handler) = interaction.on_drag.as_ref() else {
+                            return;
+                        };
+
+                        shell.publish(handler.run(|f| f(id.clone(), normalized_delta)));
+
                         // Drag events can never propagate, so we return here
                         return;
                     }

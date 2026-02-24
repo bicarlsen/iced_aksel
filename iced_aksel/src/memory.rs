@@ -30,7 +30,7 @@ impl CacheSignature {
     pub fn new<
         AxisId: Hash + Eq + Clone,
         Domain: Float,
-        Message,
+        Message: Clone,
         Renderer: crate::Renderer,
         Theme,
     >(
@@ -62,7 +62,7 @@ impl CacheSignature {
 }
 
 /// Internal chart memory
-pub struct Memory<AxisId, Message, Renderer: crate::Renderer> {
+pub struct Memory<AxisId, Message: Clone, Renderer: crate::Renderer> {
     pub action: Action<AxisId>,
     pub previous_click: Option<mouse::Click>,
     pub cache: Option<RefCell<RenderCache<Renderer>>>,
@@ -73,7 +73,7 @@ pub struct Memory<AxisId, Message, Renderer: crate::Renderer> {
     pub keyboard_modifiers: keyboard::Modifiers,
 }
 
-impl<AxisId, Message, Renderer: crate::Renderer> Memory<AxisId, Message, Renderer> {
+impl<AxisId, Message: Clone, Renderer: crate::Renderer> Memory<AxisId, Message, Renderer> {
     pub fn new() -> Self {
         Self {
             action: Action::default(),

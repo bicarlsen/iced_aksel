@@ -27,6 +27,7 @@ lyon.workspace = true
 earcutr.workspace = true
 lru.workspace = true
 smallvec.workspace = true
+rapidhash.workspace = true
 
 [dev-dependencies]
 rand.workspace = true

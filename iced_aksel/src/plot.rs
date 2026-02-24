@@ -63,6 +63,7 @@ pub struct DragDelta {
 /// ```
 pub trait PlotData<D, Message, R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
+    Message: Clone,
     D: Float,
     R: crate::Renderer,
 {
@@ -134,13 +135,14 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
 ///
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
-pub struct Plot<'a, D: Float, Message, R: crate::Renderer = iced_renderer::Renderer> {
+pub struct Plot<'a, D: Float, Message: Clone, R: crate::Renderer = iced_renderer::Renderer> {
     context: Context<'a, D, R>,
     interactions: &'a mut InteractionsCache<Message>,
 }
 
 impl<'a, D, Message, R> Plot<'a, D, Message, R>
 where
+    Message: Clone,
     D: Float,
     R: crate::Renderer,
 {
@@ -206,7 +208,7 @@ where
 
     pub fn add_interaction(&mut self, interaction: impl Into<Interaction<D, Message>>) {
         let interaction = interaction.into();
-        self.interactions
-            .push(interaction.resolve(&self.context.transform));
+        let (id, resolved) = interaction.resolve(&self.context.transform);
+        self.interactions.insert(id, resolved);
     }
 }

@@ -1,13 +1,13 @@
 //! iced_aksel Drawing Library Example (With Zoom & Z-Index Testing)
 use iced::{
-    Element, Length, Point, Theme,
+    Element, Length, Point, Theme, keyboard,
     mouse::{self, ScrollDelta},
-    widget::{button, column, container, row, text},
+    widget::{column, container, text},
 };
 use iced_aksel::{
     Axis, Cached, Chart, Interaction, PlotPoint, State,
     axis::{self},
-    interaction::{Event, Id},
+    interaction,
     plot::{DragDelta, Plot, PlotData},
     scale::Linear,
     shape::Rectangle,
@@ -19,41 +19,29 @@ fn main() -> iced::Result {
         .run()
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum AppMode {
-    Interact,
-    AddShape,
-}
-
 // -----------------------------------------------------------------------------
 // App State
 // -----------------------------------------------------------------------------
 struct DrawingApp {
     chart_state: State<&'static str, f64>,
     data: Cached<DrawingData>,
-
-    x_range: (f64, f64),
-    y_range: (f64, f64),
-
-    mode: AppMode,
-    next_id: usize, // Keeps IDs unique as we spawn new shapes!
 }
 
 #[derive(Debug, Clone)]
 enum Message {
-    // UI Controls
-    SetMode(AppMode),
-
     // Shape Interactions
-    ShapeHovered(usize),
+    ShapeHovered(interaction::Id),
+    ShapeDragged(interaction::Id, DragDelta),
+    ShapeSelected(interaction::Id),
 
     // Global Interactions
+    AddShape(Point),
+    DeleteShape(interaction::Id),
     BackgroundHovered,
     BackgroundPressed,
     BackgroundClicked(Point),
     ChartDragged(DragDelta),
     ChartScrolled(Point, ScrollDelta),
-    DragEnded,
 }
 
 impl DrawingApp {
@@ -62,19 +50,14 @@ impl DrawingApp {
 
     fn new() -> (Self, iced::Task<Message>) {
         let mut state = State::new();
-        let initial_x = (0.0, 100.0);
-        let initial_y = (0.0, 100.0);
 
         state.set_axis(
             Self::X,
-            Axis::new(
-                Linear::new(initial_x.0, initial_x.1),
-                axis::Position::Bottom,
-            ),
+            Axis::new(Linear::new(0., 100.), axis::Position::Bottom),
         );
         state.set_axis(
             Self::Y,
-            Axis::new(Linear::new(initial_y.0, initial_y.1), axis::Position::Left),
+            Axis::new(Linear::new(0., 100.), axis::Position::Left),
         );
 
         let mock_data = DrawingData {
@@ -84,14 +67,14 @@ impl DrawingApp {
                     y: 20.0,
                     w: 30.0,
                     h: 30.0,
-                    id: 1,
+                    id: interaction::Id::unique(),
                 },
                 RectShape {
                     x: 40.0,
                     y: 40.0,
                     w: 30.0,
                     h: 30.0,
-                    id: 2,
+                    id: interaction::Id::unique(),
                 },
             ],
             hovered_id: None,
@@ -103,38 +86,51 @@ impl DrawingApp {
             Self {
                 chart_state: state,
                 data: Cached::new(mock_data),
-                x_range: initial_x,
-                y_range: initial_y,
-                mode: AppMode::Interact,
-                next_id: 3,
             },
             iced::Task::none(),
         )
     }
 
-    fn update_axes(&mut self) {
-        self.chart_state.set_axis(
-            Self::X,
-            Axis::new(
-                Linear::new(self.x_range.0, self.x_range.1),
-                axis::Position::Bottom,
-            ),
-        );
-        self.chart_state.set_axis(
-            Self::Y,
-            Axis::new(
-                Linear::new(self.y_range.0, self.y_range.1),
-                axis::Position::Left,
-            ),
-        );
-    }
-
     fn update(&mut self, message: Message) {
         match message {
-            Message::SetMode(mode) => self.mode = mode,
-
             // --- Shape Interactions ---
             Message::ShapeHovered(id) => self.data.edit().hovered_id = Some(id),
+            Message::ShapeDragged(id, delta) => {
+                let data = self.data.edit();
+
+                let (x_min, x_max) = self.chart_state.axis(&Self::X).domain();
+                let (y_min, y_max) = self.chart_state.axis(&Self::Y).domain();
+
+                let x_width = x_max - x_min;
+                let y_height = y_max - y_min;
+
+                let dx = (delta.x as f64) * x_width;
+                let dy = (delta.y as f64) * y_height;
+
+                if let Some(rect) = data.rects.iter_mut().find(|r| r.id == id) {
+                    rect.x += dx;
+                    rect.y += dy;
+                };
+            }
+            Message::AddShape(point) => {
+                // Reverse-project the normalized Point (0.0-1.0) into data-space
+                let data_x = self.chart_state.axis(&Self::X).denormalize(point.x);
+                let data_y = self.chart_state.axis(&Self::Y).denormalize(point.y);
+
+                self.data.edit().rects.push(RectShape {
+                    x: data_x - 7.5,
+                    y: data_y - 7.5,
+                    w: 15.0,
+                    h: 15.0,
+                    id: interaction::Id::unique(),
+                })
+            }
+            Message::DeleteShape(id) => {
+                self.data.edit().rects.pop_if(|rect| rect.id == id);
+            }
+            Message::ShapeSelected(id) => {
+                self.data.edit().selected_id = Some(id);
+            }
             // Message::ShapeClicked(id) => self.data.edit().selected_id = Some(id),
             // Message::ShapePressed(id) => {
             //     if self.mode == AppMode::Interact {
@@ -153,60 +149,26 @@ impl DrawingApp {
             }
 
             Message::BackgroundClicked(pt) => {
-                if self.mode == AppMode::AddShape {
-                    // Reverse-project the normalized Point (0.0-1.0) into Data Space!
-                    let x_span = self.x_range.1 - self.x_range.0;
-                    let y_span = self.y_range.1 - self.y_range.0;
+                // Reverse-project the normalized Point (0.0-1.0) into data-space
+                let data_x = self.chart_state.axis(&Self::X).denormalize(pt.x);
+                let data_y = self.chart_state.axis(&Self::Y).denormalize(pt.y);
 
-                    let data_x = self.x_range.0 + (pt.x as f64 * x_span);
-                    let data_y = self.y_range.0 + (pt.y as f64 * y_span);
-
-                    // Drop a new 15x15 box centered on the mouse
-                    self.data.edit().rects.push(RectShape {
-                        x: data_x - 7.5,
-                        y: data_y - 7.5,
-                        w: 15.0,
-                        h: 15.0,
-                        id: self.next_id,
-                    });
-                    self.next_id += 1;
-                } else {
-                    let data = self.data.edit();
-                    if let Some(id) = data.hovered_id {
-                        data.selected_id = Some(id);
-                    }
-                }
+                // Drop a new 15x15 box centered on the mouse
+                self.data.edit().rects.push(RectShape {
+                    x: data_x - 7.5,
+                    y: data_y - 7.5,
+                    w: 15.0,
+                    h: 15.0,
+                    id: interaction::Id::unique(),
+                });
             }
 
             // --- Drag & Zoom Routing ---
             Message::ChartDragged(delta) => {
-                let data = self.data.edit();
-                data.hovered_id = None;
-
-                let x_width = self.x_range.1 - self.x_range.0;
-                let y_height = self.y_range.1 - self.y_range.0;
-                let data_dx = (delta.x as f64) * x_width;
-                let data_dy = (delta.y as f64) * y_height;
-
-                if let Some(drag_id) = data.dragging_id {
-                    // WE ARE DRAGGING A SHAPE
-                    if let Some(rect) = data.rects.iter_mut().find(|r| r.id == drag_id) {
-                        rect.x -= data_dx;
-                        rect.y -= data_dy;
-                    }
-                } else if self.mode == AppMode::Interact {
-                    // WE ARE PANNING THE CHART
-                    self.x_range.0 += data_dx;
-                    self.x_range.1 += data_dx;
-                    self.y_range.0 += data_dy;
-                    self.y_range.1 += data_dy;
-                    self.update_axes();
-                }
+                self.chart_state
+                    .pan_axes(Self::X, Self::Y, delta.x, delta.y);
             }
-            Message::DragEnded => {
-                self.data.edit().dragging_id = None;
-            }
-            Message::ChartScrolled(pt, delta) => {
+            Message::ChartScrolled(point, delta) => {
                 // Determine zoom factor (0.9 to zoom in, 1.1 to zoom out)
                 let zoom_factor = match delta {
                     ScrollDelta::Lines { y, .. } | ScrollDelta::Pixels { y, .. } => {
@@ -218,25 +180,14 @@ impl DrawingApp {
                     }
                 };
 
-                let x_span = self.x_range.1 - self.x_range.0;
-                let y_span = self.y_range.1 - self.y_range.0;
-
-                // Find the exact data coordinate the mouse is hovering over
-                let cursor_data_x = self.x_range.0 + (pt.x as f64 * x_span);
-                let cursor_data_y = self.y_range.0 + (pt.y as f64 * y_span);
-
-                let new_x_span = x_span * zoom_factor;
-                let new_y_span = y_span * zoom_factor;
-
-                // Contract/Expand the bounds around the cursor's location!
-                self.x_range.0 = cursor_data_x - (pt.x as f64 * new_x_span);
-                self.x_range.1 = cursor_data_x + ((1.0 - pt.x as f64) * new_x_span);
-
-                self.y_range.0 = cursor_data_y - (pt.y as f64 * new_y_span);
-                self.y_range.1 = cursor_data_y + ((1.0 - pt.y as f64) * new_y_span);
+                self.chart_state
+                    .axis_mut(&Self::X)
+                    .zoom(zoom_factor, Some(point.x));
+                self.chart_state
+                    .axis_mut(&Self::Y)
+                    .zoom(zoom_factor, Some(point.y));
 
                 self.data.edit().hovered_id = None; // Kill hovers during zoom
-                self.update_axes();
             }
         }
     }
@@ -251,24 +202,11 @@ impl DrawingApp {
                     .then_some(Message::BackgroundClicked(event.position))
             })
             .on_drag(Message::ChartDragged)
-            .on_drag_end(|| Message::DragEnded)
             .on_scroll(Message::ChartScrolled);
 
-        // UI Header with Mode Buttons
-        let mode_text = match self.mode {
-            AppMode::Interact => "Mode: Interact & Pan",
-            AppMode::AddShape => "Mode: Click to Add Shape",
-        };
-
-        let controls = row![
-            button("Interact Mode").on_press(Message::SetMode(AppMode::Interact)),
-            button("Add Shape Mode").on_press(Message::SetMode(AppMode::AddShape)),
-            text(mode_text).size(20)
-        ]
-        .spacing(20);
-
         column![
-            controls,
+            text("Interactions Demo").size(30),
+            text("Right click to new shapes").size(16),
             container(chart).width(Length::Fill).height(Length::Fill)
         ]
         .spacing(20)
@@ -285,13 +223,13 @@ struct RectShape {
     y: f64,
     w: f64,
     h: f64,
-    id: usize,
+    id: interaction::Id,
 }
 struct DrawingData {
     rects: Vec<RectShape>,
-    hovered_id: Option<usize>,
-    selected_id: Option<usize>,
-    dragging_id: Option<usize>,
+    hovered_id: Option<interaction::Id>,
+    selected_id: Option<interaction::Id>,
+    dragging_id: Option<interaction::Id>,
 }
 
 impl PlotData<f64, Message> for DrawingData {
@@ -302,9 +240,9 @@ impl PlotData<f64, Message> for DrawingData {
         // Newer shapes are pushed to the end, drawing ON TOP of older shapes.
         for rect in &self.rects {
             let mut color = palette.primary;
-            if Some(rect.id) == self.selected_id {
+            if Some(&rect.id) == self.selected_id.as_ref() {
                 color = palette.danger;
-            } else if Some(rect.id) == self.hovered_id {
+            } else if Some(&rect.id) == self.hovered_id.as_ref() {
                 color = palette.success;
             }
 
@@ -315,8 +253,19 @@ impl PlotData<f64, Message> for DrawingData {
             .fill(color);
 
             plot.add_interaction(
-                Interaction::new(Id::new(rect.id), &shape)
-                    .on_hover(Event::new(Message::ShapeHovered(rect.id))),
+                Interaction::new(rect.id.clone(), &shape)
+                    .on_hover_with(Message::ShapeHovered)
+                    .on_press_with(|id, event| match event.button {
+                        mouse::Button::Left => Message::ShapeSelected(id),
+                        mouse::Button::Right
+                            if event.modifiers.contains(keyboard::Modifiers::SHIFT) =>
+                        {
+                            Message::DeleteShape(id)
+                        }
+                        mouse::Button::Right => Message::AddShape(event.position),
+                        _ => unimplemented!(),
+                    })
+                    .on_drag_with(Message::ShapeDragged),
             );
             plot.render(shape);
         }
