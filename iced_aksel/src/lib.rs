@@ -590,7 +590,7 @@ where
                         memory.keyboard_modifiers,
                     );
 
-                    if let Some(message) = handler.run(|f| f(id.clone(), event)) {
+                    if let Some(message) = handler.run((id.clone(), event)) {
                         shell.publish(message);
                     }
 
@@ -714,10 +714,11 @@ where
                             memory.keyboard_modifiers,
                         );
 
-                        shell.publish(handler.run(|f| f(id.clone(), event)));
-
-                        // You can't press more than thing at a time
-                        return;
+                        if let Some(message) = handler.run((id.clone(), event)) {
+                            shell.publish(message);
+                            // You can't press more than thing at a time
+                            return;
+                        }
                     }
                 }
 
@@ -786,9 +787,10 @@ where
                             // NOTE: REMOVE THIS WHEN WE WANT TO SUPPORT MULTIPLE HOVER EVENTS
                             && current_hover_identity.is_none()
                         {
-                            // Prefer the Explicit ID if it exists, otherwise fall back to the Array Index!
-                            current_hover_identity = Some(id.clone());
-                            message_to_publish = Some(handler.run(|f| f(id.clone())));
+                            message_to_publish = handler.run((id.clone(),));
+                            if message_to_publish.is_some() {
+                                current_hover_identity = Some(id.clone());
+                            }
                         }
                     }
 
@@ -815,8 +817,6 @@ where
                     interaction_id,
                     ..
                 } => {
-                    shell.capture_event();
-
                     let delta_x = mouse_pos.x - last_position.x;
                     let delta_y = mouse_pos.y - last_position.y;
                     *total_delta += delta_x.hypot(delta_y);
@@ -828,6 +828,8 @@ where
 
                     // Interaction present - Use that instead
                     if let Some(id) = interaction_id {
+                        shell.capture_event();
+
                         let interactions = memory.interaction_cache.borrow();
                         let Some(interaction) = interactions.get(id) else {
                             return;
@@ -844,13 +846,16 @@ where
                             y: -delta_y / plot_bounds.height,
                         };
 
-                        shell.publish(handler.run(|f| f(id.clone(), normalized_delta)));
-
-                        // Drag events can never propagate, so we return here
-                        return;
+                        if let Some(message) = handler.run((id.clone(), normalized_delta)) {
+                            shell.publish(message);
+                            // Drag events can never propagate, so we return here
+                            return;
+                        };
                     }
 
                     if let Some(handler) = &self.on_drag {
+                        shell.capture_event();
+
                         // For chart: dragging right pans chart right (data moves left)
                         // x: negative right, y: positive down
                         let normalized_delta = DragDelta {

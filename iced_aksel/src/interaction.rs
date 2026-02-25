@@ -18,19 +18,19 @@ pub use id::Id;
 use area::ResolvedArea;
 
 type HoverHandler<Message> = event::Handler<Message, Box<dyn Fn(Id) -> Message>>;
-type DragHandler<Message> = event::Handler<Message, Box<dyn Fn(Id, DragDelta) -> Option<Message>>>;
+type DragHandler<Message> = event::Handler<Message, Box<dyn Fn(Id, DragDelta) -> Message>>;
 type PressHandler<Message> =
     event::Handler<Message, Box<dyn Fn(Id, PressEvent<Point>) -> Option<Message>>>;
 type ReleaseHandler<Message> =
     event::Handler<Message, Box<dyn Fn(Id, ReleaseEvent<Point>) -> Option<Message>>>;
 
 pub struct Interaction<D, Message: Clone> {
-    pub id: Id,
-    pub area: Area<D>,
-    pub on_hover: Option<HoverHandler<Message>>,
-    pub on_drag: Option<DragHandler<Message>>,
-    pub on_press: Option<PressHandler<Message>>,
-    pub on_release: Option<ReleaseHandler<Message>>,
+    pub(crate) id: Id,
+    pub(crate) area: Area<D>,
+    pub(crate) on_hover: Option<HoverHandler<Message>>,
+    pub(crate) on_drag: Option<DragHandler<Message>>,
+    pub(crate) on_press: Option<PressHandler<Message>>,
+    pub(crate) on_release: Option<ReleaseHandler<Message>>,
 }
 
 impl<D: Float, Message: Clone> Interaction<D, Message> {
@@ -96,10 +96,7 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
         self
     }
 
-    pub fn on_drag_with(
-        mut self,
-        closure: impl Fn(Id, DragDelta) -> Option<Message> + 'static,
-    ) -> Self {
+    pub fn on_drag_with(mut self, closure: impl Fn(Id, DragDelta) -> Message + 'static) -> Self {
         self.on_drag = Some(event::Handler::Closure(Box::new(closure)));
         self
     }

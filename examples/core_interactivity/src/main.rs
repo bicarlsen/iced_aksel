@@ -126,7 +126,7 @@ impl DrawingApp {
                 })
             }
             Message::DeleteShape(id) => {
-                self.data.edit().rects.pop_if(|rect| rect.id == id);
+                self.data.edit().rects.retain(|rect| rect.id != id);
             }
             Message::ShapeSelected(id) => {
                 self.data.edit().selected_id = Some(id);
@@ -158,9 +158,9 @@ impl DrawingApp {
                 let zoom_factor = match delta {
                     ScrollDelta::Lines { y, .. } | ScrollDelta::Pixels { y, .. } => {
                         if y > 0.0 {
-                            0.9
-                        } else {
                             1.1
+                        } else {
+                            0.9
                         }
                     }
                 };
@@ -242,10 +242,11 @@ impl PlotData<f64, Message> for DrawingData {
             plot.add_interaction(
                 Interaction::new(rect.id.clone(), &shape)
                     .on_hover_with(Message::ShapeHovered)
-                    .on_press_with(|id, event| match event.button {
-                        mouse::Button::Left => Message::ShapeSelected(id),
-                        mouse::Button::Right => Message::DeleteShape(id),
-                        _ => unimplemented!(),
+                    .on_press_with(|id, event| {
+                        (event.button == mouse::Button::Left).then_some(Message::ShapeSelected(id))
+                    })
+                    .on_release_with(|id, event| {
+                        (event.button == mouse::Button::Right).then_some(Message::DeleteShape(id))
                     })
                     .on_drag_with(Message::ShapeDragged),
             );
