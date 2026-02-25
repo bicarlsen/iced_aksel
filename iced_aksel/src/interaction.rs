@@ -18,10 +18,11 @@ pub use id::Id;
 use area::ResolvedArea;
 
 type HoverHandler<Message> = event::Handler<Message, Box<dyn Fn(Id) -> Message>>;
-type DragHandler<Message> = event::Handler<Message, Box<dyn Fn(Id, DragDelta) -> Message>>;
-type PressHandler<Message> = event::Handler<Message, Box<dyn Fn(Id, PressEvent<Point>) -> Message>>;
+type DragHandler<Message> = event::Handler<Message, Box<dyn Fn(Id, DragDelta) -> Option<Message>>>;
+type PressHandler<Message> =
+    event::Handler<Message, Box<dyn Fn(Id, PressEvent<Point>) -> Option<Message>>>;
 type ReleaseHandler<Message> =
-    event::Handler<Message, Box<dyn Fn(Id, ReleaseEvent<Point>) -> Message>>;
+    event::Handler<Message, Box<dyn Fn(Id, ReleaseEvent<Point>) -> Option<Message>>>;
 
 pub struct Interaction<D, Message: Clone> {
     pub id: Id,
@@ -90,7 +91,15 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
         self
     }
 
-    pub fn on_drag_with(mut self, closure: impl Fn(Id, DragDelta) -> Message + 'static) -> Self {
+    pub fn on_drag_maybe(mut self, message: Option<Message>) -> Self {
+        self.on_drag = message.map(event::Handler::Direct);
+        self
+    }
+
+    pub fn on_drag_with(
+        mut self,
+        closure: impl Fn(Id, DragDelta) -> Option<Message> + 'static,
+    ) -> Self {
         self.on_drag = Some(event::Handler::Closure(Box::new(closure)));
         self
     }
@@ -100,9 +109,14 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
         self
     }
 
+    pub fn on_press_maybe(mut self, message: Option<Message>) -> Self {
+        self.on_press = message.map(event::Handler::Direct);
+        self
+    }
+
     pub fn on_press_with(
         mut self,
-        closure: impl Fn(Id, PressEvent<Point>) -> Message + 'static,
+        closure: impl Fn(Id, PressEvent<Point>) -> Option<Message> + 'static,
     ) -> Self {
         self.on_press = Some(event::Handler::Closure(Box::new(closure)));
         self
@@ -113,9 +127,14 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
         self
     }
 
+    pub fn on_release_maybe(mut self, message: Option<Message>) -> Self {
+        self.on_release = message.map(event::Handler::Direct);
+        self
+    }
+
     pub fn on_release_with(
         mut self,
-        closure: impl Fn(Id, ReleaseEvent<Point>) -> Message + 'static,
+        closure: impl Fn(Id, ReleaseEvent<Point>) -> Option<Message> + 'static,
     ) -> Self {
         self.on_release = Some(event::Handler::Closure(Box::new(closure)));
         self

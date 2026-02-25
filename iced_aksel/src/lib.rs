@@ -590,7 +590,9 @@ where
                         memory.keyboard_modifiers,
                     );
 
-                    shell.publish(handler.run(|f| f(id.clone(), event)));
+                    if let Some(message) = handler.run(|f| f(id.clone(), event)) {
+                        shell.publish(message);
+                    }
 
                     // You can't press more than thing at a time
                     break;
@@ -664,7 +666,7 @@ where
             }
 
             // We can only interact with one axis at a time
-            break;
+            return;
         }
     }
 
@@ -695,8 +697,31 @@ where
         match action {
             Action::Idle => (), // Do nothing
             Action::DraggingPlot { origin, .. } => {
+                let plot_bounds = self.get_plot_layout(layout).bounds();
+                let interactions = memory.interaction_cache.borrow();
+                for (id, interaction) in interactions.iter().rev() {
+                    if interaction.area.contains(*origin)
+                        && let Some(handler) = &interaction.on_release
+                    {
+                        let normalized = Point::new(
+                            (origin.x - plot_bounds.x) / plot_bounds.width,
+                            1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
+                        );
+                        let event = ReleaseEvent::new(
+                            normalized,
+                            button,
+                            previous_click_kind,
+                            memory.keyboard_modifiers,
+                        );
+
+                        shell.publish(handler.run(|f| f(id.clone(), event)));
+
+                        // You can't press more than thing at a time
+                        return;
+                    }
+                }
+
                 if let Some(handler) = &self.on_release {
-                    let plot_bounds = self.get_plot_layout(layout).bounds();
                     let normalized = Point::new(
                         (origin.x - plot_bounds.x) / plot_bounds.width,
                         1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
