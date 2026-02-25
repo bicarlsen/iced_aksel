@@ -39,7 +39,6 @@ enum Message {
     DeleteShape(interaction::Id),
     BackgroundHovered,
     BackgroundPressed,
-    BackgroundClicked(Point),
     ChartDragged(DragDelta),
     ChartScrolled(Point, ScrollDelta),
 }
@@ -149,21 +148,6 @@ impl DrawingApp {
                 data.dragging_id = None;
             }
 
-            Message::BackgroundClicked(pt) => {
-                // Reverse-project the normalized Point (0.0-1.0) into data-space
-                let data_x = self.chart_state.axis(&Self::X).denormalize(pt.x);
-                let data_y = self.chart_state.axis(&Self::Y).denormalize(pt.y);
-
-                // Drop a new 15x15 box centered on the mouse
-                self.data.edit().rects.push(RectShape {
-                    x: data_x - 7.5,
-                    y: data_y - 7.5,
-                    w: 15.0,
-                    h: 15.0,
-                    id: interaction::Id::unique(),
-                });
-            }
-
             // --- Drag & Zoom Routing ---
             Message::ChartDragged(delta) => {
                 self.chart_state
@@ -197,10 +181,12 @@ impl DrawingApp {
         let chart = Chart::new(&self.chart_state)
             .plot_data(&self.data, Self::X, Self::Y)
             .on_hover(|_| Message::BackgroundHovered)
-            .on_press(|_| Some(Message::BackgroundPressed))
+            .on_press(|event| match event.button {
+                mouse::Button::Left => Some(Message::BackgroundPressed),
+                _ => None,
+            })
             .on_release(|event| {
-                (event.button == mouse::Button::Left)
-                    .then_some(Message::BackgroundClicked(event.position))
+                (event.button == mouse::Button::Right).then_some(Message::AddShape(event.position))
             })
             .on_drag(Message::ChartDragged)
             .on_scroll(Message::ChartScrolled);
@@ -258,12 +244,7 @@ impl PlotData<f64, Message> for DrawingData {
                     .on_hover_with(Message::ShapeHovered)
                     .on_press_with(|id, event| match event.button {
                         mouse::Button::Left => Message::ShapeSelected(id),
-                        mouse::Button::Right
-                            if event.modifiers.contains(keyboard::Modifiers::SHIFT) =>
-                        {
-                            Message::DeleteShape(id)
-                        }
-                        mouse::Button::Right => Message::AddShape(event.position),
+                        mouse::Button::Right => Message::DeleteShape(id),
                         _ => unimplemented!(),
                     })
                     .on_drag_with(Message::ShapeDragged),
