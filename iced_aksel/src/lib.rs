@@ -801,13 +801,7 @@ where
                         return;
                     };
 
-                    let normalized_delta = DragDelta {
-                        x: -delta_x / plot_bounds.width,
-                        y: delta_y / plot_bounds.height,
-                    };
-
                     // Interaction present - Use that instead
-
                     if let Some(id) = interaction_id {
                         let interactions = memory.interaction_cache.borrow();
                         let Some(interaction) = interactions.get(id) else {
@@ -818,6 +812,13 @@ where
                             return;
                         };
 
+                        // For shape: shape moves with cursor
+                        // x: positive right, y: negative down (chart coords go up)
+                        let normalized_delta = DragDelta {
+                            x: delta_x / plot_bounds.width,
+                            y: -delta_y / plot_bounds.height,
+                        };
+
                         shell.publish(handler.run(|f| f(id.clone(), normalized_delta)));
 
                         // Drag events can never propagate, so we return here
@@ -825,6 +826,12 @@ where
                     }
 
                     if let Some(handler) = &self.on_drag {
+                        // For chart: dragging right pans chart right (data moves left)
+                        // x: negative right, y: positive down
+                        let normalized_delta = DragDelta {
+                            x: -delta_x / plot_bounds.width,
+                            y: delta_y / plot_bounds.height,
+                        };
                         shell.publish(handler(normalized_delta));
                     }
 

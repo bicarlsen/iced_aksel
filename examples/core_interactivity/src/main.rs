@@ -104,6 +104,7 @@ impl DrawingApp {
                 let x_width = x_max - x_min;
                 let y_height = y_max - y_min;
 
+                // Convert normalized delta to data-space coordinates
                 let dx = (delta.x as f64) * x_width;
                 let dy = (delta.y as f64) * y_height;
 
