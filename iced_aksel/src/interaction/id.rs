@@ -3,14 +3,14 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-const NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 /// An identifier for an interaction.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Id(Internal);
 
 impl Id {
-    pub fn new(id: &'static str) -> Self {
+    pub const fn new(id: &'static str) -> Self {
         Self(Internal::Custom(borrow::Cow::Borrowed(id)))
     }
 
