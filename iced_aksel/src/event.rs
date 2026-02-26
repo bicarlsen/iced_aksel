@@ -144,21 +144,11 @@ macro_rules! impl_handlers {
         paste::paste! {
             $(
                 $(#[$doc])*
-                pub fn [<on_ $action _with>]<H>(mut self, h: H) -> Self
+                pub fn [<on_ $action>]<H>(mut self, h: H) -> Self
                 where
                     H: crate::event::IntoHandler<Message, $Args>,
                 {
                     self.[<on_ $action>] = Some(h.into_handler());
-                    self
-                }
-
-                $(#[$doc])*
-                ///
-                /// This takes in a message directly, and won't give you access to the arguments. Use
-                /// [`[<on_ $action _with>]`] instead if you need the arguments.
-                pub fn [<on_ $action>]<H>(mut self, message: Message) -> Self
-                {
-                    self.[<on_ $action>] = Some(event::Handler::Direct(message));
                     self
                 }
             )+
