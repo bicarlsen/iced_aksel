@@ -1,14 +1,15 @@
 //! iced_aksel Drawing Library Example (With Zoom & Z-Index Testing)
 use iced::{
-    Element, Length, Point, Theme, keyboard,
+    Element, Length, Point, Theme,
     mouse::{self, ScrollDelta},
     widget::{column, container, text},
 };
 use iced_aksel::{
-    Axis, Cached, Chart, Interaction, PlotPoint, State,
+    Axis, Cached, Chart, Delta, DragEvent, Interaction, PlotPoint, PressEvent, ReleaseEvent,
+    ScrollEvent, State,
     axis::{self},
     interaction,
-    plot::{DragDelta, Plot, PlotData},
+    plot::{Plot, PlotData},
     scale::Linear,
     shape::Rectangle,
 };
@@ -31,7 +32,7 @@ struct DrawingApp {
 enum Message {
     // Shape Interactions
     ShapeHovered(interaction::Id),
-    ShapeDragged(interaction::Id, DragDelta),
+    ShapeDragged(interaction::Id, DragEvent<Delta>),
     ShapeSelected(interaction::Id),
 
     // Global Interactions
@@ -39,8 +40,8 @@ enum Message {
     DeleteShape(interaction::Id),
     BackgroundHovered,
     BackgroundPressed,
-    ChartDragged(DragDelta),
-    ChartScrolled(Point, ScrollDelta),
+    ChartDragged(Delta),
+    ChartScrolled(ScrollEvent<Point>),
 }
 
 impl DrawingApp {
@@ -94,7 +95,7 @@ impl DrawingApp {
         match message {
             // --- Shape Interactions ---
             Message::ShapeHovered(id) => self.data.edit().hovered_id = Some(id),
-            Message::ShapeDragged(id, delta) => {
+            Message::ShapeDragged(id, DragEvent { delta, .. }) => {
                 let data = self.data.edit();
 
                 let (x_min, x_max) = self.chart_state.axis(&Self::X).domain();
@@ -153,7 +154,9 @@ impl DrawingApp {
                 self.chart_state
                     .pan_axes(Self::X, Self::Y, delta.x, delta.y);
             }
-            Message::ChartScrolled(point, delta) => {
+            Message::ChartScrolled(ScrollEvent {
+                delta, position, ..
+            }) => {
                 // Determine zoom factor (0.9 to zoom in, 1.1 to zoom out)
                 let zoom_factor = match delta {
                     ScrollDelta::Lines { y, .. } | ScrollDelta::Pixels { y, .. } => {
@@ -167,10 +170,10 @@ impl DrawingApp {
 
                 self.chart_state
                     .axis_mut(&Self::X)
-                    .zoom(zoom_factor, Some(point.x));
+                    .zoom(zoom_factor, Some(position.x));
                 self.chart_state
                     .axis_mut(&Self::Y)
-                    .zoom(zoom_factor, Some(point.y));
+                    .zoom(zoom_factor, Some(position.y));
 
                 self.data.edit().hovered_id = None; // Kill hovers during zoom
             }
@@ -180,16 +183,19 @@ impl DrawingApp {
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.chart_state)
             .plot_data(&self.data, Self::X, Self::Y)
-            .on_hover(|_| Message::BackgroundHovered)
-            .on_press(|event| match event.button {
+            .on_hover_with(|_| Message::BackgroundHovered)
+            .on_press_with(|event: PressEvent<Point>| match event.button {
                 mouse::Button::Left => Some(Message::BackgroundPressed),
                 _ => None,
             })
-            .on_release(|event| {
+            .on_release_with(|event: ReleaseEvent<Point>| {
                 (event.button == mouse::Button::Right).then_some(Message::AddShape(event.position))
             })
-            .on_drag(Message::ChartDragged)
-            .on_scroll(Message::ChartScrolled);
+            .on_drag_with(|event: DragEvent<Delta>| {
+                (event.button_held == mouse::Button::Left)
+                    .then_some(Message::ChartDragged(event.delta))
+            })
+            .on_scroll_with(Message::ChartScrolled);
 
         column![
             text("Interactions Demo").size(30),
@@ -242,10 +248,10 @@ impl PlotData<f64, Message> for DrawingData {
             plot.add_interaction(
                 Interaction::new(rect.id.clone(), &shape)
                     .on_hover_with(Message::ShapeHovered)
-                    .on_press_with(|id, event| {
+                    .on_press_with(|id, event: PressEvent<Point>| {
                         (event.button == mouse::Button::Left).then_some(Message::ShapeSelected(id))
                     })
-                    .on_release_with(|id, event| {
+                    .on_release_with(|id, event: ReleaseEvent<Point>| {
                         (event.button == mouse::Button::Right).then_some(Message::DeleteShape(id))
                     })
                     .on_drag_with(Message::ShapeDragged),

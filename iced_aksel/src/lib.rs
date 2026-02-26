@@ -84,7 +84,7 @@ use iced_core::{
     Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Point, Rectangle, Shell, Size,
     Widget, keyboard,
     layout::{self, Limits, Node},
-    mouse::{self, ScrollDelta},
+    mouse,
     renderer::{Quad, Style},
     widget::{Tree, tree},
 };
@@ -112,7 +112,7 @@ pub mod stroke;
 pub mod style;
 
 pub use axis::Axis;
-pub use event::{PressEvent, ReleaseEvent};
+pub use event::{Delta, DragEvent, PressEvent, ReleaseEvent, ScrollEvent};
 pub use interaction::Interaction;
 pub use layer::{Cached, LayerId};
 pub use measure::Measure;
@@ -128,7 +128,6 @@ use action::Action;
 use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
 use layer::Layer;
 use memory::Memory;
-use plot::DragDelta;
 
 use crate::memory::CacheSignature;
 
@@ -167,20 +166,20 @@ pub enum Error<AxisId> {
 }
 
 // Internal type aliases for plot event handlers
-type ErrorHandler<AxisId, Message> = Box<dyn Fn(Error<AxisId>) -> Message>;
-type DragHandler<Message> = Box<dyn Fn(DragDelta) -> Message>;
-type HoverHandler<Message> = Box<dyn Fn(Point) -> Message>;
-type ScrollHandler<Message> = Box<dyn Fn(Point, ScrollDelta) -> Message>;
-type PressHandler<Message> = Box<dyn Fn(PressEvent<Point>) -> Option<Message>>;
-type ReleaseHandler<Message> = Box<dyn Fn(ReleaseEvent<Point>) -> Option<Message>>;
+type ErrorHandler<AxisId, Message> = event::Handler<Message, (Error<AxisId>,)>;
+type HoverHandler<Message> = event::Handler<Message, (Point,)>;
+type DragHandler<Message> = event::Handler<Message, (DragEvent<Delta>,)>;
+type DragEndHandler<Message> = event::Handler<Message, ()>;
+type ScrollHandler<Message> = event::Handler<Message, (ScrollEvent<Point>,)>;
+type PressHandler<Message> = event::Handler<Message, (PressEvent<Point>,)>;
+type ReleaseHandler<Message> = event::Handler<Message, (ReleaseEvent<Point>,)>;
 
 // Internal type aliases for axis event handlers
-type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
-type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
-type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
-type AxisPressHandler<AxisId, Message> = Box<dyn Fn(AxisId, PressEvent<f32>) -> Option<Message>>;
-type AxisReleaseHandler<AxisId, Message> =
-    Box<dyn Fn(AxisId, ReleaseEvent<f32>) -> Option<Message>>;
+type AxisHoverHandler<AxisId, Message> = event::Handler<Message, (AxisId, f32)>;
+type AxisDragHandler<AxisId, Message> = event::Handler<Message, (AxisId, DragEvent<f32>)>;
+type AxisScrollHandler<AxisId, Message> = event::Handler<Message, (AxisId, ScrollEvent<f32>)>;
+type AxisPressHandler<AxisId, Message> = event::Handler<Message, (AxisId, PressEvent<f32>)>;
+type AxisReleaseHandler<AxisId, Message> = event::Handler<Message, (AxisId, ReleaseEvent<f32>)>;
 
 /// The main charting widget that renders axes and plot data.
 ///
@@ -221,6 +220,7 @@ pub struct Chart<
     Domain: Float,
     Theme: Catalog,
     Renderer: crate::Renderer,
+    Message: Clone,
 {
     state: &'a State<AxisId, Domain, Theme>,
     layers: Vec<Layer<'a, AxisId, Domain, Message, Renderer, Theme>>,
@@ -245,7 +245,7 @@ pub struct Chart<
     on_drag: Option<DragHandler<Message>>,
     on_hover: Option<HoverHandler<Message>>,
     on_scroll: Option<ScrollHandler<Message>>,
-    on_drag_end: Option<Box<dyn Fn() -> Message>>,
+    on_drag_end: Option<DragEndHandler<Message>>,
 
     // Axis Handlers
     on_axis_press: Option<AxisPressHandler<AxisId, Message>>,
@@ -420,130 +420,49 @@ where
         self
     }
 
-    /// Sets a callback for chart configuration errors.
-    ///
-    /// Errors can occur when axes referenced in `plot_data` are missing from the `State`
-    /// or have conflicting orientations.
-    pub fn on_error<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Error<AxisId>) -> Message + 'static,
-    {
-        self.on_error = Some(Box::new(f));
-        self
-    }
+    event::impl_handlers!(
+        /// Sets the event handler for chart configuration errors.
+        ///
+        /// Errors can occur when axes referenced in `plot_data` are missing from the `State`
+        /// or have conflicting orientations.
+        error: (Error<AxisId>,);
 
-    /// Sets a callback for drag events on the main plot area.
-    ///
-    /// The callback receives a [`DragDelta`] containing the normalized distance dragged.
-    /// This is typically used to implement panning.
-    pub fn on_drag<F>(mut self, f: F) -> Self
-    where
-        F: Fn(DragDelta) -> Message + 'static,
-    {
-        self.on_drag = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for when a drag action ends.
+        ///
+        /// Triggers when any drag action ends on the main plot area, an axis or an interaction.
+        drag_end: ();
 
-    /// Sets a callback for hover events on the main plot area.
-    pub fn on_hover<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point) -> Message + 'static,
-    {
-        self.on_hover = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse presses on the main plot area.
+        press: (PressEvent<Point>,);
 
-    /// Sets a callback for mouse button presses on the main plot area.
-    pub fn on_press<F>(mut self, f: F) -> Self
-    where
-        F: Fn(PressEvent<Point>) -> Option<Message> + 'static,
-    {
-        self.on_press = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse releases on the main plot area.
+        release: (ReleaseEvent<Point>,);
 
-    /// Sets a callback for mouse button releases on the main plot area.
-    pub fn on_release<F>(mut self, f: F) -> Self
-    where
-        F: Fn(ReleaseEvent<Point>) -> Option<Message> + 'static,
-    {
-        self.on_release = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for drag events on the main plot area.
+        drag: (DragEvent<Delta>,);
 
-    /// Sets a callback for when mouse drag ends.
-    pub fn on_drag_end<F>(mut self, f: F) -> Self
-    where
-        F: Fn() -> Message + 'static,
-    {
-        self.on_drag_end = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for hover events on the main plot area.
+        hover: (Point,);
 
-    /// Sets a callback for scroll events (mouse wheel) on the main plot area.
-    ///
-    /// The callback receives the cursor position (normalized) and the scroll delta.
-    /// This is typically used to implement zooming.
-    pub fn on_scroll<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point, ScrollDelta) -> Message + 'static,
-    {
-        self.on_scroll = Some(Box::new(f));
-        self
-    }
+        /// Sets a callback for scroll events (mouse wheel) on the main plot area.
+        scroll: (ScrollEvent<Point>,);
 
-    /// Sets a callback for mouse-press events on an axis.
-    ///
-    /// The callback receives the ID of the clicked axis and the normalized position (0.0-1.0)
-    /// along that axis.
-    pub fn on_axis_press<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, PressEvent<f32>) -> Option<Message> + 'static,
-    {
-        self.on_axis_press = Some(Box::new(f));
-        self
-    }
 
-    /// Sets a callback for mouse-release events on an axis.
-    ///
-    /// The callback receives the ID of the clicked axis and the normalized position (0.0-1.0)
-    /// along that axis.
-    pub fn on_axis_release<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, ReleaseEvent<f32>) -> Option<Message> + 'static,
-    {
-        self.on_axis_release = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse presses on an axis.
+        axis_press: (AxisId, PressEvent<f32>);
 
-    /// Sets a callback for drag events on an axis.
-    ///
-    /// This is often used to implement "pan along one axis" behavior.
-    pub fn on_axis_drag<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32) -> Message + 'static,
-    {
-        self.on_axis_drag = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse releases on an axis.
+        axis_release: (AxisId, ReleaseEvent<f32>);
 
-    /// Sets a callback for scroll events on an axis.
-    pub fn on_axis_scroll<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32, ScrollDelta) -> Message + 'static,
-    {
-        self.on_axis_scroll = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for dragging on an axis.
+        axis_drag: (AxisId, DragEvent<f32>);
 
-    /// Sets a callback for hover events on an axis.
-    pub fn on_axis_hover<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32) -> Message + 'static,
-    {
-        self.on_axis_hover = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for hovering on an axis.
+        axis_hover: (AxisId, f32);
+
+        /// Sets the event handler for scrolling on an axis
+        axis_scroll: (AxisId, ScrollEvent<f32>);
+    );
 
     /// Internal handler for mouse press events.
     /// Determines if the user mouse-pressed on the plot or an axis and updates the internal state.
@@ -583,6 +502,7 @@ where
                         (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
                         1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
                     );
+
                     let event = PressEvent::new(
                         normalized,
                         button,
@@ -606,6 +526,8 @@ where
                 origin: mouse_pos,
                 last_position: mouse_pos,
                 total_delta: 0.0,
+                button,
+                click_kind: click.kind(),
             };
 
             // Make sure we don't test plot, if a shape was pressed already
@@ -620,7 +542,7 @@ where
                 );
                 let event =
                     PressEvent::new(normalized, button, click.kind(), memory.keyboard_modifiers);
-                if let Some(message) = handler(event) {
+                if let Some(message) = handler.run((event,)) {
                     shell.publish(message);
                 }
             }
@@ -648,11 +570,13 @@ where
                 origin,
                 last_position: origin,
                 total_delta: 0.0,
+                button,
+                click_kind: click.kind(),
             };
 
             // Handle double-click on axis
             if let Some(handler) = self.on_axis_press.as_ref()
-                && let Some(message) = handler(
+                && let Some(message) = handler.run((
                     id.clone(),
                     PressEvent::new(
                         axis.screen_to_normalized(origin, &axis_bounds),
@@ -660,7 +584,7 @@ where
                         click.kind(),
                         memory.keyboard_modifiers,
                     ),
-                )
+                ))
             {
                 shell.publish(message);
             }
@@ -688,8 +612,10 @@ where
             .is_some_and(|delta| delta > self.drag_deadband)
         {
             // Tell the app the drag finished!
-            if let Some(handler) = &self.on_drag_end {
-                shell.publish(handler());
+            if let Some(handler) = &self.on_drag_end
+                && let Some(message) = handler.run(())
+            {
+                shell.publish(message);
             }
             return;
         }
@@ -727,12 +653,13 @@ where
                         (origin.x - plot_bounds.x) / plot_bounds.width,
                         1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
                     );
-                    if let Some(message) = handler(ReleaseEvent::new(
+                    if let Some(message) = handler.run((ReleaseEvent::new(
                         normalized,
                         button,
                         previous_click_kind,
                         memory.keyboard_modifiers,
-                    )) {
+                    ),))
+                    {
                         shell.publish(message);
                     }
                 }
@@ -742,7 +669,7 @@ where
                     let axis_bounds = layout.children().nth(i).unwrap().bounds();
                     let normalized = axis.screen_to_normalized(*origin, &axis_bounds);
                     if let Some(handler) = &self.on_axis_release
-                        && let Some(message) = handler(
+                        && let Some(message) = handler.run((
                             id.clone(),
                             ReleaseEvent::new(
                                 normalized,
@@ -750,7 +677,7 @@ where
                                 previous_click_kind,
                                 memory.keyboard_modifiers,
                             ),
-                        )
+                        ))
                     {
                         shell.publish(message);
                     }
@@ -806,7 +733,9 @@ where
                                 (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
                                 1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
                             );
-                            shell.publish(handler(normalized));
+                            if let Some(message) = handler.run((normalized,)) {
+                                shell.publish(message);
+                            }
                         }
                     }
                     return;
@@ -815,6 +744,8 @@ where
                     last_position,
                     total_delta,
                     interaction_id,
+                    button,
+                    click_kind,
                     ..
                 } => {
                     let delta_x = mouse_pos.x - last_position.x;
@@ -839,14 +770,21 @@ where
                             return;
                         };
 
-                        // For shape: shape moves with cursor
+                        // For interaction: shape/interaction moves with cursor
                         // x: positive right, y: negative down (chart coords go up)
-                        let normalized_delta = DragDelta {
+                        let normalized_delta = Delta {
                             x: delta_x / plot_bounds.width,
                             y: -delta_y / plot_bounds.height,
                         };
 
-                        if let Some(message) = handler.run((id.clone(), normalized_delta)) {
+                        let event = DragEvent::new(
+                            normalized_delta,
+                            *button,
+                            *click_kind,
+                            memory.keyboard_modifiers,
+                        );
+
+                        if let Some(message) = handler.run((id.clone(), event)) {
                             shell.publish(message);
                             // Drag events can never propagate, so we return here
                             return;
@@ -858,11 +796,21 @@ where
 
                         // For chart: dragging right pans chart right (data moves left)
                         // x: negative right, y: positive down
-                        let normalized_delta = DragDelta {
+                        let normalized_delta = Delta {
                             x: -delta_x / plot_bounds.width,
                             y: delta_y / plot_bounds.height,
                         };
-                        shell.publish(handler(normalized_delta));
+
+                        let event = DragEvent::new(
+                            normalized_delta,
+                            *button,
+                            *click_kind,
+                            memory.keyboard_modifiers,
+                        );
+
+                        if let Some(message) = handler.run((event,)) {
+                            shell.publish(message);
+                        }
                     }
 
                     return;
@@ -875,6 +823,8 @@ where
             id: dragging_id,
             last_position,
             total_delta,
+            button,
+            click_kind,
             ..
         } = action
         {
@@ -900,7 +850,15 @@ where
                     && let Some(handler) = &self.on_axis_drag
                 {
                     let normalized_delta = axis.translate_drag_delta(delta, &axis_bounds);
-                    shell.publish(handler(id.clone(), normalized_delta));
+                    let event = DragEvent::new(
+                        normalized_delta,
+                        *button,
+                        *click_kind,
+                        memory.keyboard_modifiers,
+                    );
+                    if let Some(message) = handler.run((id.clone(), event)) {
+                        shell.publish(message);
+                    }
                 }
             }
         }
@@ -919,7 +877,9 @@ where
                         axis::Orientation::Vertical => mouse_pos.y,
                     };
                     let normalized = axis.screen_to_normalized(screen_value, &axis_bounds);
-                    shell.publish(handler(id.clone(), normalized));
+                    if let Some(message) = handler.run((id.clone(), normalized)) {
+                        shell.publish(message);
+                    }
                 }
 
                 break;
@@ -1177,7 +1137,9 @@ where
             && let Some(handler) = &self.on_error
         {
             for error in self.errors.drain(..) {
-                shell.publish(handler(error));
+                if let Some(message) = handler.run((error,)) {
+                    shell.publish(message);
+                }
             }
             return;
         }
@@ -1214,14 +1176,20 @@ where
                     // Check if scrolling over the plot area
                     if cursor.position_over(plot_bounds).is_some() {
                         if let Some(handler) = &self.on_scroll {
+                            shell.capture_event();
+
                             // Normalize cursor position (0.0-1.0)
                             let normalized = Point::new(
                                 (cursor_pos.x - plot_bounds.x) / plot_bounds.width,
                                 1.0 - ((cursor_pos.y - plot_bounds.y) / plot_bounds.height),
                             );
 
-                            shell.capture_event();
-                            shell.publish(handler(normalized, *delta));
+                            let event =
+                                ScrollEvent::new(normalized, *delta, memory.keyboard_modifiers);
+
+                            if let Some(message) = handler.run((event,)) {
+                                shell.publish(message);
+                            }
                         }
                     } else {
                         // Check if scrolling over an axis
@@ -1239,7 +1207,16 @@ where
                                         axis.screen_to_normalized(screen_value, &axis_bounds);
 
                                     shell.capture_event();
-                                    shell.publish(handler(id.clone(), normalized, *delta));
+
+                                    let event = ScrollEvent::new(
+                                        normalized,
+                                        *delta,
+                                        memory.keyboard_modifiers,
+                                    );
+
+                                    if let Some(message) = handler.run((id.clone(), event)) {
+                                        shell.publish(message);
+                                    }
                                 }
                                 break;
                             }

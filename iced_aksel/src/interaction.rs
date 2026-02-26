@@ -4,10 +4,7 @@ use iced_core::{Point, Rectangle};
 use indexmap::IndexMap;
 use rapidhash::fast::RandomState;
 
-use crate::{
-    event::{self, PressEvent, ReleaseEvent},
-    plot::DragDelta,
-};
+use crate::event::{self, PressEvent, ReleaseEvent};
 
 mod area;
 mod id;
@@ -17,12 +14,10 @@ pub use id::Id;
 
 use area::ResolvedArea;
 
-type HoverHandler<Message> = event::Handler<Message, Box<dyn Fn(Id) -> Message>>;
-type DragHandler<Message> = event::Handler<Message, Box<dyn Fn(Id, DragDelta) -> Message>>;
-type PressHandler<Message> =
-    event::Handler<Message, Box<dyn Fn(Id, PressEvent<Point>) -> Option<Message>>>;
-type ReleaseHandler<Message> =
-    event::Handler<Message, Box<dyn Fn(Id, ReleaseEvent<Point>) -> Option<Message>>>;
+type HoverHandler<Message> = event::Handler<Message, (Id,)>;
+type DragHandler<Message> = event::Handler<Message, (Id, event::DragEvent<event::Delta>)>;
+type PressHandler<Message> = event::Handler<Message, (Id, PressEvent<Point>)>;
+type ReleaseHandler<Message> = event::Handler<Message, (Id, ReleaseEvent<Point>)>;
 
 pub struct Interaction<D, Message: Clone> {
     pub(crate) id: Id,
@@ -76,66 +71,19 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
         }
     }
 
-    pub fn on_hover(mut self, message: Message) -> Self {
-        self.on_hover = Some(event::Handler::Direct(message));
-        self
-    }
+    event::impl_handlers!(
+        /// Sets the event handler for interaction hovering
+        hover: (Id,);
 
-    pub fn on_hover_with(mut self, closure: impl Fn(Id) -> Message + 'static) -> Self {
-        self.on_hover = Some(event::Handler::Closure(Box::new(closure)));
-        self
-    }
+        /// Sets the event handler for interaction dragging
+        drag: (Id, event::DragEvent<event::Delta>);
 
-    pub fn on_drag(mut self, message: Message) -> Self {
-        self.on_drag = Some(event::Handler::Direct(message));
-        self
-    }
+        /// Sets the event handler for interaction mouse presses
+        press: (Id, PressEvent<Point>);
 
-    pub fn on_drag_maybe(mut self, message: Option<Message>) -> Self {
-        self.on_drag = message.map(event::Handler::Direct);
-        self
-    }
-
-    pub fn on_drag_with(mut self, closure: impl Fn(Id, DragDelta) -> Message + 'static) -> Self {
-        self.on_drag = Some(event::Handler::Closure(Box::new(closure)));
-        self
-    }
-
-    pub fn on_press(mut self, message: Message) -> Self {
-        self.on_press = Some(event::Handler::Direct(message));
-        self
-    }
-
-    pub fn on_press_maybe(mut self, message: Option<Message>) -> Self {
-        self.on_press = message.map(event::Handler::Direct);
-        self
-    }
-
-    pub fn on_press_with(
-        mut self,
-        closure: impl Fn(Id, PressEvent<Point>) -> Option<Message> + 'static,
-    ) -> Self {
-        self.on_press = Some(event::Handler::Closure(Box::new(closure)));
-        self
-    }
-
-    pub fn on_release(mut self, message: Message) -> Self {
-        self.on_release = Some(event::Handler::Direct(message));
-        self
-    }
-
-    pub fn on_release_maybe(mut self, message: Option<Message>) -> Self {
-        self.on_release = message.map(event::Handler::Direct);
-        self
-    }
-
-    pub fn on_release_with(
-        mut self,
-        closure: impl Fn(Id, ReleaseEvent<Point>) -> Option<Message> + 'static,
-    ) -> Self {
-        self.on_release = Some(event::Handler::Closure(Box::new(closure)));
-        self
-    }
+        /// Sets the event handler for interaction mouse releases
+        release: (Id, ReleaseEvent<Point>);
+    );
 }
 
 /// A stored interaction waiting to be tested against mouse events.

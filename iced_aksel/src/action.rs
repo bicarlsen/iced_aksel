@@ -1,7 +1,7 @@
 use crate::interaction;
-use iced_core::Point;
+use iced_core::{Point, mouse};
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum Action<AxisId> {
     #[default]
     Idle,
@@ -10,12 +10,16 @@ pub enum Action<AxisId> {
         origin: Point,
         last_position: Point,
         total_delta: f32,
+        button: mouse::Button,
+        click_kind: mouse::click::Kind,
     },
     DraggingAxis {
         id: AxisId,
         origin: f32,
         last_position: f32,
         total_delta: f32,
+        button: mouse::Button,
+        click_kind: mouse::click::Kind,
     },
 }
 

@@ -15,26 +15,6 @@ use crate::interaction::InteractionsCache;
 use aksel::{Float, PlotRect, Transform};
 use iced_core::{Font, Rectangle};
 
-/// Normalized drag delta for panning operations.
-///
-/// Values are in the range 0.0-1.0 and can be passed directly to axis `pan` methods.
-///
-/// # Example
-///
-/// ```rust
-/// use iced_aksel::plot::DragDelta;
-///
-/// let delta = DragDelta { x: 0.1, y: 0.05 };
-/// // Use with state.pan_axes(..., delta.x, delta.y)
-/// ```
-#[derive(Debug, Clone, Copy)]
-pub struct DragDelta {
-    /// Normalized horizontal drag distance (0.0-1.0).
-    pub x: f32,
-    /// Normalized vertical drag distance (0.0-1.0).
-    pub y: f32,
-}
-
 /// Trait for drawable data on a plot.
 ///
 /// Implement this trait for your data types to render them on a chart. The `draw` method
