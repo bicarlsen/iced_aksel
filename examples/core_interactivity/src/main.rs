@@ -183,19 +183,20 @@ impl DrawingApp {
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.chart_state)
             .plot_data(&self.data, Self::X, Self::Y)
-            .on_hover_with(|_| Message::BackgroundHovered)
-            .on_press_with(|event: PressEvent<Point>| match event.button {
+            .on_hover(|_| Message::BackgroundHovered)
+            .on_press(|event: PressEvent<Point>| match event.button {
                 mouse::Button::Left => Some(Message::BackgroundPressed),
                 _ => None,
             })
-            .on_release_with(|event: ReleaseEvent<Point>| {
-                (event.button == mouse::Button::Right).then_some(Message::AddShape(event.position))
+            .on_release(|event: ReleaseEvent<Point>| {
+                (event.button == mouse::Button::Right && !event.was_dragging)
+                    .then_some(Message::AddShape(event.position))
             })
-            .on_drag_with(|event: DragEvent<Delta>| {
+            .on_drag(|event: DragEvent<Delta>| {
                 (event.button_held == mouse::Button::Left)
                     .then_some(Message::ChartDragged(event.delta))
             })
-            .on_scroll_with(Message::ChartScrolled);
+            .on_scroll(Message::ChartScrolled);
 
         column![
             text("Interactions Demo").size(30),
@@ -247,14 +248,14 @@ impl PlotData<f64, Message> for DrawingData {
 
             plot.add_interaction(
                 Interaction::new(rect.id.clone(), &shape)
-                    .on_hover_with(Message::ShapeHovered)
-                    .on_press_with(|id, event: PressEvent<Point>| {
+                    .on_hover(Message::ShapeHovered)
+                    .on_press(|id, event: PressEvent<Point>| {
                         (event.button == mouse::Button::Left).then_some(Message::ShapeSelected(id))
                     })
-                    .on_release_with(|id, event: ReleaseEvent<Point>| {
+                    .on_release(|id, event: ReleaseEvent<Point>| {
                         (event.button == mouse::Button::Right).then_some(Message::DeleteShape(id))
                     })
-                    .on_drag_with(Message::ShapeDragged),
+                    .on_drag(Message::ShapeDragged),
             );
             plot.render(shape);
         }

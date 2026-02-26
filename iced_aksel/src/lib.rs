@@ -169,7 +169,6 @@ pub enum Error<AxisId> {
 type ErrorHandler<AxisId, Message> = event::Handler<Message, (Error<AxisId>,)>;
 type HoverHandler<Message> = event::Handler<Message, (Point,)>;
 type DragHandler<Message> = event::Handler<Message, (DragEvent<Delta>,)>;
-type DragEndHandler<Message> = event::Handler<Message, ()>;
 type ScrollHandler<Message> = event::Handler<Message, (ScrollEvent<Point>,)>;
 type PressHandler<Message> = event::Handler<Message, (PressEvent<Point>,)>;
 type ReleaseHandler<Message> = event::Handler<Message, (ReleaseEvent<Point>,)>;
@@ -245,7 +244,6 @@ pub struct Chart<
     on_drag: Option<DragHandler<Message>>,
     on_hover: Option<HoverHandler<Message>>,
     on_scroll: Option<ScrollHandler<Message>>,
-    on_drag_end: Option<DragEndHandler<Message>>,
 
     // Axis Handlers
     on_axis_press: Option<AxisPressHandler<AxisId, Message>>,
@@ -291,7 +289,6 @@ where
             on_scroll: None,
             on_press: None,
             on_release: None,
-            on_drag_end: None,
             on_axis_press: None,
             on_axis_release: None,
             on_axis_drag: None,
@@ -426,11 +423,6 @@ where
         /// Errors can occur when axes referenced in `plot_data` are missing from the `State`
         /// or have conflicting orientations.
         error: (Error<AxisId>,);
-
-        /// Sets the event handler for when a drag action ends.
-        ///
-        /// Triggers when any drag action ends on the main plot area, an axis or an interaction.
-        drag_end: ();
 
         /// Sets the event handler for mouse presses on the main plot area.
         press: (PressEvent<Point>,);
@@ -607,18 +599,9 @@ where
         let Memory { action, .. } = memory;
 
         // If total drag exceeded deadband, it was a drag, not a click.
-        if action
+        let was_dragging = action
             .total_drag_delta()
-            .is_some_and(|delta| delta > self.drag_deadband)
-        {
-            // Tell the app the drag finished!
-            if let Some(handler) = &self.on_drag_end
-                && let Some(message) = handler.run(())
-            {
-                shell.publish(message);
-            }
-            return;
-        }
+            .is_some_and(|delta| delta > self.drag_deadband);
 
         match action {
             Action::Idle => (), // Do nothing
@@ -638,6 +621,7 @@ where
                             button,
                             previous_click_kind,
                             memory.keyboard_modifiers,
+                            was_dragging,
                         );
 
                         if let Some(message) = handler.run((id.clone(), event)) {
@@ -658,6 +642,7 @@ where
                         button,
                         previous_click_kind,
                         memory.keyboard_modifiers,
+                        was_dragging,
                     ),))
                     {
                         shell.publish(message);
@@ -676,6 +661,7 @@ where
                                 button,
                                 previous_click_kind,
                                 memory.keyboard_modifiers,
+                                was_dragging,
                             ),
                         ))
                     {

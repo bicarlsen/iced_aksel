@@ -95,6 +95,7 @@ pub struct ReleaseEvent<P> {
     pub button: mouse::Button,
     pub click_kind: Option<mouse::click::Kind>,
     pub modifiers: keyboard::Modifiers,
+    pub was_dragging: bool,
 }
 
 impl<P> ReleaseEvent<P> {
@@ -103,12 +104,14 @@ impl<P> ReleaseEvent<P> {
         button: mouse::Button,
         click_kind: Option<mouse::click::Kind>,
         modifiers: keyboard::Modifiers,
+        was_dragging: bool,
     ) -> Self {
         Self {
             position,
             button,
             click_kind,
             modifiers,
+            was_dragging,
         }
     }
 }
