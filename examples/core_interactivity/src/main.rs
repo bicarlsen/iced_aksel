@@ -1,91 +1,70 @@
-//! iced_aksel Drawing Library Example (With Zoom & Z-Index Testing)
+//! Minimal iced_aksel plot example.
+
+use iced::widget::{button, row, text};
 use iced::{
-    Element, Length, Point, Theme,
-    mouse::{self, ScrollDelta},
-    widget::{column, container, text},
+    Color, Element, Length, Point, Theme, Vector, mouse,
+    widget::{column, container},
 };
+use iced_aksel::interaction::{Area, Id};
+use iced_aksel::shape::Rectangle;
 use iced_aksel::{
-    Axis, Cached, Chart, Delta, DragEvent, Interaction, PlotPoint, PressEvent, ReleaseEvent,
-    ScrollEvent, State,
+    Axis, Chart, Delta, DragEvent, Interaction, Measure, PlotPoint, ReleaseEvent, Shape, State,
+    Stroke,
     axis::{self},
-    interaction,
     plot::{Plot, PlotData},
     scale::Linear,
-    shape::Rectangle,
+    shape,
 };
+use std::ops::Add;
+// -----------------------------------------------------------------------------
+// 2. Application State
+// -----------------------------------------------------------------------------
 
-fn main() -> iced::Result {
-    iced::application(DrawingApp::new, DrawingApp::update, DrawingApp::view)
-        .theme(Theme::CatppuccinMocha)
-        .run()
+#[derive(Debug, Clone, PartialEq)]
+enum Tool {
+    Select,
+    Rectangle,
 }
 
-// -----------------------------------------------------------------------------
-// App State
-// -----------------------------------------------------------------------------
-struct DrawingApp {
+struct TemplateApp {
+    tool: Tool,
     chart_state: State<&'static str, f64>,
-    data: Cached<DrawingData>,
+    data: DrawingSystem,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
-    // Shape Interactions
-    ShapeHovered(interaction::Id),
-    ShapeDragged(interaction::Id, DragEvent<Delta>),
-    ShapeSelected(interaction::Id),
-
-    // Global Interactions
-    AddShape(Point),
-    DeleteShape(interaction::Id),
-    BackgroundHovered,
-    BackgroundPressed,
-    ChartDragged(Delta),
-    ChartScrolled(ScrollEvent<Point>),
+    ChartHovered,
+    DrawingHovered(Id),
+    LeftMouseRelease(ReleaseEvent<Point>),
+    LeftMouseDragged(DragEvent<Delta>),
+    MiddleMouseDragged(DragEvent<Delta>),
+    ToolSelected(Tool),
 }
 
-impl DrawingApp {
+impl TemplateApp {
     const X: &'static str = "x";
     const Y: &'static str = "y";
 
     fn new() -> (Self, iced::Task<Message>) {
         let mut state = State::new();
 
-        state.set_axis(
-            Self::X,
-            Axis::new(Linear::new(0., 100.), axis::Position::Bottom),
-        );
-        state.set_axis(
-            Self::Y,
-            Axis::new(Linear::new(0., 100.), axis::Position::Left),
-        );
+        // -- Setup Axes --
+        // Customizable: Change Linear to Logarithmic or adjust ranges here.
+        let x_scale = Linear::new(0.0, 100.0);
+        let y_scale = Linear::new(0.0, 100.0);
 
-        let mock_data = DrawingData {
-            rects: vec![
-                RectShape {
-                    x: 20.0,
-                    y: 20.0,
-                    w: 30.0,
-                    h: 30.0,
-                    id: interaction::Id::unique(),
-                },
-                RectShape {
-                    x: 40.0,
-                    y: 40.0,
-                    w: 30.0,
-                    h: 30.0,
-                    id: interaction::Id::unique(),
-                },
-            ],
-            hovered_id: None,
-            selected_id: None,
-            dragging_id: None,
-        };
+        let x_axis = Axis::new(x_scale, axis::Position::Bottom);
+        let y_axis = Axis::new(y_scale, axis::Position::Left);
+
+        state.set_axis(Self::X, x_axis);
+        state.set_axis(Self::Y, y_axis);
 
         (
             Self {
                 chart_state: state,
-                data: Cached::new(mock_data),
+                data: DrawingSystem::new(),
+                tool: Tool::Select,
             },
             iced::Task::none(),
         )
@@ -93,171 +72,199 @@ impl DrawingApp {
 
     fn update(&mut self, message: Message) {
         match message {
-            // --- Shape Interactions ---
-            Message::ShapeHovered(id) => self.data.edit().hovered_id = Some(id),
-            Message::ShapeDragged(id, DragEvent { delta, .. }) => {
-                let data = self.data.edit();
-
-                let (x_min, x_max) = self.chart_state.axis(&Self::X).domain();
-                let (y_min, y_max) = self.chart_state.axis(&Self::Y).domain();
-
-                let x_width = x_max - x_min;
-                let y_height = y_max - y_min;
-
-                // Convert normalized delta to data-space coordinates
-                let dx = (delta.x as f64) * x_width;
-                let dy = (delta.y as f64) * y_height;
-
-                if let Some(rect) = data.rects.iter_mut().find(|r| r.id == id) {
-                    rect.x += dx;
-                    rect.y += dy;
-                };
+            Message::ChartHovered => {
+                println!("ChartHovered!");
             }
-            Message::AddShape(point) => {
-                // Reverse-project the normalized Point (0.0-1.0) into data-space
-                let data_x = self.chart_state.axis(&Self::X).denormalize(point.x);
-                let data_y = self.chart_state.axis(&Self::Y).denormalize(point.y);
-
-                self.data.edit().rects.push(RectShape {
-                    x: data_x - 7.5,
-                    y: data_y - 7.5,
-                    w: 15.0,
-                    h: 15.0,
-                    id: interaction::Id::unique(),
-                })
+            Message::DrawingHovered(id) => {
+                println!("drawing hovered id: {:?}", id);
             }
-            Message::DeleteShape(id) => {
-                self.data.edit().rects.retain(|rect| rect.id != id);
-            }
-            Message::ShapeSelected(id) => {
-                self.data.edit().selected_id = Some(id);
-            }
-            // Message::ShapeClicked(id) => self.data.edit().selected_id = Some(id),
-            // Message::ShapePressed(id) => {
-            //     if self.mode == AppMode::Interact {
-            //         let data = self.data.edit();
-            //         data.selected_id = Some(id);
-            //         data.dragging_id = Some(id);
-            //     }
-            // }
-
-            // --- Background Interactions ---
-            Message::BackgroundHovered => self.data.edit().hovered_id = None,
-            Message::BackgroundPressed => {
-                let data = self.data.edit();
-                data.selected_id = None;
-                data.dragging_id = None;
+            Message::ToolSelected(tool) => {
+                self.tool = tool;
             }
 
-            // --- Drag & Zoom Routing ---
-            Message::ChartDragged(delta) => {
-                self.chart_state
-                    .pan_axes(Self::X, Self::Y, delta.x, delta.y);
+            Message::LeftMouseDragged(drag_event) => {
+                let delta = drag_event.delta;
+
+                self.chart_state.axis_mut(&Self::X).pan(delta.x);
+                self.chart_state.axis_mut(&Self::Y).pan(delta.y);
             }
-            Message::ChartScrolled(ScrollEvent {
-                delta, position, ..
-            }) => {
-                // Determine zoom factor (0.9 to zoom in, 1.1 to zoom out)
-                let zoom_factor = match delta {
-                    ScrollDelta::Lines { y, .. } | ScrollDelta::Pixels { y, .. } => {
-                        if y > 0.0 {
-                            1.1
-                        } else {
-                            0.9
-                        }
+
+            Message::MiddleMouseDragged(drag_event) => {
+                let delta = drag_event.delta;
+
+                self.chart_state.axis_mut(&Self::X).pan(delta.x);
+                self.chart_state.axis_mut(&Self::Y).pan(delta.y);
+            }
+
+            Message::LeftMouseRelease(release_event) => {
+                if release_event.was_dragging {
+                    return;
+                }
+
+                if matches!(
+                    release_event.click_kind,
+                    Some(iced::advanced::mouse::click::Kind::Single)
+                ) {
+                    if self.tool == Tool::Rectangle {
+                        let x_plot = self
+                            .chart_state
+                            .axis(&Self::X)
+                            .denormalize(release_event.position.x);
+                        let y_plot = self
+                            .chart_state
+                            .axis(&Self::Y)
+                            .denormalize(release_event.position.y);
+
+                        let p1 = PlotPoint::new(x_plot, y_plot);
+                        let p2 = PlotPoint::new(x_plot + 15., y_plot + 15.);
+
+                        // Create a rectangle
+                        let rect = Drawing::Rectangle {
+                            id: Id::unique(),
+                            p1,
+                            p2,
+                            fill: Color::from_rgb(0., 0., 1.),
+                            stroke: Stroke::new(Color::WHITE, Measure::Screen(1.)),
+                        };
+
+                        self.data.add_drawing(rect);
                     }
-                };
-
-                self.chart_state
-                    .axis_mut(&Self::X)
-                    .zoom(zoom_factor, Some(position.x));
-                self.chart_state
-                    .axis_mut(&Self::Y)
-                    .zoom(zoom_factor, Some(position.y));
-
-                self.data.edit().hovered_id = None; // Kill hovers during zoom
+                }
             }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
+        let btn_row = row![
+            button("Select").on_press(Message::ToolSelected(Tool::Select)),
+            button("Rectangle").on_press(Message::ToolSelected(Tool::Rectangle)),
+            text(format!["Tool Selected: {:?}", self.tool])
+        ]
+        .spacing(16.);
+
         let chart = Chart::new(&self.chart_state)
             .plot_data(&self.data, Self::X, Self::Y)
-            .on_hover(|_| Message::BackgroundHovered)
-            .on_press(|event: PressEvent<Point>| match event.button {
-                mouse::Button::Left => Some(Message::BackgroundPressed),
+            .on_drag(|v: DragEvent<Delta>| match v.button_held {
+                mouse::Button::Left => Some(Message::LeftMouseDragged(v)),
+                mouse::Button::Middle => Some(Message::MiddleMouseDragged(v)),
                 _ => None,
             })
-            .on_release(|event: ReleaseEvent<Point>| {
-                (event.button == mouse::Button::Right && !event.was_dragging)
-                    .then_some(Message::AddShape(event.position))
+            .on_release(|v: ReleaseEvent<Point>| {
+                if matches!(v.button, mouse::Button::Left) {
+                    Some(Message::LeftMouseRelease(v))
+                } else {
+                    None
+                }
             })
-            .on_drag(|event: DragEvent<Delta>| {
-                (event.button_held == mouse::Button::Left)
-                    .then_some(Message::ChartDragged(event.delta))
-            })
-            .on_scroll(Message::ChartScrolled);
+            .on_hover(|v| Some(Message::ChartHovered));
 
-        column![
-            text("Interactions Demo").size(30),
-            text("Right click to new shapes").size(16),
-            container(chart).width(Length::Fill).height(Length::Fill)
-        ]
-        .spacing(20)
-        .padding(20)
-        .into()
+        column![btn_row, chart]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 }
 
 // -----------------------------------------------------------------------------
-// Data Structs
+// 3. Data & Drawing Logic
 // -----------------------------------------------------------------------------
-struct RectShape {
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-    id: interaction::Id,
-}
-struct DrawingData {
-    rects: Vec<RectShape>,
-    hovered_id: Option<interaction::Id>,
-    selected_id: Option<interaction::Id>,
-    dragging_id: Option<interaction::Id>,
+
+#[derive(Debug, Clone)]
+enum Drawing {
+    Rectangle {
+        id: Id,
+        p1: PlotPoint,
+        p2: PlotPoint,
+        fill: Color,
+        stroke: Stroke<f64>,
+    },
 }
 
-impl PlotData<f64, Message> for DrawingData {
-    fn draw(&self, plot: &mut Plot<f64, Message>, theme: &Theme) {
-        let palette = theme.palette();
+impl Drawing {
+    fn add_to_plot(self, plot: &mut Plot<f64, Message>) {
+        match self {
+            Drawing::Rectangle {
+                id,
+                p1,
+                p2,
+                fill,
+                stroke,
+            } => {
+                let shape = shape::Rectangle::corners(p1, p2).fill(fill).stroke(stroke);
+                // println!("{:?}", rectangle_plot(p1, p2));
+                // println!("{:?} {:?}", p1, p2);
 
-        // Shapes draw in order of the array.
-        // Newer shapes are pushed to the end, drawing ON TOP of older shapes.
-        for rect in &self.rects {
-            let mut color = palette.primary;
-            if Some(&rect.id) == self.selected_id.as_ref() {
-                color = palette.danger;
-            } else if Some(&rect.id) == self.hovered_id.as_ref() {
-                color = palette.success;
+                // let interaction = Interaction::new(id, rectangle_plot(p1, p2))
+                //     .on_hover(|id| Some(Message::DrawingHovered(id)))
+                //     .on_drag(|_, _| None);
+
+                // plot.add_interaction(interaction);
+                plot.render(shape);
             }
-
-            let shape = Rectangle::corners(
-                PlotPoint::new(rect.x, rect.y),
-                PlotPoint::new(rect.x + rect.w, rect.y + rect.h),
-            )
-            .fill(color);
-
-            plot.add_interaction(
-                Interaction::new(rect.id.clone(), &shape)
-                    .on_hover(Message::ShapeHovered)
-                    .on_press(|id, event: PressEvent<Point>| {
-                        (event.button == mouse::Button::Left).then_some(Message::ShapeSelected(id))
-                    })
-                    .on_release(|id, event: ReleaseEvent<Point>| {
-                        (event.button == mouse::Button::Right).then_some(Message::DeleteShape(id))
-                    })
-                    .on_drag(Message::ShapeDragged),
-            );
-            plot.render(shape);
         }
+    }
+}
+
+struct DrawingSystem {
+    drawings: Vec<Drawing>,
+    ghost: Option<(Tool, Vec<Point>)>,
+}
+
+impl DrawingSystem {
+    fn new() -> Self {
+        Self {
+            drawings: vec![],
+            ghost: None,
+        }
+    }
+
+    fn add_drawing(&mut self, drawing: Drawing) {
+        self.drawings.push(drawing);
+    }
+}
+
+impl PlotData<f64, Message> for DrawingSystem {
+    fn draw(&self, plot: &mut Plot<f64, Message>, _theme: &Theme) {
+        for drawing in self.drawings.clone().into_iter() {
+            drawing.add_to_plot(plot);
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 1. Application Entry
+// -----------------------------------------------------------------------------
+fn main() -> iced::Result {
+    iced::application(TemplateApp::new, TemplateApp::update, TemplateApp::view)
+        .theme(Theme::Dark)
+        .run()
+}
+
+/// Creates a rectangle area in pure plot data coordinates from two diagonal points.
+pub fn rectangle_plot(p1: PlotPoint<f64>, p2: PlotPoint<f64>) -> Area<f64> {
+    // 1. Find the anchor point (usually the minimum x and y)
+    // We use a simple if/else because floating point numbers (f32/f64)
+    // only implement PartialOrd, not Ord.
+    let (min_x, max_x) = if p1.x < p2.x {
+        (p1.x, p2.x)
+    } else {
+        (p2.x, p1.x)
+    };
+    let (min_y, max_y) = if p1.y < p2.y {
+        (p1.y, p2.y)
+    } else {
+        (p2.y, p1.y)
+    };
+
+    // 2. Calculate the width and height in data space
+    let w = max_x - min_x;
+    let h = max_y - min_y;
+
+    // 3. Construct the Rect using the Measure::Plot wrapper
+    Area::Rect {
+        x: min_x,
+        y: min_y,
+        width: Measure::Plot(w),
+        height: Measure::Plot(h),
     }
 }
