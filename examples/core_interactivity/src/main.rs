@@ -1,6 +1,6 @@
 //! iced_aksel Drawing Library Example (With Zoom & Z-Index Testing)
 use iced::{
-    Element, Length, Point, Theme,
+    Element, Length, Point, Theme, keyboard,
     mouse::{self, ScrollDelta},
     widget::{column, container, text},
 };
@@ -31,7 +31,7 @@ struct DrawingApp {
 #[derive(Debug, Clone)]
 enum Message {
     // Shape Interactions
-    ShapeHovered(interaction::Id),
+    ShapeHovered(interaction::Id, keyboard::Modifiers),
     ShapeDragged(interaction::Id, DragEvent<Delta>),
     ShapeSelected(interaction::Id),
 
@@ -94,7 +94,7 @@ impl DrawingApp {
     fn update(&mut self, message: Message) {
         match message {
             // --- Shape Interactions ---
-            Message::ShapeHovered(id) => self.data.edit().hovered_id = Some(id),
+            Message::ShapeHovered(id, modifiers) => self.data.edit().hovered_id = Some(id),
             Message::ShapeDragged(id, DragEvent { delta, .. }) => {
                 let data = self.data.edit();
 
