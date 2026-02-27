@@ -5,12 +5,21 @@ use aksel::Float;
 use iced_core::{Border, Color, Layout, Point, Rectangle, renderer::Quad};
 use iced_core::{keyboard, mouse};
 
-use crate::interaction::{Id, InteractionsCache};
+use crate::interaction::{self, InteractionsCache};
 use crate::{
     Action, LayerId, Quality, State,
     layer::Layer,
     render::{Backend, RenderCache},
 };
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HoverIdentity<AxisId> {
+    Plot,
+    Interaction(interaction::Id),
+    Axis(AxisId),
+    // For the future, when we track wether the mouse left bound
+    OutsideBounds,
+}
 
 #[derive(Debug, PartialEq)]
 struct LayerIdentifier {
@@ -68,7 +77,7 @@ pub struct Memory<AxisId, Message: Clone, Renderer: crate::Renderer> {
     pub cache: Option<RefCell<RenderCache<Renderer>>>,
     pub last_signature: Option<CacheSignature>,
     pub interaction_cache: RefCell<InteractionsCache<Message>>,
-    pub last_hovered_id: Option<Id>,
+    pub last_hovered_identity: HoverIdentity<AxisId>,
     pub partition_grid: Vec<Rectangle>,
     pub keyboard_modifiers: keyboard::Modifiers,
 }
@@ -81,7 +90,7 @@ impl<AxisId, Message: Clone, Renderer: crate::Renderer> Memory<AxisId, Message, 
             cache: None,
             interaction_cache: RefCell::new(InteractionsCache::new()),
             last_signature: None,
-            last_hovered_id: None,
+            last_hovered_identity: HoverIdentity::OutsideBounds,
             partition_grid: Vec::new(),
             keyboard_modifiers: keyboard::Modifiers::NONE,
         }

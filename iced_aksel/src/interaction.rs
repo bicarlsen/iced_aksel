@@ -1,5 +1,6 @@
 use aksel::{Float, Transform};
 use derivative::Derivative;
+use iced::keyboard;
 use iced_core::{Point, Rectangle};
 use indexmap::IndexMap;
 use rapidhash::fast::RandomState;
@@ -14,7 +15,7 @@ pub use id::Id;
 
 use area::ResolvedArea;
 
-type HoverHandler<Message> = event::Handler<Message, (Id,)>;
+type HoverHandler<Message> = event::Handler<Message, (Id, keyboard::Modifiers)>;
 type DragHandler<Message> = event::Handler<Message, (Id, event::DragEvent<event::Delta>)>;
 type PressHandler<Message> = event::Handler<Message, (Id, PressEvent<Point>)>;
 type ReleaseHandler<Message> = event::Handler<Message, (Id, ReleaseEvent<Point>)>;
@@ -73,7 +74,7 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
 
     event::impl_handlers!(
         /// Sets the event handler for interaction hovering
-        hover: (Id,);
+        hover: (Id, keyboard::Modifers);
 
         /// Sets the event handler for interaction dragging
         drag: (Id, event::DragEvent<event::Delta>);

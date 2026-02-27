@@ -1,6 +1,21 @@
 use iced_core::{keyboard, mouse};
 
 #[derive(Debug, Clone, Copy)]
+pub struct MoveEvent<P> {
+    pub position: P,
+    pub modifiers: keyboard::Modifiers,
+}
+
+impl<P> MoveEvent<P> {
+    pub(crate) fn new(position: P, modifiers: keyboard::Modifiers) -> Self {
+        Self {
+            position,
+            modifiers,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct ScrollEvent<P> {
     pub position: P,
     pub delta: mouse::ScrollDelta,
@@ -160,6 +175,8 @@ macro_rules! impl_handlers {
 }
 
 pub(crate) use impl_handlers;
+
+use crate::interaction;
 
 macro_rules! impl_into_handler_for_fn {
     // 0 args
