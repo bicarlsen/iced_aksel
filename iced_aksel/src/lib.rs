@@ -720,6 +720,8 @@ where
                             memory.last_hovered_identity = identity;
                             return true;
                         }
+
+                        return false;
                     }
 
                     if memory.last_hovered_identity != HoverIdentity::Plot {
@@ -1165,8 +1167,7 @@ where
                             if let Some(message) = self
                                 .on_hover
                                 .as_ref()
-                                .map(|handler| handler.run((memory.keyboard_modifiers,)))
-                                .flatten()
+                                .and_then(|handler| handler.run((memory.keyboard_modifiers,)))
                             {
                                 shell.publish(message);
                             }
@@ -1175,8 +1176,8 @@ where
                             if let Some(message) = memory
                                 .interaction_cache
                                 .borrow()
-                                .get(&id)
-                                .map(|interaction| {
+                                .get(id)
+                                .and_then(|interaction| {
                                     interaction.on_hover.as_ref().map(
                                         |handler: &Handler<
                                             Message,
@@ -1186,7 +1187,6 @@ where
                                         },
                                     )
                                 })
-                                .flatten()
                                 .flatten()
                             {
                                 shell.publish(message);
