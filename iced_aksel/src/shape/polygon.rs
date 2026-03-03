@@ -29,7 +29,7 @@ pub struct Polygon<D> {
 }
 
 impl<D: Float, R: crate::Renderer> Shape<D, R> for Polygon<D> {
-    fn render<Message>(self, ctx: &mut plot::Context<'_, D, Message, R>) {
+    fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             center,
             radius,

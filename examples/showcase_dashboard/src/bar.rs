@@ -164,7 +164,7 @@ impl BarChart {
         self.update_labels();
     }
 
-    pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
+    pub fn chart(&self) -> Chart<'_, AxisId, f64, crate::Message> {
         let (x_axis_id, y_axis_id) = match self.orientation {
             Orientation::Horizontal => (Self::VALUE_AXIS, Self::BAR_AXIS),
             Orientation::Vertical => (Self::BAR_AXIS, Self::VALUE_AXIS),
@@ -263,8 +263,8 @@ impl BarChart {
     }
 }
 
-impl PlotData<f64> for BarChart {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {
+impl PlotData<f64, crate::Message> for BarChart {
+    fn draw(&self, plot: &mut Plot<f64, crate::Message>, theme: &Theme) {
         let palette = theme.palette();
         let bar_color = palette.primary;
 
@@ -285,7 +285,7 @@ impl PlotData<f64> for BarChart {
                 }
             };
 
-            plot.add_shape(shape);
+            plot.render(shape);
         }
     }
 }

@@ -32,7 +32,7 @@ pub struct Polyline<D> {
 }
 
 impl<D: Float, R: crate::Renderer> Shape<D, R> for Polyline<D> {
-    fn render<Message>(self, ctx: &mut plot::Context<'_, D, Message, R>) {
+    fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             points,
             stroke,

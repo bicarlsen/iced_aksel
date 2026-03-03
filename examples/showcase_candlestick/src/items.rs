@@ -47,8 +47,8 @@ pub struct CandleItems {
     pub candle_width: Measure<f64>,
 }
 
-impl PlotData<f64> for CandleItems {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &iced::Theme) {
+impl PlotData<f64, crate::Message> for CandleItems {
+    fn draw(&self, plot: &mut Plot<f64, crate::Message>, theme: &iced::Theme) {
         let palette = theme.extended_palette();
         // Create rectangles from candle data during draw
         for (time, candle) in &self.candles {
@@ -70,8 +70,8 @@ impl PlotData<f64> for CandleItems {
             )
             .fill(color);
 
-            plot.add_shape(wick);
-            plot.add_shape(body);
+            plot.render(wick);
+            plot.render(body);
         }
     }
 }
@@ -82,8 +82,8 @@ pub struct VolumeItems {
     pub bar_width: Measure<f64>,
 }
 
-impl PlotData<f64> for VolumeItems {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &iced::Theme) {
+impl PlotData<f64, crate::Message> for VolumeItems {
+    fn draw(&self, plot: &mut Plot<f64, crate::Message>, theme: &iced::Theme) {
         let palette = theme.extended_palette();
         // Create volume bars from candle data during draw
         for (time, candle) in &self.candles {
@@ -97,7 +97,7 @@ impl PlotData<f64> for VolumeItems {
             )
             .fill(color);
 
-            plot.add_shape(bar);
+            plot.render(bar);
         }
     }
 }
@@ -107,8 +107,8 @@ pub struct SmaItems {
     pub points: Vec<PlotPoint<f64>>,
 }
 
-impl PlotData<f64> for SmaItems {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &iced::Theme) {
+impl PlotData<f64, crate::Message> for SmaItems {
+    fn draw(&self, plot: &mut Plot<f64, crate::Message>, theme: &iced::Theme) {
         let palette = theme.palette();
 
         if !self.points.is_empty() {
@@ -116,7 +116,7 @@ impl PlotData<f64> for SmaItems {
                 self.points.clone(),
                 Stroke::with_style(palette.warning, Measure::Screen(1.5), StrokeStyle::Solid),
             );
-            plot.add_shape(sma_line);
+            plot.render(sma_line);
         }
     }
 }
@@ -128,8 +128,8 @@ pub struct BbandsItems {
     pub lower: Vec<PlotPoint<f64>>,
 }
 
-impl PlotData<f64> for BbandsItems {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &iced::Theme) {
+impl PlotData<f64, crate::Message> for BbandsItems {
+    fn draw(&self, plot: &mut Plot<f64, crate::Message>, theme: &iced::Theme) {
         let palette = theme.palette();
 
         if !self.upper.is_empty() {
@@ -141,7 +141,7 @@ impl PlotData<f64> for BbandsItems {
                     style: StrokeStyle::Solid,
                 },
             );
-            plot.add_shape(upper_line);
+            plot.render(upper_line);
         }
 
         if !self.middle.is_empty() {
@@ -153,7 +153,7 @@ impl PlotData<f64> for BbandsItems {
                     style: StrokeStyle::Solid,
                 },
             );
-            plot.add_shape(middle_line);
+            plot.render(middle_line);
         }
 
         if !self.lower.is_empty() {
@@ -165,7 +165,7 @@ impl PlotData<f64> for BbandsItems {
                     style: StrokeStyle::Solid,
                 },
             );
-            plot.add_shape(lower_line);
+            plot.render(lower_line);
         }
     }
 }

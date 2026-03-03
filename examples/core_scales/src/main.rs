@@ -165,19 +165,19 @@ struct StyleableData {
     color: fn(&Theme) -> Color,
 }
 
-impl PlotData<f64> for StyleableData {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {
+impl PlotData<f64, Message> for StyleableData {
+    fn draw(&self, plot: &mut Plot<f64, Message>, theme: &Theme) {
         let color = (self.color)(theme);
 
         // Draw the line
-        plot.add_shape(Polyline::new(
+        plot.render(Polyline::new(
             self.line.clone(),
             Stroke::new(color, Measure::Screen(2.5)),
         ));
 
         // Draw markers
         for point in &self.markers {
-            plot.add_shape(Ellipse::circle(*point, Measure::Screen(4.0)).fill(color));
+            plot.render(Ellipse::circle(*point, Measure::Screen(4.0)).fill(color));
         }
     }
 }

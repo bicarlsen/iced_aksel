@@ -102,6 +102,18 @@ impl<P> PressEvent<P> {
             modifiers,
         }
     }
+
+    pub fn is_single_click(&self) -> bool {
+        self.click_kind == mouse::click::Kind::Single
+    }
+
+    pub fn is_double_click(&self) -> bool {
+        self.click_kind == mouse::click::Kind::Double
+    }
+
+    pub fn is_triple_click(&self) -> bool {
+        self.click_kind == mouse::click::Kind::Triple
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -128,6 +140,21 @@ impl<P> ReleaseEvent<P> {
             modifiers,
             was_dragging,
         }
+    }
+
+    pub fn is_single_click(&self) -> bool {
+        self.click_kind
+            .is_some_and(|kind| kind == mouse::click::Kind::Single)
+    }
+
+    pub fn is_double_click(&self) -> bool {
+        self.click_kind
+            .is_some_and(|kind| kind == mouse::click::Kind::Double)
+    }
+
+    pub fn is_triple_click(&self) -> bool {
+        self.click_kind
+            .is_some_and(|kind| kind == mouse::click::Kind::Triple)
     }
 }
 

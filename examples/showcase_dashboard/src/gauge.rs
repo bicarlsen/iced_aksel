@@ -378,7 +378,7 @@ impl Gauge {
     //  View & Output
     // =========================================================
 
-    pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
+    pub fn chart(&self) -> Chart<'_, AxisId, f64, crate::Message> {
         Chart::new(&self.chart_state).plot_data(self, Self::X_AXIS, Self::Y_AXIS)
     }
 
@@ -399,12 +399,12 @@ impl Gauge {
 
 // --- Drawing Logic ---
 
-impl PlotData<f64> for Gauge {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {
+impl PlotData<f64, crate::Message> for Gauge {
+    fn draw(&self, plot: &mut Plot<f64, crate::Message>, theme: &Theme) {
         // Debug Overlay
         if self.debug_mode {
             let limit = GAUGE_RADIUS + self.padding;
-            plot.add_shape(
+            plot.render(
                 Rectangle::centered(
                     PlotPoint::new(0.0, 0.0),
                     Measure::Plot(limit * 2.0),
@@ -475,7 +475,7 @@ impl PlotData<f64> for Gauge {
                 let current_inner = Measure::Plot(1.02);
 
                 if zone_end_angle > current_angle {
-                    plot.add_shape(
+                    plot.render(
                         Arc::new(center, current_radius, current_angle, zone_end_angle)
                             .inner_radius(current_inner)
                             .fill(zone_color),
@@ -486,7 +486,7 @@ impl PlotData<f64> for Gauge {
         }
 
         // 4. Main Track
-        plot.add_shape(
+        plot.render(
             Arc::new(center, radius, self.start_angle, self.end_angle)
                 .inner_radius(inner_radius)
                 .fill(track_color),
@@ -494,7 +494,7 @@ impl PlotData<f64> for Gauge {
 
         // 5. Active Bar
         if value_ratio > 0.001 {
-            plot.add_shape(
+            plot.render(
                 Arc::new(center, radius, self.start_angle, value_angle)
                     .inner_radius(inner_radius)
                     .fill(active_color),
@@ -518,7 +518,7 @@ impl PlotData<f64> for Gauge {
             for i in 0..self.tick_count {
                 let angle = (i as f32).mul_add(step, self.start_angle);
                 let half_deg = 0.5f32.to_radians();
-                plot.add_shape(
+                plot.render(
                     Arc::new(center, tick_pos, angle - half_deg, angle + half_deg)
                         .inner_radius(tick_inner)
                         .fill(tick_color),
@@ -542,7 +542,7 @@ impl PlotData<f64> for Gauge {
                 || format!("{:.p$}{}", self.value, self.unit, p = self.decimals),
                 |fmt| fmt(self.value),
             );
-            plot.add_shape(
+            plot.render(
                 Label::new(text, pos)
                     .fill(active_color)
                     .size(Measure::Screen(32.0))
@@ -551,7 +551,7 @@ impl PlotData<f64> for Gauge {
         }
 
         if let Some((pos, vert)) = resolve_pos(self.title_placement) {
-            plot.add_shape(
+            plot.render(
                 Label::new(&self.label, pos)
                     .fill(Color {
                         a: 0.7,

@@ -14,7 +14,7 @@ use iced::{
 };
 use iced_aksel::{
     Axis, Chart, Measure, Plot, PlotData, PlotPoint, State, Stroke,
-    axis::{MarkerPosition, Position, TickContext, TickLine, TickResult},
+    axis::{MarkerContext, MarkerPosition, Position, TickContext, TickLine, TickResult},
     scale, shape,
 };
 
@@ -165,12 +165,16 @@ impl AnalyzerApp {
     fn view(&self) -> Element<'_, Message> {
         let chart = Chart::new(&self.state)
             .plot_data(&self.spectrum_layer, FREQ_AXIS_ID, DB_AXIS_ID)
-            .marker(&FREQ_AXIS_ID, MarkerPosition::Cursor, |ctx| {
-                Some(ctx.marker(format_frequency_label(ctx.value)))
-            })
-            .marker(&DB_AXIS_ID, MarkerPosition::Cursor, |ctx| {
-                Some(ctx.marker(format_db_label(ctx.value)))
-            });
+            .marker(
+                &FREQ_AXIS_ID,
+                MarkerPosition::Cursor,
+                |ctx: MarkerContext<'_, f64>| Some(ctx.marker(format_frequency_label(ctx.value))),
+            )
+            .marker(
+                &DB_AXIS_ID,
+                MarkerPosition::Cursor,
+                |ctx: MarkerContext<'_, f64>| Some(ctx.marker(format_db_label(ctx.value))),
+            );
 
         let pick_row = row![
             text("Audio Input: "),
@@ -223,8 +227,8 @@ struct SpectrumLayer {
     pub curve: Vec<PlotPoint<f64>>,
 }
 
-impl PlotData<f64> for SpectrumLayer {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &iced::Theme) {
+impl PlotData<f64, Message> for SpectrumLayer {
+    fn draw(&self, plot: &mut Plot<f64, Message>, theme: &iced::Theme) {
         if self.curve.len() < 2 {
             return;
         }
@@ -236,7 +240,7 @@ impl PlotData<f64> for SpectrumLayer {
         fill_points.extend(self.curve.iter().copied());
         fill_points.push(PlotPoint::new(MAX_FREQ, MIN_DB));
 
-        plot.add_shape(
+        plot.render(
             shape::Area::new(fill_points).fill(palette.primary.base.color.scale_alpha(0.4)),
         );
 
@@ -247,10 +251,10 @@ impl PlotData<f64> for SpectrumLayer {
         };
 
         let glow_stroke = Stroke::new(glow_color, Measure::Screen(6.0));
-        plot.add_shape(shape::Polyline::new(self.curve.clone(), glow_stroke));
+        plot.render(shape::Polyline::new(self.curve.clone(), glow_stroke));
 
         let line_stroke = Stroke::new(palette.background.base.text, Measure::Screen(2.2));
-        plot.add_shape(shape::Polyline::new(self.curve.clone(), line_stroke));
+        plot.render(shape::Polyline::new(self.curve.clone(), line_stroke));
     }
 }
 

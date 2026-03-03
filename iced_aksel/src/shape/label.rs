@@ -111,7 +111,7 @@ pub struct Label<D> {
 }
 
 impl<D: Float + Debug, R: crate::Renderer> Shape<D, R> for Label<D> {
-    fn render<Message>(self, ctx: &mut plot::Context<'_, D, Message, R>) {
+    fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             content,
             position,

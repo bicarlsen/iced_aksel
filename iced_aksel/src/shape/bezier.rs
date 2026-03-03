@@ -46,7 +46,7 @@ pub struct Bezier<D> {
 }
 
 impl<D: Float, R: crate::Renderer> Shape<D, R> for Bezier<D> {
-    fn render<Message>(self, ctx: &mut plot::Context<'_, D, Message, R>) {
+    fn render(self, ctx: &mut plot::Context<'_, D, R>) {
         let Self {
             start,
             control_1,
