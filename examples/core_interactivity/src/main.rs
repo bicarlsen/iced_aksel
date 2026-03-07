@@ -119,11 +119,11 @@ impl DrawingApp {
                 let data_y = self.chart_state.axis(&Self::Y).denormalize(point.y);
 
                 self.data.edit().rects.push(RectShape {
+                    id: interaction::Id::unique(),
                     x: data_x - 7.5,
                     y: data_y - 7.5,
                     w: 15.0,
                     h: 15.0,
-                    id: interaction::Id::unique(),
                 })
             }
             Message::DeleteShape(id) => {
@@ -132,14 +132,6 @@ impl DrawingApp {
             Message::ShapeSelected(id) => {
                 self.data.edit().selected_id = Some(id);
             }
-            // Message::ShapeClicked(id) => self.data.edit().selected_id = Some(id),
-            // Message::ShapePressed(id) => {
-            //     if self.mode == AppMode::Interact {
-            //         let data = self.data.edit();
-            //         data.selected_id = Some(id);
-            //         data.dragging_id = Some(id);
-            //     }
-            // }
 
             // --- Background Interactions ---
             Message::BackgroundHovered => self.data.edit().hovered_id = None,
@@ -174,8 +166,6 @@ impl DrawingApp {
                 self.chart_state
                     .axis_mut(&Self::Y)
                     .zoom(zoom_factor, Some(position.y));
-
-                self.data.edit().hovered_id = None; // Kill hovers during zoom
             }
         }
     }
@@ -213,12 +203,15 @@ impl DrawingApp {
 // Data Structs
 // -----------------------------------------------------------------------------
 struct RectShape {
+    id: interaction::Id,
     x: f64,
     y: f64,
     w: f64,
     h: f64,
-    id: interaction::Id,
 }
+
+impl RectShape {}
+
 struct DrawingData {
     rects: Vec<RectShape>,
     hovered_id: Option<interaction::Id>,
