@@ -186,6 +186,10 @@ impl DrawingApp {
                 (event.button_held == mouse::Button::Left)
                     .then_some(Message::ChartDragged(event.delta))
             })
+            .on_hover_all(|all, _| {
+                println!("ALL: {all:?}");
+                None
+            })
             .on_scroll(Message::ChartScrolled);
 
         column![

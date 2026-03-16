@@ -169,6 +169,8 @@ pub enum Error<AxisId> {
 type ErrorHandler<AxisId, Message> = event::Handler<Message, (Error<AxisId>,)>;
 type MoveHandler<Message> = event::Handler<Message, (MoveEvent<Point>,)>;
 type HoverHandler<Message> = event::Handler<Message, (keyboard::Modifiers,)>;
+type HoverMultipleHandler<Message> =
+    event::Handler<Message, (Vec<interaction::Id>, keyboard::Modifiers)>;
 type DragHandler<Message> = event::Handler<Message, (DragEvent<Delta>,)>;
 type ScrollHandler<Message> = event::Handler<Message, (ScrollEvent<Point>,)>;
 type PressHandler<Message> = event::Handler<Message, (PressEvent<Point>,)>;
@@ -244,6 +246,7 @@ pub struct Chart<
     on_release: Option<ReleaseHandler<Message>>,
     on_drag: Option<DragHandler<Message>>,
     on_hover: Option<HoverHandler<Message>>,
+    on_hover_all: Option<HoverMultipleHandler<Message>>,
     on_move: Option<MoveHandler<Message>>,
     on_scroll: Option<ScrollHandler<Message>>,
 
@@ -288,6 +291,7 @@ where
             on_error: None,
             on_drag: None,
             on_hover: None,
+            on_hover_all: None,
             on_move: None,
             on_scroll: None,
             on_press: None,
@@ -438,6 +442,10 @@ where
 
         /// Sets the event handler for when the mouse hovers the main plot area.
         hover: (keyboard::Modifiers,);
+
+        /// Sets the event handler for when multiple interactions are hovered at once,
+        /// returning every interaction::Id currently hovered.
+        hover_all: (Vec<interaction::Id>, keyboard::Modifiers);
 
         /// Sets the event handler for hover identity changes
         move: (MoveEvent<Point>,);
@@ -708,6 +716,9 @@ where
                         shell.publish(message);
                     }
 
+                    let mut all = self.on_hover_all.as_ref().map(|_| vec![]);
+                    let mut new_identity = None;
+
                     // Check the Interaction Registry for hovers!
                     let interactions = memory.interaction_cache.borrow();
                     for (id, interaction) in interactions.iter().rev() {
@@ -716,12 +727,33 @@ where
                         };
 
                         let identity = HoverIdentity::Interaction(id.clone());
-                        if memory.last_hovered_identity != identity {
-                            memory.last_hovered_identity = identity;
-                            return true;
+                        if memory.last_hovered_identity != identity && new_identity.is_none() {
+                            memory.last_hovered_identity = identity.clone();
+                            new_identity = Some(identity);
                         }
 
-                        return false;
+                        let Some(ids) = &mut all else {
+                            // Early return if we don't look for all hovers
+                            return false;
+                        };
+
+                        ids.push(id.clone());
+                    }
+
+                    if let Some(ids) = all
+                        && let Some(message) = self
+                            .on_hover_all
+                            .as_ref()
+                            .and_then(|f| f.run((ids, memory.keyboard_modifiers)))
+                    {
+                        shell.publish(message);
+                    }
+
+                    if let Some(identity) = new_identity
+                        && memory.last_hovered_identity != identity
+                    {
+                        memory.last_hovered_identity = identity;
+                        return true;
                     }
 
                     if memory.last_hovered_identity != HoverIdentity::Plot {
