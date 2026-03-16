@@ -3,6 +3,7 @@
 //! This module provides the core plotting infrastructure for rendering data on charts.
 //! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
 
+use std::hash::Hash;
 use std::ops::Deref;
 
 use crate::{
@@ -41,16 +42,17 @@ use iced_core::{Font, Rectangle};
 ///     }
 /// }
 /// ```
-pub trait PlotData<D, Message, R = iced_renderer::Renderer, Theme = iced_core::Theme>
+pub trait PlotData<D, Message, Tag = (), R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
     Message: Clone,
     D: Float,
     R: crate::Renderer,
+    Tag: Hash + Eq + Clone,
 {
     /// Draws this data onto the plot.
     ///
     /// Use `plot.add_shape()` to add visual elements to the chart.
-    fn draw(&self, plot: &mut Plot<D, Message, R>, theme: &Theme);
+    fn draw(&self, plot: &mut Plot<D, Message, Tag, R>, theme: &Theme);
 
     /// The version of the layer, used for caching.
     ///
@@ -115,14 +117,21 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
 ///
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
-pub struct Plot<'a, D: Float, Message: Clone, R: crate::Renderer = iced_renderer::Renderer> {
+pub struct Plot<
+    'a,
+    D: Float,
+    Message: Clone,
+    Tag: Hash + Eq + Clone = (),
+    R: crate::Renderer = iced_renderer::Renderer,
+> {
     context: Context<'a, D, R>,
-    interactions: &'a mut InteractionsCache<Message>,
+    interactions: &'a mut InteractionsCache<Message, Tag>,
 }
 
-impl<'a, D, Message, R> Plot<'a, D, Message, R>
+impl<'a, D, Message, Tag, R> Plot<'a, D, Message, Tag, R>
 where
     Message: Clone,
+    Tag: Hash + Eq + Clone,
     D: Float,
     R: crate::Renderer,
 {
@@ -133,7 +142,7 @@ where
         renderer: &'a mut R,
         cache: &'a mut RenderCache<R>,
         transform: &'a Transform<'a, D, f32, f32>,
-        interactions: &'a mut InteractionsCache<Message>,
+        interactions: &'a mut InteractionsCache<Message, Tag>,
     ) -> Self {
         let context = Context {
             transform,
@@ -186,7 +195,7 @@ where
         shape.render(&mut self.context);
     }
 
-    pub fn add_interaction(&mut self, interaction: impl Into<Interaction<D, Message>>) {
+    pub fn add_interaction(&mut self, interaction: impl Into<Interaction<D, Message, Tag>>) {
         let interaction = interaction.into();
         let (id, resolved) = interaction.resolve(&self.context.transform);
         self.interactions.insert(id, resolved);

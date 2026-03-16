@@ -12,10 +12,10 @@ use crate::{
     render::{Backend, RenderCache},
 };
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum HoverIdentity<AxisId> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HoverIdentity<AxisId, Tag: Hash + Eq + Clone> {
     Plot,
-    Interaction(interaction::Id),
+    Interaction(interaction::Id<Tag>),
     Axis(AxisId),
     // For the future, when we track wether the mouse left bound
     OutsideBounds,
@@ -41,11 +41,12 @@ impl CacheSignature {
         Domain: Float,
         Message: Clone,
         Renderer: crate::Renderer,
+        Tag: Hash + Eq + Clone,
         Theme,
     >(
         state: &State<AxisId, Domain, Theme>,
         layout: &Layout<'_>,
-        layers: &[Layer<'_, AxisId, Domain, Message, Renderer, Theme>],
+        layers: &[Layer<'_, AxisId, Domain, Message, Tag, Renderer, Theme>],
     ) -> Self {
         let mut force_redraw = false;
         Self {
@@ -71,18 +72,20 @@ impl CacheSignature {
 }
 
 /// Internal chart memory
-pub struct Memory<AxisId, Message: Clone, Renderer: crate::Renderer> {
-    pub action: Action<AxisId>,
+pub struct Memory<AxisId, Message: Clone, Tag: Hash + Eq + Clone, Renderer: crate::Renderer> {
+    pub action: Action<AxisId, Tag>,
     pub previous_click: Option<mouse::Click>,
     pub cache: Option<RefCell<RenderCache<Renderer>>>,
     pub last_signature: Option<CacheSignature>,
-    pub interaction_cache: RefCell<InteractionsCache<Message>>,
-    pub last_hovered_identity: HoverIdentity<AxisId>,
+    pub interaction_cache: RefCell<InteractionsCache<Message, Tag>>,
+    pub last_hovered_identity: HoverIdentity<AxisId, Tag>,
     pub partition_grid: Vec<Rectangle>,
     pub keyboard_modifiers: keyboard::Modifiers,
 }
 
-impl<AxisId, Message: Clone, Renderer: crate::Renderer> Memory<AxisId, Message, Renderer> {
+impl<AxisId, Tag: Hash + Eq + Clone, Message: Clone, Renderer: crate::Renderer>
+    Memory<AxisId, Message, Tag, Renderer>
+{
     pub fn new() -> Self {
         Self {
             action: Action::default(),
@@ -96,7 +99,7 @@ impl<AxisId, Message: Clone, Renderer: crate::Renderer> Memory<AxisId, Message, 
         }
     }
 
-    pub fn update_modifiers(&mut self, modifiers: keyboard::Modifiers) {
+    pub const fn update_modifiers(&mut self, modifiers: keyboard::Modifiers) {
         self.keyboard_modifiers = modifiers;
     }
 
@@ -124,8 +127,8 @@ impl<AxisId, Message: Clone, Renderer: crate::Renderer> Memory<AxisId, Message, 
 
         for row in 0..grid_rows {
             for col in 0..grid_cols {
-                let x = viewport.x + col as f32 * cell_width;
-                let y = viewport.y + row as f32 * cell_height;
+                let x = (col as f32).mul_add(cell_width, viewport.x);
+                let y = (row as f32).mul_add(cell_height, viewport.y);
 
                 self.partition_grid.push(Rectangle {
                     x,

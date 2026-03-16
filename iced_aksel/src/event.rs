@@ -7,7 +7,7 @@ pub struct MoveEvent<P> {
 }
 
 impl<P> MoveEvent<P> {
-    pub(crate) fn new(position: P, modifiers: keyboard::Modifiers) -> Self {
+    pub(crate) const fn new(position: P, modifiers: keyboard::Modifiers) -> Self {
         Self {
             position,
             modifiers,
@@ -202,8 +202,6 @@ macro_rules! impl_handlers {
 }
 
 pub(crate) use impl_handlers;
-
-use crate::interaction;
 
 macro_rules! impl_into_handler_for_fn {
     // 0 args

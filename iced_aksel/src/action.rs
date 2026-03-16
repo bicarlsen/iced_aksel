@@ -1,12 +1,14 @@
+use std::hash::Hash;
+
 use crate::interaction;
 use iced_core::{Point, mouse};
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub enum Action<AxisId> {
+pub enum Action<AxisId, Tag: Hash + Eq + Clone> {
     #[default]
     Idle,
     DraggingPlot {
-        interaction_id: Option<interaction::Id>,
+        interaction_id: Option<interaction::Id<Tag>>,
         origin: Point,
         last_position: Point,
         total_delta: f32,
@@ -23,7 +25,7 @@ pub enum Action<AxisId> {
     },
 }
 
-impl<AxisId> Action<AxisId> {
+impl<AxisId, Tag: Hash + Eq + Clone> Action<AxisId, Tag> {
     pub(crate) const fn total_drag_delta(&self) -> Option<f32> {
         match self {
             Self::Idle => None,

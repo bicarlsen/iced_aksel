@@ -1,5 +1,5 @@
 use crate::{Measure, Shape, Stroke, interaction::Area, plot, render::Primitive};
-use aksel::{Float, PlotPoint, PlotRect};
+use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point};
 
 #[derive(Debug, Clone)]
@@ -117,11 +117,7 @@ impl<D: Float> From<&Rectangle<D>> for Area<D> {
                 width: Measure::Plot((p2.x - p1.x).abs()),
                 height: Measure::Plot((p2.y - p1.y).abs()),
             },
-            Geometry::Centered {
-                center,
-                width,
-                height,
-            } => todo!(),
+            Geometry::Centered { .. } => todo!(),
         }
     }
 }

@@ -254,6 +254,17 @@ impl PlotData<f64, Message> for DrawingData {
                     })
                     .on_drag(Message::ShapeDragged),
             );
+            plot.add_interaction(
+                Interaction::new(rect.id.clone(), &shape)
+                    .on_hover(Message::ShapeHovered)
+                    .on_press(|id, event: PressEvent<Point>| {
+                        (event.button == mouse::Button::Left).then_some(Message::ShapeSelected(id))
+                    })
+                    .on_release(|id, event: ReleaseEvent<Point>| {
+                        (event.button == mouse::Button::Right).then_some(Message::DeleteShape(id))
+                    })
+                    .on_drag(Message::ShapeDragged),
+            );
             plot.render(shape);
         }
     }

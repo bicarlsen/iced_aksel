@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use aksel::{Float, Transform};
 use derivative::Derivative;
 use iced_core::{Point, Rectangle, keyboard};
@@ -14,25 +16,26 @@ pub use id::Id;
 
 use area::ResolvedArea;
 
-type HoverHandler<Message> = event::Handler<Message, (Id, keyboard::Modifiers)>;
-type DragHandler<Message> = event::Handler<Message, (Id, event::DragEvent<event::Delta>)>;
-type PressHandler<Message> = event::Handler<Message, (Id, PressEvent<Point>)>;
-type ReleaseHandler<Message> = event::Handler<Message, (Id, ReleaseEvent<Point>)>;
+type HoverHandler<Message, T = ()> = event::Handler<Message, (Id<T>, keyboard::Modifiers)>;
+type DragHandler<Message, T = ()> =
+    event::Handler<Message, (Id<T>, event::DragEvent<event::Delta>)>;
+type PressHandler<Message, T = ()> = event::Handler<Message, (Id<T>, PressEvent<Point>)>;
+type ReleaseHandler<Message, T = ()> = event::Handler<Message, (Id<T>, ReleaseEvent<Point>)>;
 
-pub struct Interaction<D, Message: Clone> {
-    pub(crate) id: Id,
+pub struct Interaction<D, Message: Clone, T: Hash + Eq + Clone = ()> {
+    pub(crate) id: Id<T>,
     pub(crate) area: Area<D>,
-    pub(crate) on_hover: Option<HoverHandler<Message>>,
-    pub(crate) on_drag: Option<DragHandler<Message>>,
-    pub(crate) on_press: Option<PressHandler<Message>>,
-    pub(crate) on_release: Option<ReleaseHandler<Message>>,
+    pub(crate) on_hover: Option<HoverHandler<Message, T>>,
+    pub(crate) on_drag: Option<DragHandler<Message, T>>,
+    pub(crate) on_press: Option<PressHandler<Message, T>>,
+    pub(crate) on_release: Option<ReleaseHandler<Message, T>>,
 }
 
-impl<D: Float, Message: Clone> Interaction<D, Message> {
+impl<D: Float, Message: Clone, T: Hash + Eq + Clone> Interaction<D, Message, T> {
     pub(crate) fn resolve(
         self,
         transform: &Transform<D, f32, f32>,
-    ) -> (Id, ResolvedInteraction<Message>) {
+    ) -> (Id<T>, ResolvedInteraction<Message, T>) {
         let Self {
             id,
             area,
@@ -58,7 +61,7 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
         )
     }
 
-    pub fn new(id: impl Into<Id>, area: impl Into<Area<D>>) -> Self {
+    pub fn new(id: impl Into<Id<T>>, area: impl Into<Area<D>>) -> Self {
         let id = id.into();
         let area = area.into();
         Self {
@@ -73,62 +76,68 @@ impl<D: Float, Message: Clone> Interaction<D, Message> {
 
     event::impl_handlers!(
         /// Sets the event handler for interaction hovering
-        hover: (Id, keyboard::Modifiers);
+        hover: (Id<T>, keyboard::Modifiers);
 
         /// Sets the event handler for interaction dragging
-        drag: (Id, event::DragEvent<event::Delta>);
+        drag: (Id<T>, event::DragEvent<event::Delta>);
 
         /// Sets the event handler for interaction mouse presses
-        press: (Id, PressEvent<Point>);
+        press: (Id<T>, PressEvent<Point>);
 
         /// Sets the event handler for interaction mouse releases
-        release: (Id, ReleaseEvent<Point>);
+        release: (Id<T>, ReleaseEvent<Point>);
     );
 }
 
 /// A stored interaction waiting to be tested against mouse events.
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub(crate) struct ResolvedInteraction<Message: Clone> {
+pub(crate) struct ResolvedInteraction<Message: Clone, T: Hash + Eq + Clone = ()> {
     pub area: ResolvedArea,
     pub bounding_box: Rectangle,
 
     #[derivative(Debug = "ignore")]
-    pub on_hover: Option<HoverHandler<Message>>,
+    pub on_hover: Option<HoverHandler<Message, T>>,
     #[derivative(Debug = "ignore")]
-    pub on_drag: Option<DragHandler<Message>>,
+    pub on_drag: Option<DragHandler<Message, T>>,
     #[derivative(Debug = "ignore")]
-    pub on_press: Option<PressHandler<Message>>,
+    pub on_press: Option<PressHandler<Message, T>>,
     #[derivative(Debug = "ignore")]
-    pub on_release: Option<ReleaseHandler<Message>>,
+    pub on_release: Option<ReleaseHandler<Message, T>>,
 }
 
 /// The registry that collects hitboxes during the drawing phase.
 #[derive(Debug)]
-pub(crate) struct InteractionsCache<Message: Clone>(
-    IndexMap<Id, ResolvedInteraction<Message>, RandomState>,
+pub struct InteractionsCache<Message: Clone, Tag: Hash + Eq + Clone>(
+    IndexMap<Id<Tag>, ResolvedInteraction<Message, Tag>, RandomState>,
 );
 
-impl<Message: Clone> InteractionsCache<Message> {
+impl<Message: Clone, T: Hash + Eq + Clone> InteractionsCache<Message, T> {
     pub fn new() -> Self {
         Self(IndexMap::with_hasher(RandomState::new()))
     }
 
-    pub fn iter(&self) -> indexmap::map::Iter<'_, Id, ResolvedInteraction<Message>> {
+    pub(crate) fn iter(&self) -> indexmap::map::Iter<'_, Id<T>, ResolvedInteraction<Message, T>> {
         self.0.iter()
     }
 
-    pub fn get(&self, id: &Id) -> Option<&ResolvedInteraction<Message>> {
+    pub(crate) fn get(&self, id: &Id<T>) -> Option<&ResolvedInteraction<Message, T>> {
         self.0.get(id)
     }
 
     /// Push an interaction to the cache
-    pub fn insert(&mut self, id: Id, interaction: ResolvedInteraction<Message>) {
+    pub(crate) fn insert(&mut self, id: Id<T>, interaction: ResolvedInteraction<Message, T>) {
         self.0.insert(id, interaction);
     }
 
     // Clear the inner vector, re-using the allocated space next time we push
     pub fn clear(&mut self) {
         self.0.clear();
+    }
+}
+
+impl<Message: Clone, T: Hash + Eq + Clone> Default for InteractionsCache<Message, T> {
+    fn default() -> Self {
+        Self::new()
     }
 }

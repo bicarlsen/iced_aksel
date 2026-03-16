@@ -169,8 +169,8 @@ pub enum Error<AxisId> {
 type ErrorHandler<AxisId, Message> = event::Handler<Message, (Error<AxisId>,)>;
 type MoveHandler<Message> = event::Handler<Message, (MoveEvent<Point>,)>;
 type HoverHandler<Message> = event::Handler<Message, (keyboard::Modifiers,)>;
-type HoverMultipleHandler<Message> =
-    event::Handler<Message, (Vec<interaction::Id>, keyboard::Modifiers)>;
+type HoverMultipleHandler<Message, T> =
+    event::Handler<Message, (Vec<interaction::Id<T>>, keyboard::Modifiers)>;
 type DragHandler<Message> = event::Handler<Message, (DragEvent<Delta>,)>;
 type ScrollHandler<Message> = event::Handler<Message, (ScrollEvent<Point>,)>;
 type PressHandler<Message> = event::Handler<Message, (PressEvent<Point>,)>;
@@ -215,6 +215,7 @@ pub struct Chart<
     AxisId,
     Domain,
     Message,
+    Tag = (),
     Theme = iced_core::Theme,
     Renderer = iced_renderer::Renderer,
 > where
@@ -223,9 +224,10 @@ pub struct Chart<
     Theme: Catalog,
     Renderer: crate::Renderer,
     Message: Clone,
+    Tag: Hash + Eq + Clone,
 {
     state: &'a State<AxisId, Domain, Theme>,
-    layers: Vec<Layer<'a, AxisId, Domain, Message, Renderer, Theme>>,
+    layers: Vec<Layer<'a, AxisId, Domain, Message, Tag, Renderer, Theme>>,
     width: Length,
     height: Length,
     class: <Theme as Catalog>::Class<'a>,
@@ -246,7 +248,7 @@ pub struct Chart<
     on_release: Option<ReleaseHandler<Message>>,
     on_drag: Option<DragHandler<Message>>,
     on_hover: Option<HoverHandler<Message>>,
-    on_hover_all: Option<HoverMultipleHandler<Message>>,
+    on_hover_all: Option<HoverMultipleHandler<Message, Tag>>,
     on_move: Option<MoveHandler<Message>>,
     on_scroll: Option<ScrollHandler<Message>>,
 
@@ -260,11 +262,12 @@ pub struct Chart<
     debug: bool,
 }
 
-impl<'a, AxisId, Domain, Message: std::clone::Clone, Theme, Renderer>
-    Chart<'a, AxisId, Domain, Message, Theme, Renderer>
+impl<'a, AxisId, Domain, Message: std::clone::Clone, Tag, Theme, Renderer>
+    Chart<'a, AxisId, Domain, Message, Tag, Theme, Renderer>
 where
     Domain: Float,
     AxisId: Hash + Eq + Clone + Debug,
+    Tag: Hash + Eq + Clone + Debug,
     Theme: Catalog,
     Renderer: crate::Renderer,
 {
@@ -344,7 +347,7 @@ where
     /// Multiple layers can be added to a single chart, potentially using different axes.
     ///
     /// ***OBS***: It's important to note that the axis ID's **must** be present in [`State`]
-    pub fn plot_data<T: plot::PlotData<Domain, Message, Renderer, Theme>>(
+    pub fn plot_data<T: plot::PlotData<Domain, Message, Tag, Renderer, Theme>>(
         mut self,
         items: &'a T,
         x_axis_id: AxisId,
@@ -445,7 +448,7 @@ where
 
         /// Sets the event handler for when multiple interactions are hovered at once,
         /// returning every interaction::Id currently hovered.
-        hover_all: (Vec<interaction::Id>, keyboard::Modifiers);
+        hover_all: (Vec<interaction::Id<Tag>>, keyboard::Modifiers);
 
         /// Sets the event handler for hover identity changes
         move: (MoveEvent<Point>,);
@@ -474,7 +477,7 @@ where
     /// Determines if the user mouse-pressed on the plot or an axis and updates the internal state.
     fn handle_mouse_press(
         &self,
-        memory: &mut Memory<AxisId, Message, Renderer>,
+        memory: &mut Memory<AxisId, Message, Tag, Renderer>,
         layout: Layout,
         shell: &mut Shell<'_, Message>,
         click: mouse::Click,
@@ -604,7 +607,7 @@ where
     /// Triggers click events if the drag distance was within the deadband.
     fn handle_mouse_release(
         &self,
-        memory: &mut Memory<AxisId, Message, Renderer>,
+        memory: &mut Memory<AxisId, Message, Tag, Renderer>,
         layout: Layout,
         shell: &mut Shell<'_, Message>,
         previous_click_kind: Option<mouse::click::Kind>,
@@ -692,7 +695,7 @@ where
     /// Return true if hover identity has changed
     fn handle_mouse_moved(
         &self,
-        memory: &mut Memory<AxisId, Message, Renderer>,
+        memory: &mut Memory<AxisId, Message, Tag, Renderer>,
         layout: Layout,
         shell: &mut Shell<'_, Message>,
         mouse_pos: Point,
@@ -890,7 +893,8 @@ where
             for (i, (id, axis)) in self.state.axes().iter().enumerate() {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
-                if axis_bounds.contains(mouse_pos) {
+                if !axis_bounds.contains(mouse_pos) {
+                    memory.last_hovered_identity = HoverIdentity::Axis(id.clone());
                     continue;
                 }
 
@@ -1044,21 +1048,22 @@ where
     }
 }
 
-impl<AxisId, Domain, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Chart<'_, AxisId, Domain, Message, Theme, Renderer>
+impl<AxisId, Domain, Message, Theme, Tag, Renderer> Widget<Message, Theme, Renderer>
+    for Chart<'_, AxisId, Domain, Message, Tag, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
     Domain: Float + 'static,
+    Tag: Hash + Eq + Clone + Debug + 'static,
     Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
     Theme: Catalog,
     Message: Clone + 'static,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Memory<AxisId, Message, Renderer>>()
+        tree::Tag::of::<Memory<AxisId, Message, Tag, Renderer>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId, Message, Renderer>::new())
+        tree::State::new(Memory::<AxisId, Message, Tag, Renderer>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -1075,7 +1080,7 @@ where
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
-        let memory: &mut Memory<AxisId, Message, Renderer> = tree.state.downcast_mut();
+        let memory: &mut Memory<AxisId, Message, Tag, Renderer> = tree.state.downcast_mut();
         memory.make_sure_cache_is_initialized(renderer, self.quality);
 
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
@@ -1170,7 +1175,7 @@ where
         }
 
         let signature = CacheSignature::new(self.state, &layout, &self.layers);
-        let memory: &mut Memory<AxisId, Message, Renderer> = tree.state.downcast_mut();
+        let memory: &mut Memory<AxisId, Message, Tag, Renderer> = tree.state.downcast_mut();
         memory.update(signature);
         memory.update_partitions(self.get_plot_layout(layout).bounds());
 
@@ -1213,7 +1218,7 @@ where
                                     interaction.on_hover.as_ref().map(
                                         |handler: &Handler<
                                             Message,
-                                            (interaction::Id, keyboard::Modifiers),
+                                            (interaction::Id<Tag>, keyboard::Modifiers),
                                         >| {
                                             handler.run((id.clone(), memory.keyboard_modifiers))
                                         },
@@ -1316,7 +1321,7 @@ where
         // Retrieve the Memory from the Tree directly
         let memory = tree
             .state
-            .downcast_ref::<Memory<AxisId, Message, Renderer>>();
+            .downcast_ref::<Memory<AxisId, Message, Tag, Renderer>>();
 
         // Get cache from memory
         let Some(mut cache) = memory.get_cache_mut() else {
@@ -1353,7 +1358,7 @@ where
                 let y_axis = self.state.axis(&layer.vertical_axis_id);
                 let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-                let mut plot: Plot<Domain, Message, Renderer> =
+                let mut plot: Plot<Domain, Message, Tag, Renderer> =
                     Plot::new(renderer, &mut cache, &transform, &mut interactions);
 
                 // User code draws shapes into the plot here
@@ -1400,8 +1405,8 @@ where
 
 // Boilerplate conversions and helpers
 
-impl<'a, AxisId, Domain, Message, Theme, Renderer>
-    From<Chart<'a, AxisId, Domain, Message, Theme, Renderer>>
+impl<'a, AxisId, Domain, Message, Tag, Theme, Renderer>
+    From<Chart<'a, AxisId, Domain, Message, Tag, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
@@ -1409,8 +1414,9 @@ where
     Message: Clone + 'a + 'static,
     Theme: Catalog + 'a,
     Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
+    Tag: Hash + Eq + Clone + Debug + 'static,
 {
-    fn from(plot: Chart<'a, AxisId, Domain, Message, Theme, Renderer>) -> Self {
+    fn from(plot: Chart<'a, AxisId, Domain, Message, Tag, Theme, Renderer>) -> Self {
         Element::new(plot)
     }
 }
@@ -1446,8 +1452,16 @@ fn layout_vertical_axis<Domain: Float, Theme>(
 }
 
 #[inline(always)]
-fn verify_layer<'a, AxisId: Hash + Eq + Clone, Domain: Float, Message, Renderer, Theme>(
-    layer: &Layer<'a, AxisId, Domain, Message, Renderer, Theme>,
+fn verify_layer<
+    'a,
+    AxisId: Hash + Eq + Clone,
+    Domain: Float,
+    Message,
+    Tag: Hash + Eq + Clone,
+    Renderer,
+    Theme,
+>(
+    layer: &Layer<'a, AxisId, Domain, Message, Tag, Renderer, Theme>,
     state: &'a State<AxisId, Domain, Theme>,
     errors: &mut Vec<Error<AxisId>>,
 ) -> bool {
