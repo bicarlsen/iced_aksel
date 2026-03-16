@@ -1359,7 +1359,7 @@ where
         }
 
         // DEBUG!
-        memory.draw_partitions(renderer, plot_bounds);
+        // memory.draw_partitions(renderer, plot_bounds);
 
         // Draw the currently cached primitives
         cache.draw(renderer, &plot_bounds);
