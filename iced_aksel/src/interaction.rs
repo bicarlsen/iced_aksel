@@ -8,8 +8,9 @@ use rapidhash::fast::RandomState;
 
 use crate::event::{self, PressEvent, ReleaseEvent};
 
-mod area;
+pub mod area;
 mod id;
+mod math;
 
 pub use area::Area;
 pub use id::Id;
@@ -32,9 +33,10 @@ pub struct Interaction<D, Message: Clone, T: Hash + Eq + Clone = ()> {
 }
 
 impl<D: Float, Message: Clone, T: Hash + Eq + Clone> Interaction<D, Message, T> {
-    pub(crate) fn resolve(
+    pub(crate) fn resolve<R: iced_core::text::Renderer<Font = iced_core::Font>>(
         self,
         transform: &Transform<D, f32, f32>,
+        renderer: &R,
     ) -> (Id<T>, ResolvedInteraction<Message, T>) {
         let Self {
             id,
@@ -45,7 +47,7 @@ impl<D: Float, Message: Clone, T: Hash + Eq + Clone> Interaction<D, Message, T> 
             on_release,
         } = self;
 
-        let area = area.resolve(transform);
+        let area = area.resolve(transform, renderer);
         let bounding_box = area.bounding_box();
 
         (
@@ -134,10 +136,58 @@ impl<Message: Clone, T: Hash + Eq + Clone> InteractionsCache<Message, T> {
     pub fn clear(&mut self) {
         self.0.clear();
     }
+
+    /// Queries the cache for all interactions that intersect the given query.
+    pub fn query(
+        &self,
+        query: &InteractionQuery,
+    ) -> Vec<(&Id<T>, &ResolvedInteraction<Message, T>)> {
+        let mut hits = Vec::new();
+        let query_bounds = query.bounds();
+
+        for (id, interaction) in self.0.iter() {
+            if math::rect_intersects_rect(&interaction.area.bounding_box(), &query_bounds) {
+                if interaction.area.intersects(query) {
+                    hits.push((id, interaction));
+                }
+            }
+        }
+
+        hits
+    }
 }
 
 impl<Message: Clone, T: Hash + Eq + Clone> Default for InteractionsCache<Message, T> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Represents a spatial query in screen-space to test against interactions.
+#[derive(Debug, Clone, Copy)]
+pub enum InteractionQuery {
+    /// A precise point check (e.g., hovering or clicking).
+    /// `tolerance_px` expands the hit area to make thin lines/points clickable.
+    Point { position: Point, tolerance_px: f32 },
+
+    /// A bounding box check (e.g., marquee drag selection).
+    Bounds(Rectangle),
+}
+
+impl InteractionQuery {
+    /// Returns the broad-phase bounding box of the query itself.
+    pub(crate) fn bounds(&self) -> Rectangle {
+        match self {
+            Self::Point {
+                position,
+                tolerance_px,
+            } => Rectangle {
+                x: position.x - tolerance_px,
+                y: position.y - tolerance_px,
+                width: tolerance_px * 2.0,
+                height: tolerance_px * 2.0,
+            },
+            Self::Bounds(rect) => *rect,
+        }
     }
 }

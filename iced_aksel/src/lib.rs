@@ -81,8 +81,8 @@
 use aksel::ScreenRect;
 use derive_more::{Display, Error};
 use iced_core::{
-    Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Point, Rectangle, Shell, Size,
-    Widget, keyboard,
+    Border, Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Point, Rectangle,
+    Shell, Size, Widget, keyboard,
     layout::{self, Limits, Node},
     mouse,
     renderer::{Quad, Style},
@@ -124,12 +124,15 @@ pub use state::State;
 pub use stroke::Stroke;
 pub use style::Catalog;
 
+use crate::interaction::InteractionQuery;
+use crate::interaction::area::ResolvedArea;
+use crate::memory::{CacheSignature, HoverIdentity};
+use crate::render::{LineArrows, LineExtensions, Primitive};
+use crate::stroke::ResolvedStroke;
 use action::Action;
 use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
 use layer::Layer;
 use memory::Memory;
-
-use crate::memory::{CacheSignature, HoverIdentity};
 
 /// Default movement threshold (in pixels) to distinguish a click from a drag operation.
 const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
@@ -497,10 +500,15 @@ where
 
             let mut interaction_id = None;
             let interactions = memory.interaction_cache.borrow();
-            for (id, interaction) in interactions.iter().rev() {
-                if interaction.area.contains(mouse_pos)
-                    && let Some(handler) = &interaction.on_press
-                {
+
+            // Build the query with a 5px hover/click tolerance
+            let query = InteractionQuery::Point {
+                position: mouse_pos,
+                tolerance_px: 5.0,
+            };
+
+            for (id, interaction) in interactions.query(&query).into_iter().rev() {
+                if let Some(handler) = &interaction.on_press {
                     // TODO: Priority sorting - Which id should we actually save?
                     // We just save the top-most Id for now
                     if interaction_id.is_none() && interaction.on_drag.is_some() {
@@ -625,10 +633,14 @@ where
             Action::DraggingPlot { origin, .. } => {
                 let plot_bounds = self.get_plot_layout(layout).bounds();
                 let interactions = memory.interaction_cache.borrow();
-                for (id, interaction) in interactions.iter().rev() {
-                    if interaction.area.contains(*origin)
-                        && let Some(handler) = &interaction.on_release
-                    {
+
+                let query = InteractionQuery::Point {
+                    position: *origin,
+                    tolerance_px: 5.0,
+                };
+
+                for (id, interaction) in interactions.query(&query).into_iter().rev() {
+                    if let Some(handler) = &interaction.on_release {
                         let normalized = Point::new(
                             (origin.x - plot_bounds.x) / plot_bounds.width,
                             1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
@@ -724,11 +736,13 @@ where
 
                     // Check the Interaction Registry for hovers!
                     let interactions = memory.interaction_cache.borrow();
-                    for (id, interaction) in interactions.iter().rev() {
-                        if !interaction.area.contains(mouse_pos) {
-                            continue;
-                        };
+                    let query = InteractionQuery::Point {
+                        position: mouse_pos,
+                        tolerance_px: 5.0,
+                    };
 
+                    for (id, _interaction) in interactions.query(&query).into_iter().rev() {
+                        
                         let identity = HoverIdentity::Interaction(id.clone());
                         if new_identity.is_none() {
                             new_identity = Some(identity);
@@ -1359,6 +1373,29 @@ where
                 // User code draws shapes into the plot here
                 layer.items.draw(&mut plot, theme);
             }
+
+            // Populate the debug cache
+            if self.debug {
+                if let Some(debug_cache_cell) = &memory.debug_cache {
+                    let mut debug_cache = debug_cache_cell.borrow_mut();
+
+                    // Safely recreate the mesh to clear old debug primitives
+                    let mut new_debug_cache = match renderer.preferred_backend() {
+                        crate::render::Backend::Mesh => crate::render::RenderCache::new_mesh(),
+                        crate::render::Backend::Path => crate::render::RenderCache::new_path(),
+                    };
+                    new_debug_cache.set_quality(self.quality);
+
+                    for (_, interaction) in interactions.iter() {
+                        if let Some(primitive) = build_debug_primitive(&interaction.area) {
+                            new_debug_cache.add_primitive(primitive);
+                        }
+                    }
+
+                    // Assign the fresh cache
+                    *debug_cache = new_debug_cache;
+                }
+            }
         }
 
         // Draw markers
@@ -1395,6 +1432,31 @@ where
 
         // Draw the currently cached primitives
         cache.draw(renderer, &plot_bounds);
+
+        // Draw exact mathematical shape interactions if debug is enabled
+        if self.debug {
+            if let Some(mut debug_cache) = memory.get_debug_cache_mut() {
+                debug_cache.draw(renderer, &plot_bounds);
+            };
+        }
+        // --- INTERACTION DEBUG VISUALIZER ---
+        if self.debug {
+            for (_, interaction) in memory.interaction_cache.borrow().iter() {
+                // Only draw the intersection of the bounding box and the plot area
+                if let Some(clipped_bounds) = interaction.bounding_box.intersection(&plot_bounds) {
+                    renderer.fill_quad(
+                        Quad {
+                            bounds: clipped_bounds,
+                            border: iced_core::Border::default()
+                                .color(Color::from_rgba(1.0, 0.0, 0.0, 0.8))
+                                .width(1.0),
+                            ..Default::default()
+                        },
+                        Color::from_rgba(1.0, 0.0, 0.0, 0.1),
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -1490,4 +1552,110 @@ fn verify_layer<
     }
 
     true
+}
+
+/// Translates a mathematical interaction area into a renderable stroke outline.
+pub(crate) fn build_debug_primitive(area: &ResolvedArea) -> Option<Primitive> {
+    // A standard 1px red stroke for our X-Ray lines
+    let debug_stroke = ResolvedStroke {
+        thickness: 1.0,
+        fill: Color::from_rgba(1.0, 0.0, 0.0, 0.8),
+        style: crate::stroke::StrokeStyle::Solid,
+    };
+
+    match area {
+        ResolvedArea::Rect(rect) => Some(Primitive::Rectangle {
+            xy1: Point::new(rect.x, rect.y),
+            xy2: Point::new(rect.x + rect.width, rect.y + rect.height),
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        ResolvedArea::LineSegment {
+            p1,
+            p2,
+            stroke_width_px,
+        } => Some(Primitive::Line {
+            start: *p1,
+            end: *p2,
+            stroke: ResolvedStroke {
+                thickness: *stroke_width_px,
+                ..debug_stroke
+            },
+            clip_bounds: Rectangle::INFINITE, // Will be clipped by plot bounds later
+            extensions: LineExtensions {
+                start: false,
+                end: false,
+            },
+            arrows: LineArrows {
+                start: false,
+                end: false,
+                size: 0.0,
+            },
+        }),
+        ResolvedArea::Ellipse { center, rx, ry } => Some(Primitive::Ellipse {
+            center: *center,
+            radii: crate::radii::ResolvedRadii { x: *rx, y: *ry },
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        ResolvedArea::Triangle { p1, p2, p3 } => Some(Primitive::Triangle {
+            points: [*p1, *p2, *p3],
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        ResolvedArea::Polygon { points } => Some(Primitive::Area {
+            points: points.clone(),
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        ResolvedArea::Polyline {
+            points,
+            stroke_width_px,
+        } => Some(Primitive::PolyLine {
+            points: points.clone(),
+            stroke: ResolvedStroke {
+                thickness: *stroke_width_px,
+                ..debug_stroke
+            },
+            clip_bounds: Rectangle::INFINITE,
+            extensions: LineExtensions {
+                start: false,
+                end: false,
+            },
+            arrows: LineArrows {
+                start: false,
+                end: false,
+                size: 0.0,
+            },
+        }),
+        ResolvedArea::RegularPolygon {
+            center,
+            radius_px,
+            vertices,
+            rotation_rads,
+        } => Some(Primitive::Polygon {
+            center: *center,
+            radius: crate::radii::ResolvedRadius(*radius_px),
+            vertices: *vertices,
+            rotation: iced_core::Radians(*rotation_rads),
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        ResolvedArea::Arc {
+            center,
+            radius_outer,
+            radius_inner,
+            start_angle,
+            end_angle,
+        } => Some(Primitive::Arc {
+            center: *center,
+            radius_inner: Some(crate::radii::ResolvedRadius(*radius_inner)),
+            radius_outer: crate::radii::ResolvedRadius(*radius_outer),
+            start_angle: iced_core::Radians(*start_angle),
+            end_angle: iced_core::Radians(*end_angle),
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        ResolvedArea::Custom(_) => None, // Cannot easily draw custom dynamic interactions
+    }
 }
