@@ -279,7 +279,7 @@ impl DrawingApp {
         let chart = Chart::new(&self.chart_state)
             .debug(true)
             .plot_data(&self.data, Self::X, Self::Y)
-            // .on_hover(|_| Message::BackgroundHovered)
+            .on_hover(|_| Message::BackgroundHovered)
             .on_press(|event: PressEvent<Point>| match event.button {
                 mouse::Button::Left => Some(Message::BackgroundPressed),
                 _ => None,

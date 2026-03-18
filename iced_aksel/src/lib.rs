@@ -742,15 +742,18 @@ where
                     };
 
                     for (id, _interaction) in interactions.query(&query).into_iter().rev() {
-                        
                         let identity = HoverIdentity::Interaction(id.clone());
                         if new_identity.is_none() {
                             new_identity = Some(identity);
                         }
 
                         let Some(ids) = &mut all else {
+                            if new_identity.is_none() {
+                                continue;
+                            }
+
                             // Early return if we don't look for all hovers
-                            return false;
+                            break;
                         };
 
                         ids.push(id.clone());
