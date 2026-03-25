@@ -81,12 +81,11 @@
 use aksel::ScreenRect;
 use derive_more::{Display, Error};
 use iced_core::{
-    Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Point, Rectangle, Shell, Size,
-    Widget,
+    Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Pixels, Point, Rectangle,
+    Shell, Size, Widget, keyboard,
     layout::{self, Limits, Node},
-    mouse::{self, ScrollDelta},
+    mouse,
     renderer::{Quad, Style},
-    touch,
     widget::{Tree, tree},
 };
 use std::fmt::Debug;
@@ -97,6 +96,7 @@ use std::ops::Deref;
 pub use aksel::{Float, Transform, scale, scale::Scale, transform, transform::PlotPoint};
 
 mod action;
+mod event;
 mod layer;
 mod measure;
 mod memory;
@@ -104,6 +104,7 @@ mod render;
 mod state;
 
 pub mod axis;
+pub mod interaction;
 pub mod plot;
 pub mod radii;
 pub mod shape;
@@ -111,24 +112,30 @@ pub mod stroke;
 pub mod style;
 
 pub use axis::Axis;
+pub use event::*;
+pub use interaction::Interaction;
 pub use layer::{Cached, LayerId};
 pub use measure::Measure;
 pub use plot::{Plot, PlotData};
-pub use radii::Radii;
+pub use radii::{Radii, Radius};
 pub use render::{Quality, Renderer};
 pub use shape::Shape;
 pub use state::State;
 pub use stroke::Stroke;
 pub use style::Catalog;
 
+use crate::interaction::{Area, InteractionQuery};
+use crate::memory::{CacheSignature, HoverIdentity};
+use crate::render::{LineArrows, LineExtensions, Primitive};
+use crate::stroke::ResolvedStroke;
 use action::Action;
 use axis::{MarkerContext, MarkerPosition, MarkerRequest, Orientation, Position};
 use layer::Layer;
 use memory::Memory;
-use plot::DragDelta;
 
 /// Default movement threshold (in pixels) to distinguish a click from a drag operation.
-const DEFAULT_DRAG_DEADBAND: f32 = 10.0;
+const DEFAULT_DRAG_DEADBAND: f32 = 5.0;
+const INTERACTION_HIT_TOLERANCE: Pixels = Pixels(1.0);
 
 /// Errors that can occur during chart construction or rendering.
 #[derive(Debug, Clone, Error, Display)]
@@ -161,33 +168,24 @@ pub enum Error<AxisId> {
     },
 }
 
-// Internal type aliases for event handlers
-type ErrorHandler<AxisId, Message> = Box<dyn Fn(Error<AxisId>) -> Message>;
-type ClickHandler<Message> = Box<dyn Fn(Point) -> Message>;
-type DoubleClickHandler<Message> = Box<dyn Fn(Point) -> Message>;
-type DragHandler<Message> = Box<dyn Fn(DragDelta) -> Message>;
-type HoverHandler<Message> = Box<dyn Fn(Point) -> Message>;
-type ScrollHandler<Message> = Box<dyn Fn(Point, ScrollDelta) -> Message>;
+// Internal type aliases for plot event handlers
+type ErrorHandler<AxisId, Message> = event::Handler<Message, (Error<AxisId>,)>;
+type MoveHandler<Message> = event::Handler<Message, (MoveEvent<Point>,)>;
+type EnterHandler<Message> = event::Handler<Message, (EnterEvent,)>;
+type ExitHandler<Message> = event::Handler<Message, (ExitEvent,)>;
+type DragHandler<Message> = event::Handler<Message, (DragEvent<Delta>,)>;
+type ScrollHandler<Message> = event::Handler<Message, (ScrollEvent<Point>,)>;
+type PressHandler<Message> = event::Handler<Message, (PressEvent<Point>,)>;
+type ReleaseHandler<Message> = event::Handler<Message, (ReleaseEvent<Point>,)>;
 
 // Internal type aliases for axis event handlers
-type AxisClickHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
-type AxisDoubleClickHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
-type AxisDragHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
-type AxisHoverHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32) -> Message>;
-type AxisScrollHandler<AxisId, Message> = Box<dyn Fn(AxisId, f32, ScrollDelta) -> Message>;
-
-#[derive(Debug, PartialEq)]
-struct LayerIdentifier {
-    id: Option<LayerId>,
-    version: Option<u64>,
-}
-
-#[derive(Debug, PartialEq)]
-struct CacheSignature {
-    state_version: u64,
-    layout_bounds: Rectangle,
-    layers: Vec<LayerIdentifier>,
-}
+type AxisMoveHandler<AxisId, Message> = event::Handler<Message, (AxisId, MoveEvent<f32>)>;
+type AxisEnterHandler<AxisId, Message> = event::Handler<Message, (AxisId, EnterEvent)>;
+type AxisExitHandler<AxisId, Message> = event::Handler<Message, (AxisId, ExitEvent)>;
+type AxisDragHandler<AxisId, Message> = event::Handler<Message, (AxisId, DragEvent<f32>)>;
+type AxisScrollHandler<AxisId, Message> = event::Handler<Message, (AxisId, ScrollEvent<f32>)>;
+type AxisPressHandler<AxisId, Message> = event::Handler<Message, (AxisId, PressEvent<f32>)>;
+type AxisReleaseHandler<AxisId, Message> = event::Handler<Message, (AxisId, ReleaseEvent<f32>)>;
 
 /// The main charting widget that renders axes and plot data.
 ///
@@ -221,6 +219,7 @@ pub struct Chart<
     AxisId,
     Domain,
     Message,
+    Tag = (),
     Theme = iced_core::Theme,
     Renderer = iced_renderer::Renderer,
 > where
@@ -228,9 +227,11 @@ pub struct Chart<
     Domain: Float,
     Theme: Catalog,
     Renderer: crate::Renderer,
+    Message: Clone,
+    Tag: Hash + Eq + Clone,
 {
     state: &'a State<AxisId, Domain, Theme>,
-    layers: Vec<Layer<'a, AxisId, Domain, Renderer, Theme>>,
+    layers: Vec<Layer<'a, AxisId, Domain, Message, Tag, Renderer, Theme>>,
     width: Length,
     height: Length,
     class: <Theme as Catalog>::Class<'a>,
@@ -246,28 +247,36 @@ pub struct Chart<
     // Interaction Handlers
     on_error: Option<ErrorHandler<AxisId, Message>>,
 
+    // Cursor
+    default_cursor: mouse::Interaction,
+
     // Plot Area Handlers
-    on_click: Option<ClickHandler<Message>>,
-    on_double_click: Option<DoubleClickHandler<Message>>,
+    on_press: Option<PressHandler<Message>>,
+    on_release: Option<ReleaseHandler<Message>>,
     on_drag: Option<DragHandler<Message>>,
-    on_hover: Option<HoverHandler<Message>>,
+    on_enter: Option<EnterHandler<Message>>,
+    on_exit: Option<ExitHandler<Message>>,
+    on_move: Option<MoveHandler<Message>>,
     on_scroll: Option<ScrollHandler<Message>>,
 
     // Axis Handlers
-    on_axis_click: Option<AxisClickHandler<AxisId, Message>>,
-    on_axis_double_click: Option<AxisDoubleClickHandler<AxisId, Message>>,
+    on_axis_press: Option<AxisPressHandler<AxisId, Message>>,
+    on_axis_release: Option<AxisReleaseHandler<AxisId, Message>>,
     on_axis_drag: Option<AxisDragHandler<AxisId, Message>>,
-    on_axis_hover: Option<AxisHoverHandler<AxisId, Message>>,
+    on_axis_move: Option<AxisMoveHandler<AxisId, Message>>,
+    on_axis_enter: Option<AxisEnterHandler<AxisId, Message>>,
+    on_axis_exit: Option<AxisExitHandler<AxisId, Message>>,
     on_axis_scroll: Option<AxisScrollHandler<AxisId, Message>>,
 
     debug: bool,
 }
 
-impl<'a, AxisId, Domain, Message, Theme, Renderer>
-    Chart<'a, AxisId, Domain, Message, Theme, Renderer>
+impl<'a, AxisId, Domain, Message: std::clone::Clone, Tag, Theme, Renderer>
+    Chart<'a, AxisId, Domain, Message, Tag, Theme, Renderer>
 where
     Domain: Float,
     AxisId: Hash + Eq + Clone + Debug,
+    Tag: Hash + Eq + Clone + Debug,
     Theme: Catalog,
     Renderer: crate::Renderer,
 {
@@ -292,15 +301,23 @@ where
             // Handlers and fonts default to None
             axis_font: None,
             on_error: None,
-            on_click: None,
-            on_double_click: None,
+
+            default_cursor: mouse::Interaction::Idle,
+
             on_drag: None,
-            on_hover: None,
+            on_enter: None,
+            on_exit: None,
+            on_move: None,
             on_scroll: None,
-            on_axis_click: None,
-            on_axis_double_click: None,
+            on_press: None,
+            on_release: None,
+
+            on_axis_press: None,
+            on_axis_release: None,
             on_axis_drag: None,
-            on_axis_hover: None,
+            on_axis_move: None,
+            on_axis_enter: None,
+            on_axis_exit: None,
             on_axis_scroll: None,
 
             debug: false,
@@ -345,7 +362,7 @@ where
     /// Multiple layers can be added to a single chart, potentially using different axes.
     ///
     /// ***OBS***: It's important to note that the axis ID's **must** be present in [`State`]
-    pub fn plot_data<T: plot::PlotData<Domain, Renderer, Theme>>(
+    pub fn plot_data<T: plot::PlotData<Domain, Message, Tag, Renderer, Theme>>(
         mut self,
         items: &'a T,
         x_axis_id: AxisId,
@@ -387,6 +404,14 @@ where
         self
     }
 
+    /// Sets the default mouse cursor to display when hovering over the empty plot background.
+    ///
+    /// If an interactive shape overrides the cursor, this background cursor will be temporarily hidden.
+    pub const fn default_cursor(mut self, cursor: mouse::Interaction) -> Self {
+        self.default_cursor = cursor;
+        self
+    }
+
     /// Sets a marker to be drawn on the given axis, at the given position, if the position is Some
     pub fn marker_maybe<F>(
         mut self,
@@ -425,177 +450,157 @@ where
         self
     }
 
-    /// Sets a callback for chart configuration errors.
-    ///
-    /// Errors can occur when axes referenced in `plot_data` are missing from the `State`
-    /// or have conflicting orientations.
-    pub fn on_error<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Error<AxisId>) -> Message + 'static,
-    {
-        self.on_error = Some(Box::new(f));
-        self
-    }
+    event::impl_handlers!(
+        /// Sets the event handler for chart configuration errors.
+        ///
+        /// Errors can occur when axes referenced in `plot_data` are missing from the `State`
+        /// or have conflicting orientations.
+        error: (Error<AxisId>,);
 
-    /// Sets a callback for clicks on the main plot area.
-    ///
-    /// The callback receives the position of the click as normalized coordinates (0.0-1.0)
-    /// relative to the plot bounds.
-    pub fn on_click<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point) -> Message + 'static,
-    {
-        self.on_click = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse presses on the main plot area.
+        press: (PressEvent<Point>,);
 
-    /// Sets a callback for double-clicks on the main plot area.
-    pub fn on_double_click<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point) -> Message + 'static,
-    {
-        self.on_double_click = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse releases on the main plot area.
+        release: (ReleaseEvent<Point>,);
 
-    /// Sets a callback for drag events on the main plot area.
-    ///
-    /// The callback receives a [`DragDelta`] containing the normalized distance dragged.
-    /// This is typically used to implement panning.
-    pub fn on_drag<F>(mut self, f: F) -> Self
-    where
-        F: Fn(DragDelta) -> Message + 'static,
-    {
-        self.on_drag = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for drag events on the main plot area.
+        drag: (DragEvent<Delta>,);
 
-    /// Sets a callback for hover events on the main plot area.
-    pub fn on_hover<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point) -> Message + 'static,
-    {
-        self.on_hover = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for when the mouse hovers the main plot area.
+        move: (MoveEvent<Point>,);
 
-    /// Sets a callback for scroll events (mouse wheel) on the main plot area.
-    ///
-    /// The callback receives the cursor position (normalized) and the scroll delta.
-    /// This is typically used to implement zooming.
-    pub fn on_scroll<F>(mut self, f: F) -> Self
-    where
-        F: Fn(Point, ScrollDelta) -> Message + 'static,
-    {
-        self.on_scroll = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for when the mouse enters the plot
+        enter: (EnterEvent,);
 
-    /// Sets a callback for click events on an axis.
-    ///
-    /// The callback receives the ID of the clicked axis and the normalized position (0.0-1.0)
-    /// along that axis.
-    pub fn on_axis_click<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32) -> Message + 'static,
-    {
-        self.on_axis_click = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for when the mouse exits the plot
+        exit: (ExitEvent,);
 
-    /// Sets a callback for double-click events on an axis.
-    pub fn on_axis_double_click<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32) -> Message + 'static,
-    {
-        self.on_axis_double_click = Some(Box::new(f));
-        self
-    }
+        /// Sets a callback for scroll events (mouse wheel) on the main plot area.
+        scroll: (ScrollEvent<Point>,);
 
-    /// Sets a callback for drag events on an axis.
-    ///
-    /// This is often used to implement "pan along one axis" behavior.
-    pub fn on_axis_drag<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32) -> Message + 'static,
-    {
-        self.on_axis_drag = Some(Box::new(f));
-        self
-    }
 
-    /// Sets a callback for scroll events on an axis.
-    pub fn on_axis_scroll<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32, ScrollDelta) -> Message + 'static,
-    {
-        self.on_axis_scroll = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse presses on an axis.
+        axis_press: (AxisId, PressEvent<f32>);
 
-    /// Sets a callback for hover events on an axis.
-    pub fn on_axis_hover<F>(mut self, f: F) -> Self
-    where
-        F: Fn(AxisId, f32) -> Message + 'static,
-    {
-        self.on_axis_hover = Some(Box::new(f));
-        self
-    }
+        /// Sets the event handler for mouse releases on an axis.
+        axis_release: (AxisId, ReleaseEvent<f32>);
+
+        /// Sets the event handler for dragging on an axis.
+        axis_drag: (AxisId, DragEvent<f32>);
+
+        /// Sets the event handler for hovering on an axis.
+        axis_move: (AxisId, MoveEvent<f32>);
+
+        /// Sets the event handler for hovering on an axis.
+        axis_enter: (AxisId, EnterEvent);
+
+        /// Sets the event handler for hovering on an axis.
+        axis_exit: (AxisId, ExitEvent);
+
+        /// Sets the event handler for scrolling on an axis
+        axis_scroll: (AxisId, ScrollEvent<f32>);
+    );
 
     /// Internal handler for mouse press events.
-    /// Determines if the user clicked on the plot or an axis and updates the internal state.
+    /// Determines if the user mouse-pressed on the plot or an axis and updates the internal state.
     fn handle_mouse_press(
         &self,
-        memory: &mut Memory<AxisId, Renderer>,
+        memory: &mut Memory<AxisId, Message, Tag, Renderer>,
         layout: Layout,
-        cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
+        click: mouse::Click,
+        button: mouse::Button,
     ) {
-        // If we click during any other action than idle, we must return
+        // If we press during any other action than idle, we must return
         if Action::Idle != memory.action {
             return;
         }
 
         let plot_bounds = self.get_plot_layout(layout).bounds();
+        let mouse_pos = click.position();
 
-        // 1. Check if click is on the plot area
-        if cursor.position_over(plot_bounds).is_some() {
+        // Check if press is on the plot area
+        if plot_bounds.contains(mouse_pos) {
             shell.capture_event();
 
-            memory.action = Action::DraggingPlot {
-                origin: cursor.position().unwrap(),
-                last_position: cursor.position().unwrap(),
-                total_delta: 0.0,
+            let interactions = memory.interaction_cache.borrow();
+
+            // Build the query with a 5px hover/click tolerance
+            let query = InteractionQuery::Point {
+                position: mouse_pos,
+                tolerance: INTERACTION_HIT_TOLERANCE,
             };
 
-            // Handle double-click immediately
-            if let Some((position, handler)) = cursor.position().zip(self.on_double_click.as_ref())
-            {
-                let new_click =
-                    mouse::Click::new(position, mouse::Button::Left, memory.previous_click);
+            // Query for prioritized targets with `on_press` handlers
+            let target_id = interactions
+                .query_prioritized(&query, |interaction| interaction.on_press.is_some())
+                // Publish the target's event if any, and save the id to put into memory later
+                .map(|(id, interaction)| {
+                    // SAFETY: We just checked if the on_press handler exists in the prioritized query
+                    // above
+                    let handler = interaction.on_press.as_ref().unwrap();
 
-                if new_click.kind() == mouse::click::Kind::Double {
-                    shell.publish(handler(position));
-                }
-                memory.previous_click = Some(new_click);
+                    let normalized = Point::new(
+                        (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
+                        1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
+                    );
+
+                    let event = PressEvent::new(
+                        normalized,
+                        button,
+                        click.kind(),
+                        memory.keyboard_modifiers,
+                    );
+
+                    if let Some(message) = handler.run((id.clone(), event)) {
+                        shell.publish(message);
+                    }
+
+                    id
+                });
+
+            let handled = target_id.is_some();
+
+            memory.action = Action::DraggingPlot {
+                interaction_id: target_id,
+                origin: mouse_pos,
+                last_position: mouse_pos,
+                total_delta: 0.0,
+                button,
+                click_kind: click.kind(),
+            };
+
+            // Make sure we don't test plot, if a shape was pressed already
+            if handled {
+                return;
             }
+
+            if let Some(handler) = &self.on_press {
+                let normalized = Point::new(
+                    (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
+                    1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
+                );
+                let event =
+                    PressEvent::new(normalized, button, click.kind(), memory.keyboard_modifiers);
+                if let Some(message) = handler.run((event,)) {
+                    shell.publish(message);
+                }
+            }
+
             return;
         }
 
-        // 2. Check if click is on any axis
+        // Check if press is on any axis
         for (i, (id, axis)) in self.state.axes().iter().enumerate() {
             let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
-            let Some(position) = cursor.position() else {
-                continue;
-            };
-
-            if !axis_bounds.contains(position) {
+            if !axis_bounds.contains(mouse_pos) {
                 continue;
             }
 
             let origin = match axis.orientation() {
-                Orientation::Horizontal => position.x,
-                Orientation::Vertical => position.y,
+                Orientation::Horizontal => mouse_pos.x,
+                Orientation::Vertical => mouse_pos.y,
             };
 
             shell.capture_event();
@@ -605,26 +610,27 @@ where
                 origin,
                 last_position: origin,
                 total_delta: 0.0,
+                button,
+                click_kind: click.kind(),
             };
 
             // Handle double-click on axis
-            if let Some((position, handler)) =
-                cursor.position().zip(self.on_axis_double_click.as_ref())
-            {
-                let new_click =
-                    mouse::Click::new(position, mouse::Button::Left, memory.previous_click);
-
-                if new_click.kind() == mouse::click::Kind::Double {
-                    shell.publish(handler(
-                        id.clone(),
+            if let Some(handler) = self.on_axis_press.as_ref()
+                && let Some(message) = handler.run((
+                    id.clone(),
+                    PressEvent::new(
                         axis.screen_to_normalized(origin, &axis_bounds),
-                    ));
-                }
-                memory.previous_click = Some(new_click);
+                        button,
+                        click.kind(),
+                        memory.keyboard_modifiers,
+                    ),
+                ))
+            {
+                shell.publish(message);
             }
 
             // We can only interact with one axis at a time
-            break;
+            return;
         }
     }
 
@@ -632,42 +638,101 @@ where
     /// Triggers click events if the drag distance was within the deadband.
     fn handle_mouse_release(
         &self,
-        memory: &mut Memory<AxisId, Renderer>,
+        memory: &mut Memory<AxisId, Message, Tag, Renderer>,
         layout: Layout,
-        _cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
+        previous_click_kind: Option<mouse::click::Kind>,
+        button: mouse::Button,
     ) {
         let Memory { action, .. } = memory;
 
         // If total drag exceeded deadband, it was a drag, not a click.
-        if let Some(total_drag_delta) = action.total_drag_delta()
-            && total_drag_delta > self.drag_deadband
-        {
-            return;
-        }
+        let was_dragging = action
+            .total_drag_delta()
+            .is_some_and(|delta| delta > self.drag_deadband);
 
         match action {
             Action::Idle => (), // Do nothing
-            Action::DraggingPlot { origin, .. } => {
-                if let Some(handler) = &self.on_click {
-                    let plot_bounds = self.get_plot_layout(layout).bounds();
+            Action::DraggingPlot {
+                origin,
+                interaction_id,
+                ..
+            } => {
+                let plot_bounds = self.get_plot_layout(layout).bounds();
+                let interactions = memory.interaction_cache.borrow();
 
-                    // Convert screen coordinates to normalized plot coordinates
-                    let normalized = Point::new(
-                        (origin.x - plot_bounds.x) / plot_bounds.width,
-                        1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
-                    );
+                let normalized = Point::new(
+                    (origin.x - plot_bounds.x) / plot_bounds.width,
+                    1.0 - ((origin.y - plot_bounds.y) / plot_bounds.height),
+                );
+                let event = ReleaseEvent::new(
+                    normalized,
+                    button,
+                    previous_click_kind,
+                    memory.keyboard_modifiers,
+                    was_dragging,
+                );
 
-                    shell.publish(handler(normalized));
+                // If interaction started on another interaction, we should prefer using that
+                if let Some(existing_id) = interaction_id
+                    && let Some(interaction) = interactions.get(existing_id)
+                    && let Some(handler) = interaction.on_release.as_ref()
+                {
+                    // Publish message if any and return - Also return otherwise, so we don't
+                    // process any other events
+                    if let Some(message) = handler.run((existing_id.clone(), event)) {
+                        shell.publish(message)
+                    }
+                    return;
+                }
+
+                // If we have no "current" interaction, we look for one before handling chart
+                let query = InteractionQuery::Point {
+                    position: *origin,
+                    tolerance: INTERACTION_HIT_TOLERANCE,
+                };
+                let target_id = interactions
+                    .query_prioritized(&query, |interaction| interaction.on_release.is_some())
+                    .map(|(id, interaction)| {
+                        // SAFETY: We just checked if the on_press handler exists in the prioritized query
+                        // above
+                        let handler = interaction.on_release.as_ref().unwrap();
+
+                        if let Some(message) = handler.run((id.clone(), event)) {
+                            shell.publish(message);
+                        }
+
+                        id
+                    });
+
+                if target_id.is_some() {
+                    // Don't handle chart if we already hit an interaction
+                    return;
+                }
+
+                if let Some(handler) = &self.on_release
+                    && let Some(message) = handler.run((event,))
+                {
+                    shell.publish(message);
                 }
             }
             Action::DraggingAxis { id, origin, .. } => {
                 if let Some((i, id, axis)) = self.state.axes().get_full(id) {
                     let axis_bounds = layout.children().nth(i).unwrap().bounds();
                     let normalized = axis.screen_to_normalized(*origin, &axis_bounds);
-
-                    if let Some(handler) = &self.on_axis_click {
-                        shell.publish(handler(id.clone(), normalized));
+                    if let Some(handler) = &self.on_axis_release
+                        && let Some(message) = handler.run((
+                            id.clone(),
+                            ReleaseEvent::new(
+                                normalized,
+                                button,
+                                previous_click_kind,
+                                memory.keyboard_modifiers,
+                                was_dragging,
+                            ),
+                        ))
+                    {
+                        shell.publish(message);
                     }
                 }
             }
@@ -676,88 +741,144 @@ where
 
     /// Internal handler for mouse movement.
     /// Manages hover states and processes drag deltas.
+    ///
+    /// Return the last hover identity if hover identity has changed
     fn handle_mouse_moved(
         &self,
-        memory: &mut Memory<AxisId, Renderer>,
+        memory: &mut Memory<AxisId, Message, Tag, Renderer>,
         layout: Layout,
-        cursor: mouse::Cursor,
         shell: &mut Shell<'_, Message>,
-    ) {
+        mouse_pos: Point,
+    ) -> Option<HoverIdentity<AxisId, Tag>> {
         let Memory { action, .. } = memory;
         let plot_bounds = self.get_plot_layout(layout).bounds();
 
-        // 1. Mouse is over the plot area
-        if cursor.position_in(plot_bounds).is_some() {
+        // Mouse is over the plot area
+        if plot_bounds.contains(mouse_pos) {
             match action {
-                Action::DraggingAxis { .. } => (), // Ignore if we are busy dragging an axis
+                Action::DraggingAxis { .. } => (), // Ignore if dragging axis
                 Action::Idle => {
-                    if let Some(handler) = &self.on_hover {
-                        let cursor_pos = cursor.position().unwrap();
-                        let normalized = Point::new(
-                            (cursor_pos.x - plot_bounds.x) / plot_bounds.width,
-                            1.0 - ((cursor_pos.y - plot_bounds.y) / plot_bounds.height),
-                        );
-                        shell.publish(handler(normalized));
+                    if let Some(handler) = &self.on_move
+                        && let Some(message) = handler.run((MoveEvent::new(
+                            Point::new(
+                                (mouse_pos.x - plot_bounds.x) / plot_bounds.width,
+                                1.0 - ((mouse_pos.y - plot_bounds.y) / plot_bounds.height),
+                            ),
+                            memory.keyboard_modifiers,
+                        ),))
+                    {
+                        shell.publish(message);
                     }
-                    return;
+
+                    // Check the Interaction Registry for hovers!
+                    let interactions = memory.interaction_cache.borrow();
+                    let query = InteractionQuery::Point {
+                        position: mouse_pos,
+                        tolerance: INTERACTION_HIT_TOLERANCE,
+                    };
+
+                    // Check for prioritized `on_enter` interaction
+                    let prioritized_id = interactions
+                        .query_prioritized(&query, |interaction| interaction.on_enter.is_some())
+                        .map(|(id, _)| HoverIdentity::Interaction(id));
+
+                    let identity = prioritized_id.unwrap_or(HoverIdentity::Plot);
+
+                    if memory.last_hovered_identity != identity {
+                        let last = std::mem::replace(&mut memory.last_hovered_identity, identity);
+                        return Some(last);
+                    }
+
+                    return None;
                 }
                 Action::DraggingPlot {
                     last_position,
                     total_delta,
+                    interaction_id,
+                    button,
+                    click_kind,
                     ..
                 } => {
-                    // Capture event so parent widgets don't steal the drag
-                    shell.capture_event();
-
-                    let current_pos = cursor.position().unwrap();
-                    let delta_x = current_pos.x - last_position.x;
-                    let delta_y = current_pos.y - last_position.y;
-
+                    let delta_x = mouse_pos.x - last_position.x;
+                    let delta_y = mouse_pos.y - last_position.y;
                     *total_delta += delta_x.hypot(delta_y);
-                    *last_position = current_pos;
+                    *last_position = mouse_pos;
 
-                    // Only trigger drag if we exceeded the deadband
-                    if *total_delta > self.drag_deadband
-                        && let Some(handler) = &self.on_drag
-                    {
-                        // Normalize the delta.
-                        // Note: X is inverted because dragging right usually implies panning left (moving the view).
-                        // Y is standard.
-                        let normalized_delta = DragDelta {
+                    if *total_delta < self.drag_deadband {
+                        return None;
+                    };
+
+                    // Interaction present - Use that instead
+                    if let Some(id) = interaction_id {
+                        shell.capture_event();
+
+                        let interactions = memory.interaction_cache.borrow();
+                        let handler = interactions.get(id)?.on_drag.as_ref()?;
+
+                        // For interaction: shape/interaction moves with cursor
+                        // x: positive right, y: negative down (chart coords go up)
+                        let normalized_delta = Delta {
+                            x: delta_x / plot_bounds.width,
+                            y: -delta_y / plot_bounds.height,
+                        };
+
+                        let event = DragEvent::new(
+                            normalized_delta,
+                            *button,
+                            *click_kind,
+                            memory.keyboard_modifiers,
+                        );
+
+                        if let Some(message) = handler.run((id.clone(), event)) {
+                            shell.publish(message);
+                            // Drag events can never propagate, so we return here
+                            return None;
+                        };
+                    }
+
+                    if let Some(handler) = &self.on_drag {
+                        shell.capture_event();
+
+                        // For chart: dragging right pans chart right (data moves left)
+                        // x: negative right, y: positive down
+                        let normalized_delta = Delta {
                             x: -delta_x / plot_bounds.width,
                             y: delta_y / plot_bounds.height,
                         };
 
-                        shell.publish(handler(normalized_delta));
+                        let event = DragEvent::new(
+                            normalized_delta,
+                            *button,
+                            *click_kind,
+                            memory.keyboard_modifiers,
+                        );
+
+                        if let Some(message) = handler.run((event,)) {
+                            shell.publish(message);
+                        }
                     }
 
-                    return;
+                    return None;
                 }
             }
         }
 
-        // 2. Handle active axis drag (continues even if cursor leaves axis bounds)
+        // Handle active axis drag
         if let Action::DraggingAxis {
             id: dragging_id,
             last_position,
             total_delta,
+            button,
+            click_kind,
             ..
         } = action
         {
             shell.capture_event();
-
-            if let Some((i, (id, axis))) = self
-                .state
-                .axes()
-                .iter()
-                .enumerate()
-                .find(|(_, (axis_id, _))| *axis_id == dragging_id)
-            {
+            if let Some((i, id, axis)) = self.state.axes().get_full(dragging_id) {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
-                let cursor_pos = cursor.position().unwrap();
                 let screen_value = match axis.orientation() {
-                    Orientation::Horizontal => cursor_pos.x,
-                    Orientation::Vertical => cursor_pos.y,
+                    axis::Orientation::Horizontal => mouse_pos.x,
+                    axis::Orientation::Vertical => mouse_pos.y,
                 };
 
                 let delta = screen_value - *last_position;
@@ -768,32 +889,47 @@ where
                     && let Some(handler) = &self.on_axis_drag
                 {
                     let normalized_delta = axis.translate_drag_delta(delta, &axis_bounds);
-                    shell.publish(handler(id.clone(), normalized_delta));
+                    let event = DragEvent::new(
+                        normalized_delta,
+                        *button,
+                        *click_kind,
+                        memory.keyboard_modifiers,
+                    );
+                    if let Some(message) = handler.run((id.clone(), event)) {
+                        shell.publish(message);
+                    }
                 }
             }
         }
-        // 3. Handle axis hover (only if idle)
+        // Handle axis hover
         else if matches!(action, Action::Idle) {
             for (i, (id, axis)) in self.state.axes().iter().enumerate() {
                 let axis_bounds = layout.children().nth(i).unwrap().bounds();
 
-                if cursor.position_over(axis_bounds).is_none() {
+                if !axis_bounds.contains(mouse_pos) {
+                    memory.last_hovered_identity = HoverIdentity::Axis(id.clone());
                     continue;
                 }
 
-                if let Some(handler) = &self.on_axis_hover {
-                    let cursor_pos = cursor.position().unwrap();
+                if let Some(handler) = &self.on_axis_move {
                     let screen_value = match axis.orientation() {
-                        Orientation::Horizontal => cursor_pos.x,
-                        Orientation::Vertical => cursor_pos.y,
+                        axis::Orientation::Horizontal => mouse_pos.x,
+                        axis::Orientation::Vertical => mouse_pos.y,
                     };
                     let normalized = axis.screen_to_normalized(screen_value, &axis_bounds);
-                    shell.publish(handler(id.clone(), normalized));
+                    if let Some(message) = handler.run((
+                        id.clone(),
+                        MoveEvent::new(normalized, memory.keyboard_modifiers),
+                    )) {
+                        shell.publish(message);
+                    }
                 }
 
                 break;
             }
         }
+
+        None
     }
 
     #[inline(always)]
@@ -928,21 +1064,22 @@ where
     }
 }
 
-impl<AxisId, Domain, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Chart<'_, AxisId, Domain, Message, Theme, Renderer>
+impl<AxisId, Domain, Message, Theme, Tag, Renderer> Widget<Message, Theme, Renderer>
+    for Chart<'_, AxisId, Domain, Message, Tag, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
-    Domain: Float,
+    Domain: Float + 'static,
+    Tag: Hash + Eq + Clone + Debug + 'static,
     Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
     Theme: Catalog,
-    Message: Clone,
+    Message: Clone + 'static,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<Memory<AxisId, Renderer>>()
+        tree::Tag::of::<Memory<AxisId, Message, Tag, Renderer>>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(Memory::<AxisId, Renderer>::new())
+        tree::State::new(Memory::<AxisId, Message, Tag, Renderer>::new())
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -959,7 +1096,7 @@ where
     }
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
-        let memory: &mut Memory<AxisId, Renderer> = tree.state.downcast_mut();
+        let memory: &mut Memory<AxisId, Message, Tag, Renderer> = tree.state.downcast_mut();
         memory.make_sure_cache_is_initialized(renderer, self.quality);
 
         let bounds = limits.resolve(self.width, self.height, Size::ZERO);
@@ -1046,68 +1183,93 @@ where
             && let Some(handler) = &self.on_error
         {
             for error in self.errors.drain(..) {
-                shell.publish(handler(error));
+                if let Some(message) = handler.run((error,)) {
+                    shell.publish(message);
+                }
             }
             return;
         }
 
-        // Construct current cache signature
-        let mut force_redraw = false;
-        let current_signature = CacheSignature {
-            state_version: self.state.version(),
-            layout_bounds: layout.bounds(),
-            layers: self
-                .layers
-                .iter()
-                .map(|l| {
-                    // Make sure we force a redraw if no version is provided for any layer
-                    if !force_redraw {
-                        force_redraw = l.items.version().is_none();
-                    }
-
-                    LayerIdentifier {
-                        id: l.items.id(),
-                        version: l.items.version(),
-                    }
-                })
-                .collect(),
-        };
-
-        let memory: &mut Memory<AxisId, Renderer> = tree.state.downcast_mut();
-
-        // Check if we need to redraw
-        if force_redraw || memory.last_signature.as_ref() != Some(&current_signature) {
-            // Update signature
-            memory.last_signature = Some(current_signature);
-
-            // Get and clear the cache
-            let Some(mut cache) = memory.get_cache_mut() else {
-                return;
-            };
-            cache.request_redraw();
-        }
+        let signature = CacheSignature::new(self.state, &layout, &self.layers);
+        let memory: &mut Memory<AxisId, Message, Tag, Renderer> = tree.state.downcast_mut();
+        memory.update(signature);
+        memory.update_partitions(self.get_plot_layout(layout).bounds());
 
         // Only handle events if the cursor is near the chart
         let bounds = layout.bounds();
-        if cursor.position_over(bounds).is_none() {
+        let Some(mouse_pos) = cursor.position_over(bounds) else {
             return;
-        }
+        };
 
         // Handle input events
         match event {
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                self.handle_mouse_press(memory, layout, cursor, shell);
+            Event::Mouse(mouse::Event::ButtonPressed(button)) => {
+                let new_click = memory.update_click(mouse_pos, *button);
+                self.handle_mouse_press(memory, layout, shell, new_click, *button);
             }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. })
-            | Event::Touch(touch::Event::FingerLost { .. }) => {
-                self.handle_mouse_release(memory, layout, cursor, shell);
+            Event::Mouse(mouse::Event::ButtonReleased(button)) => {
+                let previous_click_kind = memory.previous_click.take().map(|c| c.kind());
+                self.handle_mouse_release(memory, layout, shell, previous_click_kind, *button);
                 memory.action = Action::Idle;
             }
-            Event::Mouse(mouse::Event::CursorMoved { .. })
-            | Event::Touch(touch::Event::FingerMoved { .. }) => {
-                self.handle_mouse_moved(memory, layout, cursor, shell);
+            Event::Mouse(mouse::Event::CursorMoved { position }) => {
+                let changed = self.handle_mouse_moved(memory, layout, shell, *position);
+
+                let Some(last) = changed else {
+                    shell.request_redraw();
+                    return;
+                };
+
+                // match the last event
+                let exit_message = match last {
+                    HoverIdentity::Plot => self.on_exit.as_ref().and_then(|handler| {
+                        handler.run((ExitEvent::new(memory.keyboard_modifiers),))
+                    }),
+                    HoverIdentity::Axis(id) => self.on_axis_exit.as_ref().and_then(|handler| {
+                        handler.run((id.clone(), ExitEvent::new(memory.keyboard_modifiers)))
+                    }),
+                    HoverIdentity::Interaction(id) => memory
+                        .interaction_cache
+                        .borrow()
+                        .get(&id)
+                        .and_then(|interaction| {
+                            interaction.on_exit.as_ref().map(|handler| {
+                                handler.run((id.clone(), ExitEvent::new(memory.keyboard_modifiers)))
+                            })
+                        })
+                        .flatten(),
+                    HoverIdentity::OutsideBounds => None, // Do nothing
+                };
+
+                // Match the new event:
+                let enter_message = match &memory.last_hovered_identity {
+                    HoverIdentity::Plot => self.on_enter.as_ref().and_then(|handler| {
+                        handler.run((EnterEvent::new(memory.keyboard_modifiers),))
+                    }),
+                    HoverIdentity::Axis(id) => self.on_axis_enter.as_ref().and_then(|handler| {
+                        handler.run((id.clone(), EnterEvent::new(memory.keyboard_modifiers)))
+                    }),
+                    HoverIdentity::Interaction(id) => memory
+                        .interaction_cache
+                        .borrow()
+                        .get(id)
+                        .and_then(|interaction| {
+                            interaction.on_enter.as_ref().map(|handler| {
+                                handler
+                                    .run((id.clone(), EnterEvent::new(memory.keyboard_modifiers)))
+                            })
+                        })
+                        .flatten(),
+                    HoverIdentity::OutsideBounds => None, // Do nothing
+                };
+
+                if let Some(message) = exit_message {
+                    shell.publish(message);
+                }
+
+                if let Some(message) = enter_message {
+                    shell.publish(message);
+                }
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 if let Some(cursor_pos) = cursor.position() {
@@ -1116,14 +1278,20 @@ where
                     // Check if scrolling over the plot area
                     if cursor.position_over(plot_bounds).is_some() {
                         if let Some(handler) = &self.on_scroll {
+                            shell.capture_event();
+
                             // Normalize cursor position (0.0-1.0)
                             let normalized = Point::new(
                                 (cursor_pos.x - plot_bounds.x) / plot_bounds.width,
                                 1.0 - ((cursor_pos.y - plot_bounds.y) / plot_bounds.height),
                             );
 
-                            shell.capture_event();
-                            shell.publish(handler(normalized, *delta));
+                            let event =
+                                ScrollEvent::new(normalized, *delta, memory.keyboard_modifiers);
+
+                            if let Some(message) = handler.run((event,)) {
+                                shell.publish(message);
+                            }
                         }
                     } else {
                         // Check if scrolling over an axis
@@ -1141,13 +1309,25 @@ where
                                         axis.screen_to_normalized(screen_value, &axis_bounds);
 
                                     shell.capture_event();
-                                    shell.publish(handler(id.clone(), normalized, *delta));
+
+                                    let event = ScrollEvent::new(
+                                        normalized,
+                                        *delta,
+                                        memory.keyboard_modifiers,
+                                    );
+
+                                    if let Some(message) = handler.run((id.clone(), event)) {
+                                        shell.publish(message);
+                                    }
                                 }
                                 break;
                             }
                         }
                     }
                 }
+            }
+            Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                memory.update_modifiers(*modifiers)
             }
             // TODO: Add multi-touch support for zooming
             _ => {}
@@ -1177,7 +1357,9 @@ where
         };
 
         // Retrieve the Memory from the Tree directly
-        let memory = tree.state.downcast_ref::<Memory<AxisId, Renderer>>();
+        let memory = tree
+            .state
+            .downcast_ref::<Memory<AxisId, Message, Tag, Renderer>>();
 
         // Get cache from memory
         let Some(mut cache) = memory.get_cache_mut() else {
@@ -1205,16 +1387,45 @@ where
         self.draw_spine_corners(layout, &style, plot_bounds, renderer);
 
         // Draw data layers if the cache needs redraw
-        for layer in &self.layers {
-            // These axes are guaranteed to exist because of `verify_layer` check
-            let x_axis = self.state.axis(&layer.horizontal_axis_id);
-            let y_axis = self.state.axis(&layer.vertical_axis_id);
-            let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
+        if cache.needs_redraw() {
+            let mut interactions = memory.interaction_cache.borrow_mut();
+            interactions.clear();
 
-            let mut plot: Plot<Domain, Renderer> = Plot::new(renderer, &mut cache, &transform);
+            for layer in &self.layers {
+                // These axes are guaranteed to exist because of `verify_layer` check
+                let x_axis = self.state.axis(&layer.horizontal_axis_id);
+                let y_axis = self.state.axis(&layer.vertical_axis_id);
+                let transform = Transform::new(&screen_rect, x_axis.deref(), y_axis.deref());
 
-            // User code draws shapes into the plot here
-            layer.items.draw(&mut plot, theme);
+                let mut plot: Plot<Domain, Message, Tag, Renderer> =
+                    Plot::new(renderer, &mut cache, &transform, &mut interactions);
+
+                // User code draws shapes into the plot here
+                layer.items.draw(&mut plot, theme);
+            }
+
+            // Populate the debug cache
+            if self.debug
+                && let Some(debug_cache_cell) = &memory.debug_cache
+            {
+                let mut debug_cache = debug_cache_cell.borrow_mut();
+
+                // Safely recreate the mesh to clear old debug primitives
+                let mut new_debug_cache = match renderer.preferred_backend() {
+                    crate::render::Backend::Mesh => crate::render::RenderCache::new_mesh(),
+                    crate::render::Backend::Path => crate::render::RenderCache::new_path(),
+                };
+                new_debug_cache.set_quality(self.quality);
+
+                for (_, interaction) in interactions.iter() {
+                    if let Some(primitive) = build_debug_primitive(&interaction.area) {
+                        new_debug_cache.add_primitive(primitive);
+                    }
+                }
+
+                // Assign the fresh cache
+                *debug_cache = new_debug_cache;
+            }
         }
 
         // Draw markers
@@ -1246,24 +1457,126 @@ where
             );
         }
 
+        // DEBUG!
+        // memory.draw_partitions(renderer, plot_bounds);
+
         // Draw the currently cached primitives
         cache.draw(renderer, &plot_bounds);
+
+        // Draw exact mathematical shape interactions if debug is enabled
+        if self.debug
+            && let Some(mut debug_cache) = memory.get_debug_cache_mut()
+        {
+            debug_cache.draw(renderer, &plot_bounds);
+        }
+
+        // --- INTERACTION DEBUG VISUALIZER ---
+        if self.debug {
+            for (_, interaction) in memory.interaction_cache.borrow().iter() {
+                // Only draw the intersection of the bounding box and the plot area
+                if let Some(clipped_bounds) = interaction.bounding_box.intersection(&plot_bounds) {
+                    renderer.fill_quad(
+                        Quad {
+                            bounds: clipped_bounds,
+                            border: iced_core::Border::default()
+                                .color(Color::from_rgba(1.0, 0.0, 0.0, 0.8))
+                                .width(1.0),
+                            ..Default::default()
+                        },
+                        Color::from_rgba(1.0, 0.0, 0.0, 0.1),
+                    );
+                }
+            }
+        }
+    }
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _viewport: &Rectangle,
+        _renderer: &Renderer,
+    ) -> mouse::Interaction {
+        let memory: &Memory<AxisId, Message, Tag, Renderer> = tree.state.downcast_ref();
+        let interactions = memory.interaction_cache.borrow();
+
+        // 1. Identify if we are interacting with a specific shape
+        let (target_id, click_kind, button_held, drag_delta) = match &memory.action {
+            Action::DraggingPlot {
+                interaction_id,
+                click_kind,
+                button,
+                total_delta,
+                ..
+            } => (
+                interaction_id.clone(),
+                Some(*click_kind),
+                Some(*button),
+                Some(*total_delta),
+            ),
+            Action::Idle => {
+                let id = if let HoverIdentity::Interaction(id) = &memory.last_hovered_identity {
+                    Some(id.clone())
+                } else {
+                    None
+                };
+                (id, None, None, None)
+            }
+            _ => (None, None, None, None),
+        };
+
+        // 2. Query for a Specific Interaction Cursor
+        if let Some(id) = target_id
+            && let Some(interaction) = interactions.get(&id)
+            && let Some(handler) = interaction.cursor_handler.as_ref()
+        {
+            // Calculate mutually exclusive states
+            let is_dragging = drag_delta.is_some_and(|delta| delta >= self.drag_deadband);
+            let is_pressed = drag_delta.is_some_and(|_| !is_dragging);
+            let is_hovered = !is_pressed
+                && !is_dragging
+                && matches!(memory.last_hovered_identity, HoverIdentity::Interaction(ref i) if i == &id);
+
+            let status = interaction::InteractionStatus {
+                is_hovered,
+                is_pressed,
+                is_dragging,
+                button_held,
+                click_kind,
+                modifiers: memory.keyboard_modifiers,
+            };
+
+            // If the user provided a specific cursor, return it immediately
+            if let Some(preferred_cursor) = handler.run((status,)) {
+                return preferred_cursor;
+            }
+        }
+
+        // 3. System Default Fallback
+        // If the mouse is over the plot bounds, use the user's custom background cursor.
+        // Otherwise, if outside the chart entirely, return the standard arrow.
+        if cursor.position_over(layout.bounds()).is_some() {
+            self.default_cursor
+        } else {
+            mouse::Interaction::Idle
+        }
     }
 }
 
 // Boilerplate conversions and helpers
 
-impl<'a, AxisId, Domain, Message, Theme, Renderer>
-    From<Chart<'a, AxisId, Domain, Message, Theme, Renderer>>
+impl<'a, AxisId, Domain, Message, Tag, Theme, Renderer>
+    From<Chart<'a, AxisId, Domain, Message, Tag, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
     AxisId: Hash + Eq + Debug + Clone + 'static,
-    Domain: Float,
-    Message: Clone + 'a,
+    Domain: Float + 'static,
+    Message: Clone + 'a + 'static,
     Theme: Catalog + 'a,
     Renderer: crate::Renderer + iced_core::text::Renderer<Font = iced_core::Font> + 'static,
+    Tag: Hash + Eq + Clone + Debug + 'static,
 {
-    fn from(plot: Chart<'a, AxisId, Domain, Message, Theme, Renderer>) -> Self {
+    fn from(plot: Chart<'a, AxisId, Domain, Message, Tag, Theme, Renderer>) -> Self {
         Element::new(plot)
     }
 }
@@ -1299,8 +1612,16 @@ fn layout_vertical_axis<Domain: Float, Theme>(
 }
 
 #[inline(always)]
-fn verify_layer<'a, AxisId: Hash + Eq + Clone, Domain: Float, Renderer, Theme>(
-    layer: &Layer<'a, AxisId, Domain, Renderer, Theme>,
+fn verify_layer<
+    'a,
+    AxisId: Hash + Eq + Clone,
+    Domain: Float,
+    Message,
+    Tag: Hash + Eq + Clone,
+    Renderer,
+    Theme,
+>(
+    layer: &Layer<'a, AxisId, Domain, Message, Tag, Renderer, Theme>,
     state: &'a State<AxisId, Domain, Theme>,
     errors: &mut Vec<Error<AxisId>>,
 ) -> bool {
@@ -1334,4 +1655,110 @@ fn verify_layer<'a, AxisId: Hash + Eq + Clone, Domain: Float, Renderer, Theme>(
     }
 
     true
+}
+
+/// Translates a mathematical interaction area into a renderable stroke outline.
+pub(crate) fn build_debug_primitive(area: &Area) -> Option<Primitive> {
+    // A standard 1px red stroke for our X-Ray lines
+    let debug_stroke = ResolvedStroke {
+        thickness: 1.0,
+        fill: Color::from_rgba(1.0, 0.0, 0.0, 0.8),
+        style: crate::stroke::StrokeStyle::Solid,
+    };
+
+    match area {
+        Area::Rectangle { top_left, size } => Some(Primitive::Rectangle {
+            xy1: Point::new(top_left.x, top_left.y),
+            xy2: Point::new(top_left.x + size.width, top_left.y + size.height),
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        Area::LineSegment {
+            p1,
+            p2,
+            stroke_width,
+        } => Some(Primitive::Line {
+            start: *p1,
+            end: *p2,
+            stroke: ResolvedStroke {
+                thickness: stroke_width.0,
+                ..debug_stroke
+            },
+            clip_bounds: Rectangle::INFINITE, // Will be clipped by plot bounds later
+            extensions: LineExtensions {
+                start: false,
+                end: false,
+            },
+            arrows: LineArrows {
+                start: false,
+                end: false,
+                size: 0.0,
+            },
+        }),
+        Area::Ellipse { center, radii } => Some(Primitive::Ellipse {
+            center: *center,
+            radii: *radii,
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        Area::Triangle { p1, p2, p3 } => Some(Primitive::Triangle {
+            points: [*p1, *p2, *p3],
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        Area::Polygon { points } => Some(Primitive::Area {
+            points: points.clone(),
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        Area::Polyline {
+            points,
+            stroke_width,
+        } => Some(Primitive::PolyLine {
+            points: points.clone(),
+            stroke: ResolvedStroke {
+                thickness: stroke_width.0,
+                ..debug_stroke
+            },
+            clip_bounds: Rectangle::INFINITE,
+            extensions: LineExtensions {
+                start: false,
+                end: false,
+            },
+            arrows: LineArrows {
+                start: false,
+                end: false,
+                size: 0.0,
+            },
+        }),
+        Area::RegularPolygon {
+            center,
+            radius,
+            vertices,
+            rotation,
+        } => Some(Primitive::Polygon {
+            center: *center,
+            radius: *radius,
+            vertices: *vertices,
+            rotation: *rotation,
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        Area::Arc {
+            center,
+            radius_outer,
+            radius_inner,
+            start_angle,
+            end_angle,
+        } => Some(Primitive::Arc {
+            center: *center,
+            radius_inner: Some(*radius_inner),
+            radius_outer: *radius_outer,
+            start_angle: *start_angle,
+            end_angle: *end_angle,
+            fill: None,
+            stroke: Some(debug_stroke),
+        }),
+        Area::Custom(_) => None, // Cannot easily draw custom dynamic interactions
+    }
 }

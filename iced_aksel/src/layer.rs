@@ -1,7 +1,5 @@
-use std::{
-    hash::Hash,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::hash::Hash;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use aksel::Float;
 use derivative::Derivative;
@@ -12,16 +10,25 @@ use super::plot;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct Layer<'a, AxisId, Domain, Renderer, Theme> {
+pub struct Layer<'a, AxisId, Domain, Message, Tag, Renderer, Theme> {
     pub(crate) horizontal_axis_id: AxisId,
     pub(crate) vertical_axis_id: AxisId,
 
     #[derivative(Debug = "ignore")]
-    pub(crate) items: &'a dyn plot::PlotData<Domain, Renderer, Theme>,
+    pub(crate) items: &'a dyn plot::PlotData<Domain, Message, Tag, Renderer, Theme>,
 }
 
-impl<'a, AxisId: Hash + Eq, D: Float, R: crate::Renderer, Theme> Layer<'a, AxisId, D, R, Theme> {
-    pub const fn new<T: plot::PlotData<D, R, Theme>>(
+impl<
+    'a,
+    AxisId: Hash + Eq,
+    Tag: Hash + Eq + Clone,
+    D: aksel::Float,
+    Message: Clone,
+    Renderer: crate::Renderer,
+    Theme,
+> Layer<'a, AxisId, D, Message, Tag, Renderer, Theme>
+{
+    pub const fn new<T: plot::PlotData<D, Message, Tag, Renderer, Theme>>(
         items: &'a T,
         horizontal_axis_id: AxisId,
         vertical_axis_id: AxisId,
@@ -112,17 +119,20 @@ impl<T> Cached<T> {
     }
 }
 
-impl<D: Float, Renderer: crate::Renderer, T: PlotData<D, Renderer>> PlotData<D, Renderer>
-    for Cached<T>
+impl<
+    D: Float,
+    Renderer: crate::Renderer,
+    Message: Clone,
+    Tag: Hash + Eq + Clone,
+    T: PlotData<D, Message, Tag, Renderer>,
+> PlotData<D, Message, Tag, Renderer> for Cached<T>
 {
-    fn draw(&self, plot: &mut plot::Plot<D, Renderer>, theme: &iced_core::Theme) {
+    fn draw(&self, plot: &mut plot::Plot<D, Message, Tag, Renderer>, theme: &iced_core::Theme) {
         self.data.draw(plot, theme);
     }
-
     fn version(&self) -> Option<u64> {
         Some(self.version)
     }
-
     fn id(&self) -> Option<LayerId> {
         Some(self.uid)
     }

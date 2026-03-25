@@ -1,4 +1,9 @@
-use crate::{Measure, Shape, Stroke, plot, render::Primitive};
+use crate::{
+    Measure, Shape, Stroke,
+    interaction::{Area, IntoArea},
+    plot,
+    render::Primitive,
+};
 use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point};
 
@@ -105,6 +110,16 @@ impl<D: Float> Triangle<D> {
             stroke: None,
         }
     }
+    /// Creates a new `Triangle` defined by three specific vertices.
+    ///
+    /// Note: The shape is invisible by default. You must call `.fill()` or `.stroke()` to render it.
+    pub const fn vertices(points: [PlotPoint<D>; 3]) -> Self {
+        Self {
+            geometry: Geometry::Vertices(points),
+            fill: None,
+            stroke: None,
+        }
+    }
 
     /// Creates a new `Triangle` centered at a point with a specific width and height.
     /// The triangle points **Up** (North).
@@ -134,5 +149,43 @@ impl<D: Float> Triangle<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
+    }
+}
+
+impl<'a, D: Float, Renderer: crate::Renderer> IntoArea<'a, D, Renderer> for &Triangle<D> {
+    fn resolve_area(self, ctx: &plot::Context<'a, D, Renderer>) -> Area {
+        match self.geometry {
+            Geometry::Vertices(pts) => {
+                let p1 = ctx.chart_to_screen(&pts[0]);
+                let p2 = ctx.chart_to_screen(&pts[1]);
+                let p3 = ctx.chart_to_screen(&pts[2]);
+                Area::Triangle {
+                    p1: Point::new(p1.x, p1.y),
+                    p2: Point::new(p2.x, p2.y),
+                    p3: Point::new(p3.x, p3.y),
+                }
+            }
+            Geometry::Centered {
+                center,
+                width,
+                height,
+            } => {
+                let sc = ctx.chart_to_screen(&center);
+                let center_x = sc.x;
+                let center_y = sc.y;
+
+                let w = width.resolve_x(ctx);
+                let h = height.resolve_y(ctx);
+
+                let half_w = w / 2.0;
+                let half_h = h / 2.0;
+
+                Area::Triangle {
+                    p1: Point::new(center_x, center_y - half_h),
+                    p2: Point::new(center_x + half_w, center_y + half_h),
+                    p3: Point::new(center_x - half_w, center_y + half_h),
+                }
+            }
+        }
     }
 }

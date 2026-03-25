@@ -34,7 +34,7 @@ cpal = "0.17.0"
 derive_more = { version = "2.0", features = ["from", "error", "display", "into"] }
 derivative = "2.2"
 earcutr = "0.5"
-iced = "0.14.0"
+iced = { version = "0.14.0", features = ["tokio"] }
 iced_core = "0.14.0"
 iced_graphics = { version = "0.14.0", features = ["geometry"] }
 iced_renderer = { version = "0.14.0", features = ["wgpu-bare", "tiny-skia", "geometry"] }
@@ -47,6 +47,9 @@ lyon_path = "1.0"
 lyon = "1.0"
 rand = "0.9"
 realfft = "3.5.0"
+smallvec = "1.15"
 strum = "0.27"
 strum_macros = "0.27"
 triple_buffer = "8.1.1"
+rapidhash = "4.4"
+paste = "1.0"

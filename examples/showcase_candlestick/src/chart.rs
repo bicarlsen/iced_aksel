@@ -1,11 +1,10 @@
 use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use chrono::{Datelike, TimeZone, Timelike};
-use iced::mouse::ScrollDelta;
+use iced::{Point, mouse::ScrollDelta};
 use iced_aksel::{
-    Axis, Cached, Chart, Measure, State,
-    axis::{MarkerPosition, Position, TickContext, TickResult},
-    plot::DragDelta,
+    Axis, Cached, Chart, Delta, DragEvent, Measure, ReleaseEvent, ScrollEvent, State,
+    axis::{MarkerContext, MarkerPosition, Position, TickContext, TickResult},
     scale::Linear,
 };
 
@@ -94,7 +93,7 @@ pub enum Message {
     /// A message to trigger a full rebuild of the chart layers.
     UpdateChart,
     /// A message sent when the main plot area is dragged.
-    OnPlotDrag(DragDelta),
+    OnPlotDrag(DragEvent<Delta>),
     OnPlotScroll(iced::Point, ScrollDelta),
     /// A message sent when an axis is dragged (for zooming).
     OnAxisDrag(AxisId, f32),
@@ -172,18 +171,28 @@ impl CandlestickChart {
             .plot_data(&self.volume_items, X_AXIS_ID, Y_VOL_AXIS_ID)
             .plot_data(&self.sma_items, X_AXIS_ID, Y_AXIS_ID)
             .plot_data(&self.bband_items, X_AXIS_ID, Y_AXIS_ID)
-            .on_drag(|delta| Message::OnPlotDrag(delta).into())
-            .on_scroll(|anchor, delta| Message::OnPlotScroll(anchor, delta).into())
-            .on_axis_drag(|axis, delta| Message::OnAxisDrag(axis, delta).into())
-            .on_axis_double_click(|id, _| Message::OnAxisDoubleClick(id).into())
+            .on_drag(|delta| Some(Message::OnPlotDrag(delta).into()))
+            .on_scroll(|event: ScrollEvent<Point>| {
+                Some(Message::OnPlotScroll(event.position, event.delta).into())
+            })
+            .on_axis_drag(|axis, event: DragEvent<f32>| {
+                Some(Message::OnAxisDrag(axis, event.delta).into())
+            })
+            .on_axis_release(|id, event: ReleaseEvent<f32>| {
+                event
+                    .is_double_click()
+                    .then_some(Message::OnAxisDoubleClick(id).into())
+            })
             .marker(&X_AXIS_ID, MarkerPosition::Cursor, |ctx| {
                 let timestamp_seconds = ctx.value as i64 * 60;
                 let datetime = chrono::Utc.timestamp_opt(timestamp_seconds, 0).single()?;
                 Some(ctx.marker(datetime.format("%a %d %b '%g %H:%M").to_string()))
             })
-            .marker(&Y_AXIS_ID, MarkerPosition::Cursor, |ctx| {
-                Some(ctx.marker(format!("{:.2}", ctx.value)))
-            })
+            .marker(
+                &Y_AXIS_ID,
+                MarkerPosition::Cursor,
+                |ctx: MarkerContext<'_, f64>| Some(ctx.marker(format!("{:.2}", ctx.value))),
+            )
     }
 
     /// Handles incoming messages and updates the chart state.
@@ -192,8 +201,8 @@ impl CandlestickChart {
             Message::UpdateChart => {
                 self.rebuild_layers();
             }
-            Message::OnPlotDrag(delta) => {
-                self.handle_plot_drag(delta);
+            Message::OnPlotDrag(event) => {
+                self.handle_plot_drag(event.delta);
                 self.rebuild_layers();
             }
             Message::OnPlotScroll(cursor_pos, delta) => {
@@ -256,7 +265,7 @@ impl CandlestickChart {
     }
 
     /// Logic for panning the chart.
-    fn handle_plot_drag(&mut self, delta: DragDelta) {
+    fn handle_plot_drag(&mut self, delta: Delta) {
         // --- Pan X-Axis ---
         self.state.axis_mut(&X_AXIS_ID).pan(delta.x);
         self.clamp_x_axis();

@@ -535,7 +535,7 @@ impl LineChart {
 
     // --- View ---
 
-    pub fn chart<Message>(&self) -> Chart<'_, AxisId, f64, Message> {
+    pub fn chart(&self) -> Chart<'_, AxisId, f64, crate::Message> {
         let mut chart = Chart::new(&self.state);
         let first_y = self
             .series
@@ -548,8 +548,8 @@ impl LineChart {
 }
 
 // Unified Renderer
-impl PlotData<f64> for LineChart {
-    fn draw(&self, plot: &mut Plot<f64>, theme: &Theme) {
+impl PlotData<f64, crate::Message> for LineChart {
+    fn draw(&self, plot: &mut Plot<f64, crate::Message>, theme: &Theme) {
         let chart_floor = self
             .state
             .axis_opt(&Self::Y.to_string())
@@ -594,10 +594,10 @@ impl PlotData<f64> for LineChart {
                 let mut color = s.color;
                 color.a = self.current_fill_alpha;
                 // Changed from Polygon to Zone for area filling
-                plot.add_shape(Area::new(fill_poly).fill(color));
+                plot.render(Area::new(fill_poly).fill(color));
             }
 
-            plot.add_shape(Polyline::new(
+            plot.render(Polyline::new(
                 points.clone(),
                 Stroke::new(s.color, Measure::Screen(s.width)),
             ));
@@ -605,7 +605,7 @@ impl PlotData<f64> for LineChart {
             if s.show_markers {
                 for point in &points {
                     let marker_radius = Measure::Screen(s.width + 2.0);
-                    plot.add_shape(
+                    plot.render(
                         Polygon::new(*point, marker_radius, 4)
                             .rotation(45.0) // Rotate to form diamond
                             .fill(s.color),
@@ -635,7 +635,7 @@ impl PlotData<f64> for LineChart {
                     let y_pos = (i as f64).mul_add(-step_y, start_y);
 
                     // Legend marker: Small square using Rectangle
-                    plot.add_shape(
+                    plot.render(
                         Rectangle::centered(
                             PlotPoint::new(start_x, y_pos),
                             Measure::Screen(10.0),
@@ -644,7 +644,7 @@ impl PlotData<f64> for LineChart {
                         .fill(series.color),
                     );
                     let text_offset = (x_max - x_min) * 0.02;
-                    plot.add_shape(
+                    plot.render(
                         Label::new(&series.name, PlotPoint::new(start_x + text_offset, y_pos))
                             .fill(palette.text)
                             .size(Measure::Screen(12.0))

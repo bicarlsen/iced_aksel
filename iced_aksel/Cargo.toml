@@ -26,6 +26,9 @@ lyon_path.workspace = true
 lyon.workspace = true
 earcutr.workspace = true
 lru.workspace = true
+smallvec.workspace = true
+rapidhash.workspace = true
+paste.workspace = true
 
 [dev-dependencies]
 rand.workspace = true

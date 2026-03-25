@@ -1,5 +1,6 @@
 use crate::{
     Shape, Stroke,
+    interaction::{self, IntoArea},
     plot::{self},
     render::Primitive,
 };
@@ -79,5 +80,20 @@ impl<D: Float> Area<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
+    }
+}
+
+impl<'a, D: Float, Renderer: crate::Renderer> IntoArea<'a, D, Renderer> for &Area<D> {
+    fn resolve_area(self, ctx: &plot::Context<'a, D, Renderer>) -> interaction::Area {
+        interaction::Area::Polygon {
+            points: self
+                .points
+                .iter()
+                .map(|p| {
+                    let sp = ctx.chart_to_screen(p);
+                    Point::new(sp.x, sp.y)
+                })
+                .collect(),
+        }
     }
 }

@@ -3,36 +3,18 @@
 //! This module provides the core plotting infrastructure for rendering data on charts.
 //! The main entry point is the [`PlotData`] trait, which you implement to draw your data.
 
+use std::hash::Hash;
 use std::ops::Deref;
 
 use crate::{
+    interaction::{self, Interaction},
     layer::LayerId,
     render::{Primitive, RenderCache},
-    shape::Shape,
 };
 
+use crate::interaction::InteractionsCache;
 use aksel::{Float, PlotRect, Transform};
 use iced_core::{Font, Rectangle};
-
-/// Normalized drag delta for panning operations.
-///
-/// Values are in the range 0.0-1.0 and can be passed directly to axis `pan` methods.
-///
-/// # Example
-///
-/// ```rust
-/// use iced_aksel::plot::DragDelta;
-///
-/// let delta = DragDelta { x: 0.1, y: 0.05 };
-/// // Use with state.pan_axes(..., delta.x, delta.y)
-/// ```
-#[derive(Debug, Clone, Copy)]
-pub struct DragDelta {
-    /// Normalized horizontal drag distance (0.0-1.0).
-    pub x: f32,
-    /// Normalized vertical drag distance (0.0-1.0).
-    pub y: f32,
-}
 
 /// Trait for drawable data on a plot.
 ///
@@ -60,15 +42,17 @@ pub struct DragDelta {
 ///     }
 /// }
 /// ```
-pub trait PlotData<D, R = iced_renderer::Renderer, Theme = iced_core::Theme>
+pub trait PlotData<D, Message, Tag = (), R = iced_renderer::Renderer, Theme = iced_core::Theme>
 where
+    Message: Clone,
     D: Float,
     R: crate::Renderer,
+    Tag: Hash + Eq + Clone,
 {
     /// Draws this data onto the plot.
     ///
     /// Use `plot.add_shape()` to add visual elements to the chart.
-    fn draw(&self, plot: &mut Plot<D, R>, theme: &Theme);
+    fn draw(&self, plot: &mut Plot<D, Message, Tag, R>, theme: &Theme);
 
     /// The version of the layer, used for caching.
     ///
@@ -87,8 +71,8 @@ where
 ///
 /// Manages layer ordering and caching for efficient rendering.
 pub struct Context<'a, D: Float, Renderer: crate::Renderer = iced_renderer::Renderer> {
-    transform: &'a Transform<'a, D, f32, f32>,
-    renderer: &'a mut Renderer,
+    pub(crate) transform: &'a Transform<'a, D, f32, f32>,
+    pub(crate) renderer: &'a mut Renderer,
     cache: &'a mut RenderCache<Renderer>,
 }
 
@@ -117,6 +101,12 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
         self.cache.add_primitive(primitive);
     }
 
+    /// Measures a Text to get it's bounds
+    pub fn measure_text(&self, text: iced_core::text::Text<&str>) -> iced_core::Size {
+        use iced_core::text::Paragraph as _;
+        <Renderer as iced_core::text::Renderer>::Paragraph::with_text(text).min_bounds()
+    }
+
     /// Returns the screen bounds bounds of the plot
     pub const fn clip_bounds(&self) -> Rectangle {
         let bounds = self.transform.screen_bounds();
@@ -133,29 +123,52 @@ impl<'a, D: Float, Renderer: crate::Renderer> Context<'a, D, Renderer> {
 ///
 /// This is passed to your [`PlotData::draw`] implementation. Use [`Plot::add_shape`]
 /// to render visual elements.
-pub struct Plot<'a, D: Float, R: crate::Renderer = iced_renderer::Renderer> {
-    context: Context<'a, D, R>,
+pub struct Plot<
+    'a,
+    D: Float,
+    Message: Clone,
+    Tag = (),
+    Renderer: crate::Renderer = iced_renderer::Renderer,
+> {
+    pub(crate) context: Context<'a, D, Renderer>,
+    interactions: &'a mut InteractionsCache<Message, Tag>,
 }
 
-impl<'a, D, R> Plot<'a, D, R>
+impl<'a, D: Float, Message: Clone, Tag, Renderer: crate::Renderer> Deref
+    for Plot<'a, D, Message, Tag, Renderer>
+{
+    type Target = Context<'a, D, Renderer>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.context
+    }
+}
+
+impl<'a, D, Message, Tag, Renderer> Plot<'a, D, Message, Tag, Renderer>
 where
+    Message: Clone,
+    Tag: Hash + Eq + Clone,
     D: Float,
-    R: crate::Renderer,
+    Renderer: crate::Renderer,
 {
     /// Creates a new plot context.
     ///
     /// This is typically called internally by the Chart widget.
-    pub const fn new(
-        renderer: &'a mut R,
-        cache: &'a mut RenderCache<R>,
+    pub(crate) const fn new(
+        renderer: &'a mut Renderer,
+        cache: &'a mut RenderCache<Renderer>,
         transform: &'a Transform<'a, D, f32, f32>,
+        interactions: &'a mut InteractionsCache<Message, Tag>,
     ) -> Self {
         let context = Context {
             transform,
             renderer,
             cache,
         };
-        Self { context }
+        Self {
+            context,
+            interactions,
+        }
     }
 
     /// Returns the current plot bounds in data space.
@@ -177,7 +190,7 @@ where
         self.context.transform.plot_bounds()
     }
 
-    /// Adds a shape to the plot.
+    /// Renders a shape to the plot.
     ///
     /// # Example
     ///
@@ -194,7 +207,20 @@ where
     /// #     }
     /// # }
     /// ```
-    pub fn add_shape<S: Shape<D, R>>(&mut self, shape: S) {
+    pub fn render<S: crate::shape::Shape<D, Renderer>>(&mut self, shape: S) {
         shape.render(&mut self.context);
+    }
+
+    /// Pushes an interaction to the plot
+    pub fn push_interaction(
+        &mut self,
+        id: impl Into<interaction::Id<Tag>>,
+        interaction: impl Into<Interaction<Message, Tag>>,
+    ) {
+        let interaction = interaction.into();
+        let Some(interaction) = interaction::ResolvedInteraction::new(interaction) else {
+            return;
+        };
+        self.interactions.insert(id.into(), interaction);
     }
 }

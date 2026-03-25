@@ -80,6 +80,6 @@ struct MyData {}
 
 impl MyData {}
 
-impl PlotData<f64> for MyData {
-    fn draw(&self, _plot: &mut Plot<f64>, _theme: &Theme) {}
+impl PlotData<f64, Message> for MyData {
+    fn draw(&self, _plot: &mut Plot<f64, Message>, _theme: &Theme) {}
 }

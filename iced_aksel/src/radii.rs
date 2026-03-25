@@ -127,21 +127,29 @@ impl<D: Float> Radii<Measure<D>> {
 
 /// A radius in screen-space pixels
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct ResolvedRadius(pub(crate) f32);
+pub struct ResolvedRadius(pub f32);
+
+impl ResolvedRadius {
+    /// A screen-space zero-radius
+    pub const ZERO: Self = Self(0.0);
+}
 
 /// A radii with all measurements resolved to screen-space pixels.
 ///
-/// Produced by converting a [`Radii<Measure<T>>`](Radii) through a plot transform, or constructed
+/// Mainly produced by converting a [`Radii<Measure<T>>`](Radii) through a plot transform, or constructed
 /// manually from pixel-values.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct ResolvedRadii {
     /// Resolved value of the radius on the x-axis in pixels
-    pub(crate) x: f32,
+    pub x: f32,
     /// Resolved value of the radius on the y-axis in pixels
-    pub(crate) y: f32,
+    pub y: f32,
 }
 
 impl ResolvedRadii {
+    /// A screen-space zero-radius
+    pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
+
     /// Checks wether or not the Radii values are close to equal (Accounting for sub-pixel
     /// tolerance)
     pub const fn is_uniform(&self) -> bool {

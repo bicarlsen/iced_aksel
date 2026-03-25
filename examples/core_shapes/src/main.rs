@@ -87,7 +87,7 @@ struct GridData {}
 impl GridData {
     // Helper to get center of a grid cell
     // Rows: 0 (Bottom) to 3 (Top). Cols: 0 (Left) to 3 (Right)
-    fn cell(&self, row: usize, col: usize) -> PlotPoint {
+    const fn cell(&self, row: usize, col: usize) -> PlotPoint {
         PlotPoint::new(
             (col as f64).mul_add(100.0, 50.0),
             (row as f64).mul_add(100.0, 50.0),
@@ -95,32 +95,32 @@ impl GridData {
     }
 }
 
-impl PlotData<f64> for GridData {
-    fn draw(&self, plot: &mut Plot<f64>, _theme: &Theme) {
+impl PlotData<f64, Message> for GridData {
+    fn draw(&self, plot: &mut Plot<f64, Message>, _theme: &Theme) {
         // =====================================================================
         // ROW 0: BASIC GEOMETRY (Rect, Triangle, Circle, Poly)
         // =====================================================================
 
         // Col 0: Rectangle (Filled)
         let c = self.cell(0, 0);
-        plot.add_shape(
+        plot.render(
             Rectangle::centered(c, Measure::Screen(40.0), Measure::Screen(30.0))
                 .fill(Color::from_rgb(0.2, 0.4, 0.8)),
         );
 
         // Col 1: Triangle (Rotated & Stroked)
         let c = self.cell(0, 1);
-        plot.add_shape(
+        plot.render(
             Triangle::centered(c, Measure::Screen(40.0), Measure::Screen(40.0)).stroke(
                 Stroke::new(Color::from_rgb(0.2, 0.8, 0.2), Measure::Screen(3.0)),
             ),
         );
         // Add a center dot to verify centering
-        plot.add_shape(Ellipse::circle(c, Measure::Screen(2.0)).fill(Color::WHITE));
+        plot.render(Ellipse::circle(c, Measure::Screen(2.0)).fill(Color::WHITE));
 
         // Col 2: Circle (Dashed Stroke)
         let c = self.cell(0, 2);
-        plot.add_shape(
+        plot.render(
             Ellipse::circle(c, Measure::Screen(25.0)).stroke(Stroke::with_style(
                 Color::from_rgb(0.8, 0.2, 0.2),
                 Measure::Screen(3.0),
@@ -133,7 +133,7 @@ impl PlotData<f64> for GridData {
 
         // Col 3: Polygon (Hexagon, Rotated)
         let c = self.cell(0, 3);
-        plot.add_shape(
+        plot.render(
             Polygon::new(c, Measure::Screen(30.0), 6)
                 .rotation(Degrees(30.0)) // Flat top
                 .fill(Color::from_rgb(0.8, 0.8, 0.2))
@@ -146,7 +146,7 @@ impl PlotData<f64> for GridData {
 
         // Col 0: Simple Line Segment
         let c = self.cell(1, 0);
-        plot.add_shape(Line::new(
+        plot.render(Line::new(
             PlotPoint::new(c.x - 30.0, c.y - 30.0),
             PlotPoint::new(c.x + 30.0, c.y + 30.0),
             Stroke::new(Color::WHITE, Measure::Screen(2.0)),
@@ -154,7 +154,7 @@ impl PlotData<f64> for GridData {
 
         // Col 1: Line with Arrows (Start & End)
         let c = self.cell(1, 1);
-        plot.add_shape(
+        plot.render(
             Line::new(
                 PlotPoint::new(c.x - 30.0, c.y),
                 PlotPoint::new(c.x + 30.0, c.y),
@@ -166,7 +166,7 @@ impl PlotData<f64> for GridData {
 
         // Col 2: Infinite Line (Clipped)
         let c = self.cell(1, 2);
-        plot.add_shape(
+        plot.render(
             Line::new(
                 PlotPoint::new(c.x, c.y - 10.0),
                 PlotPoint::new(c.x + 20.0, c.y + 10.0),
@@ -181,7 +181,7 @@ impl PlotData<f64> for GridData {
 
         // Col 3: Polyline (M-Shape)
         let c = self.cell(1, 3);
-        plot.add_shape(
+        plot.render(
             Polyline::new(
                 vec![
                     PlotPoint::new(c.x - 40.0, c.y - 20.0),
@@ -201,7 +201,7 @@ impl PlotData<f64> for GridData {
 
         // Col 0: Arc (Donut)
         let c = self.cell(2, 0);
-        plot.add_shape(
+        plot.render(
             Arc::new(c, Measure::Screen(30.0), 0.0, 4.71) // 270 deg
                 .inner_radius(Measure::Screen(15.0))
                 .fill(Color::from_rgb(1.0, 0.5, 0.0))
@@ -210,7 +210,7 @@ impl PlotData<f64> for GridData {
 
         // Col 1: Bezier (Quadratic)
         let c = self.cell(2, 1);
-        plot.add_shape(Bezier::quadratic(
+        plot.render(Bezier::quadratic(
             PlotPoint::new(c.x - 30.0, c.y - 20.0),
             PlotPoint::new(c.x, c.y + 50.0), // Control
             PlotPoint::new(c.x + 30.0, c.y - 20.0),
@@ -225,18 +225,18 @@ impl PlotData<f64> for GridData {
             PlotPoint::new(c.x + 20.0, c.y - 30.0),
             PlotPoint::new(c.x + 40.0, c.y),
         ];
-        plot.add_shape(Spline::new(
+        plot.render(Spline::new(
             pts.clone(),
             Stroke::new(Color::from_rgb(0.5, 0.5, 1.0), Measure::Screen(2.0)),
         ));
         // Dots to verify fit
         for p in pts {
-            plot.add_shape(Ellipse::circle(p, Measure::Screen(3.0)).fill(Color::WHITE));
+            plot.render(Ellipse::circle(p, Measure::Screen(3.0)).fill(Color::WHITE));
         }
 
         // Col 3: Area (Filled Blob)
         let c = self.cell(2, 3);
-        plot.add_shape(
+        plot.render(
             Area::new(vec![
                 PlotPoint::new(c.x - 30.0, c.y - 30.0),
                 PlotPoint::new(c.x - 10.0, c.y + 20.0),
@@ -253,19 +253,17 @@ impl PlotData<f64> for GridData {
 
         // Col 0: Plain Text (Centered)
         let c = self.cell(3, 0);
-        plot.add_shape(
+        plot.render(
             Label::new("Center", c)
                 .align(Horizontal::Center, Vertical::Center)
                 .fill(Color::WHITE)
                 .size(Measure::Screen(16.0)),
         );
-        plot.add_shape(
-            Ellipse::circle(c, Measure::Screen(2.0)).fill(Color::from_rgb(1.0, 0.0, 0.0)),
-        );
+        plot.render(Ellipse::circle(c, Measure::Screen(2.0)).fill(Color::from_rgb(1.0, 0.0, 0.0)));
 
         // Col 1: Rotated Text
         let c = self.cell(3, 1);
-        plot.add_shape(
+        plot.render(
             Label::new("Rotated 45", c)
                 .rotation(0.785)
                 .align(Horizontal::Center, Vertical::Center)
@@ -273,12 +271,12 @@ impl PlotData<f64> for GridData {
                 .size(Measure::Screen(14.0)),
         );
         // Crosshair to check rotation center
-        plot.add_shape(Line::new(
+        plot.render(Line::new(
             PlotPoint::new(c.x - 10.0, c.y),
             PlotPoint::new(c.x + 10.0, c.y),
             Stroke::new(Color::from_rgb(1.0, 0.0, 0.0), Measure::Screen(1.0)),
         ));
-        plot.add_shape(Line::new(
+        plot.render(Line::new(
             PlotPoint::new(c.x, c.y - 10.0),
             PlotPoint::new(c.x, c.y + 10.0),
             Stroke::new(Color::from_rgb(1.0, 0.0, 0.0), Measure::Screen(1.0)),
@@ -294,7 +292,7 @@ impl PlotData<f64> for GridData {
         let top_left = PlotPoint::new(c.x, c.y + box_height);
 
         // 3. Draw the Label anchored at Top-Left
-        plot.add_shape(
+        plot.render(
             Label::new("This text wraps inside the red box.", top_left)
                 // Constrain width, but height can be whatever
                 .bounds(Bounds::Plot(Size::new(box_width, 150.0)))
@@ -306,7 +304,7 @@ impl PlotData<f64> for GridData {
 
         // 4. Draw the Red Box (checking corners)
         // We draw from Bottom-Left (c) to Top-Right (c + size)
-        plot.add_shape(
+        plot.render(
             Rectangle::corners(c, PlotPoint::new(c.x + box_width, c.y + box_height)).stroke(
                 Stroke::new(Color::from_rgb(1.0, 0.0, 0.0), Measure::Screen(1.0)),
             ),
@@ -314,7 +312,7 @@ impl PlotData<f64> for GridData {
 
         // Col 3: Plot-Scaled Text (Zoom Test)
         let c = self.cell(3, 3);
-        plot.add_shape(
+        plot.render(
             Label::new("Scales with Zoom", c)
                 .size(Measure::Plot(5.0)) // Height in plot units
                 .align(Horizontal::Center, Vertical::Center)

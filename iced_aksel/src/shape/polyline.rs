@@ -1,5 +1,7 @@
 use crate::{
-    Shape, Stroke, plot,
+    Shape, Stroke,
+    interaction::{Area, IntoArea},
+    plot,
     render::{LineArrows, LineExtensions, Primitive},
 };
 use aksel::{Float, PlotPoint};
@@ -122,5 +124,24 @@ impl<D: Float> Polyline<D> {
     pub const fn arrow_size(mut self, size: f32) -> Self {
         self.arrows.size = size;
         self
+    }
+}
+
+impl<'a, D: Float, Renderer: crate::Renderer> IntoArea<'a, D, Renderer> for &Polyline<D> {
+    fn resolve_area(self, ctx: &plot::Context<'a, D, Renderer>) -> Area {
+        let stroke = self.stroke.resolve(ctx);
+        let points = self
+            .points
+            .iter()
+            .map(|plot_point| {
+                let sc = ctx.chart_to_screen(plot_point);
+                Point::new(sc.x, sc.y)
+            })
+            .collect();
+
+        Area::Polyline {
+            points,
+            stroke_width: stroke.thickness.into(),
+        }
     }
 }

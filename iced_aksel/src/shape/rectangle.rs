@@ -1,6 +1,12 @@
-use crate::{Measure, Shape, Stroke, plot, render::Primitive};
+use crate::{
+    Measure, Shape, Stroke,
+    interaction::{Area, IntoArea},
+    plot,
+    render::Primitive,
+};
 use aksel::{Float, PlotPoint};
-use iced_core::{Color, Point};
+use iced_core::{Color, Point, Size};
+use std::fmt::Debug;
 
 /// A primitive representing an axis-aligned box.
 ///
@@ -65,7 +71,8 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Rectangle<D> {
             stroke,
         } = self;
 
-        let (min, max) = match geometry {
+        // Calculate visual screen coordinates
+        let (screen_min, screen_max) = match &geometry {
             Geometry::Corners { p1, p2 } => {
                 let x1 = ctx.x_to_screen(&p1.x);
                 let y1 = ctx.y_to_screen(&p1.y);
@@ -98,11 +105,12 @@ impl<D: Float, R: crate::Renderer> Shape<D, R> for Rectangle<D> {
             }
         };
 
+        // Dispatch visual rendering
         let stroke = stroke.map(|s| s.resolve(ctx));
 
         ctx.add_primitive(Primitive::Rectangle {
-            xy1: min,
-            xy2: max,
+            xy1: screen_min,
+            xy2: screen_max,
             fill,
             stroke,
         });
@@ -137,16 +145,56 @@ impl<D: Float> Rectangle<D> {
     }
 
     /// Sets the fill color of the rectangle.
-    #[inline]
     pub const fn fill(mut self, color: Color) -> Self {
         self.fill = Some(color);
         self
     }
 
     /// Sets the stroke style (border) of the rectangle.
-    #[inline]
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
+    }
+}
+
+impl<'a, D: Float, Renderer: crate::Renderer> IntoArea<'a, D, Renderer> for &Rectangle<D> {
+    fn resolve_area(self, ctx: &plot::Context<'a, D, Renderer>) -> Area {
+        match self.geometry {
+            Geometry::Corners { p1, p2 } => {
+                let p1 = ctx.chart_to_screen(&p1);
+                let p2 = ctx.chart_to_screen(&p2);
+                let left = p1.x.min(p2.x);
+                let right = p1.x.max(p2.x);
+                let top = p1.y.min(p2.y);
+                let bottom = p1.y.max(p2.y);
+
+                let width = right - left;
+                let height = bottom - top;
+
+                let top_left = Point::new(left, top);
+
+                Area::Rectangle {
+                    top_left,
+                    size: Size::new(width, height),
+                }
+            }
+            Geometry::Centered {
+                center,
+                width,
+                height,
+            } => {
+                let center = ctx.chart_to_screen(&center);
+                let width = width.resolve_x(ctx);
+                let height = height.resolve_y(ctx);
+                let half_width = width / 2.0;
+                let half_height = height / 2.0;
+                let top_left = Point::new(center.x - half_width, center.y - half_height);
+
+                Area::Rectangle {
+                    top_left,
+                    size: Size::new(width, height),
+                }
+            }
+        }
     }
 }

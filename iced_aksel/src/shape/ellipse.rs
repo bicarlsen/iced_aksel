@@ -1,4 +1,10 @@
-use crate::{Measure, Radii, Shape, Stroke, plot, render::Primitive};
+use crate::{
+    Measure, Radii, Shape, Stroke,
+    interaction::{Area, IntoArea},
+    plot,
+    radii::ResolvedRadii,
+    render::Primitive,
+};
 use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point};
 
@@ -112,5 +118,15 @@ impl<D: Float> Ellipse<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
+    }
+}
+
+impl<'a, D: Float, Renderer: crate::Renderer> IntoArea<'a, D, Renderer> for &Ellipse<D> {
+    fn resolve_area(self, ctx: &plot::Context<'a, D, Renderer>) -> Area {
+        let center = ctx.chart_to_screen(&self.center);
+        Area::Ellipse {
+            center: Point::new(center.x, center.y),
+            radii: self.radii.resolve(ctx).unwrap_or(ResolvedRadii::ZERO),
+        }
     }
 }

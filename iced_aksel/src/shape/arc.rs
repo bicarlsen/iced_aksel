@@ -1,4 +1,10 @@
-use crate::{Measure, Shape, Stroke, plot, radii::Radius, render::Primitive};
+use crate::{
+    Measure, Shape, Stroke,
+    interaction::{Area, IntoArea},
+    plot,
+    radii::{Radius, ResolvedRadius},
+    render::Primitive,
+};
 
 use aksel::{Float, PlotPoint};
 use iced_core::{Color, Point, Radians};
@@ -114,5 +120,24 @@ impl<D: Float> Arc<D> {
     pub const fn stroke(mut self, stroke: Stroke<D>) -> Self {
         self.stroke = Some(stroke);
         self
+    }
+}
+
+impl<'a, D: Float, Renderer: crate::Renderer> IntoArea<'a, D, Renderer> for &Arc<D> {
+    fn resolve_area(self, ctx: &plot::Context<'a, D, Renderer>) -> Area {
+        let center = ctx.chart_to_screen(&self.center);
+        Area::Arc {
+            center: Point::new(center.x, center.y),
+            radius_outer: self
+                .radius
+                .resolve_isotropic(ctx)
+                .unwrap_or(ResolvedRadius::ZERO),
+            radius_inner: self
+                .inner_radius
+                .resolve_isotropic(ctx)
+                .unwrap_or(ResolvedRadius::ZERO),
+            start_angle: self.start_angle,
+            end_angle: self.end_angle,
+        }
     }
 }
