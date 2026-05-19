@@ -16,7 +16,7 @@ mod id;
 mod math;
 mod query;
 
-pub use area::{Area, IntoArea};
+pub use area::{Area, HitTest, IntoArea};
 pub use id::Id;
 pub use query::InteractionQuery;
 
